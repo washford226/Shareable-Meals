@@ -723,43 +723,52 @@ router.post('/report', authMiddleware, async (req: Request, res: Response): Prom
   }
 });
 
-// Define the foodData object with nutritional information
-const foodData: Record<string, any> = {
-  apple: {
-    calories: 52,
-    protein: 0.3,
-    carbohydrates: 14,
-    fat: 0.2,
-  },
-  banana: {
-    calories: 96,
-    protein: 1.3,
-    carbohydrates: 27,
-    fat: 0.3,
-  },
-  chicken: {
-    calories: 239,
-    protein: 27,
-    carbohydrates: 0,
-    fat: 14,
-  },
-  // Add more foods as needed
-};
+//Retrieve nutritional information from USDA API endpoint
+router.get('/nutrition/:food', authMiddleware, async (req: Request, res: Response) => {
+  const { food } = req.params;
+  const apiKey = process.env.USDA_API_KEY;
 
-// API Endpoint to retrieve nutritional information for foods via query parameters
-router.get('/v1/foods', (req: Request, res: Response): void => {
-  const foodName = req.query.food?.toString().toLowerCase();
+  if (!apiKey) {
+    return res.status(500).send('USDA API key not configured');
+  }
 
-  if (foodName && foodData[foodName]) {
-    res.status(200).json({
-      food: foodName,
-      nutrition: foodData[foodName],
-    });
-  } else {
-    res.status(404).json({
-      error: 'Food not found. Please provide a valid food name.',
-    });
+  try {
+    const searchUrl = `https://api.nal.usda.gov/fdc/v1/foods/search?query=${encodeURIComponent(food)}&api_key=${apiKey}`;
+    const searchResponse = await fetch(searchUrl);
+    const searchData = await searchResponse.json();
+
+    if (!searchData.foods || searchData.foods.length === 0) {
+      return res.status(404).json({ message: 'Food not found' });
+    }
+
+    const foodId = searchData.foods[0].fdcId;
+
+    // Get detailed food info
+    const detailsUrl = `https://api.nal.usda.gov/fdc/v1/food/${foodId}?api_key=${apiKey}`;
+    const detailsResponse = await fetch(detailsUrl);
+    const details = await detailsResponse.json();
+
+    const getNutrient = (name: string) => {
+      const nutrient = details.foodNutrients?.find(n => n.nutrientName === name);
+      return nutrient?.value ?? null;
+    };
+
+    const result = {
+      name: details.description,
+      calories: getNutrient('Energy'),
+      protein: getNutrient('Protein'),
+      fat: getNutrient('Total lipid (fat)'),
+      carbohydrates: getNutrient('Carbohydrate, by difference'),
+      servingSize: details.servingSize || 'Varies',
+      servingUnit: details.servingSizeUnit || '',
+    };
+
+    res.status(200).json(result);
+  } catch (error) {
+    console.error('Error fetching nutrition data:', error);
+    res.status(500).send('Failed to fetch nutrition data');
   }
 });
+
 
 export default router;
