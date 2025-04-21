@@ -956,12 +956,13 @@ router.post('/report', authMiddleware, async (req: Request, res: Response): Prom
 });
 
 //Retrieve nutritional information from USDA API endpoint
-router.get('/nutrition/:food', authMiddleware, async (req: Request, res: Response) => {
+router.get('/nutrition/:food', authMiddleware, async (req: Request, res: Response): Promise<void> => {
   const { food } = req.params;
   const apiKey = process.env.USDA_API_KEY;
 
   if (!apiKey) {
-    return res.status(500).send('USDA API key not configured');
+    res.status(500).send('USDA API key not configured');
+    return;
   }
 
   try {
@@ -970,7 +971,8 @@ router.get('/nutrition/:food', authMiddleware, async (req: Request, res: Respons
     const searchData = await searchResponse.json();
 
     if (!searchData.foods || searchData.foods.length === 0) {
-      return res.status(404).json({ message: 'Food not found' });
+      res.status(404).json({ message: 'Food not found' });
+      return;
     }
 
     const foodId = searchData.foods[0].fdcId;
@@ -981,7 +983,7 @@ router.get('/nutrition/:food', authMiddleware, async (req: Request, res: Respons
     const details = await detailsResponse.json();
 
     const getNutrient = (name: string) => {
-      const nutrient = details.foodNutrients?.find(n => n.nutrientName === name);
+      const nutrient: { nutrientName: string; value: number | null } | undefined = details.foodNutrients?.find((n: { nutrientName: string; value: number | null }) => n.nutrientName === name);
       return nutrient?.value ?? null;
     };
 
