@@ -13,6 +13,9 @@ Install the required dependencies for both the backend and frontend.
 ```bash
 # Install dependencies
 npm install
+ # For the time picker you nead this, Otherwise everything breaks
+ npx expo install @react-native-community/datetimepicker
+
 ```
 
 #### 2. Set Up the Database
@@ -75,45 +78,41 @@ If running on the web, please note that errors may not display properly and coul
 Exercise caution and ensure all inputs and actions are correct when using the web version.
 ---
 
-### **Dependencies**
 
-#### Backend Dependencies:
-- `express`: Web framework for building the backend API.
-- `@types/express`: TypeScript type definitions for Express.
-- `bcrypt`: For hashing passwords securely.
-- `jsonwebtoken`: For generating and verifying JWT tokens.
-- `mysql2`: For interacting with the MySQL database.
-- `dotenv`: For managing environment variables.
-- `multer`: For handling file uploads (e.g., profile pictures).
-- `nodemailer`: For sending emails (e.g., forgot password functionality).
-
-#### Frontend Dependencies:
-- `react-native`: Core library for building mobile apps.
-- `react-native-vector-icons`: For using icons in the app.
-- `axios`: For making HTTP requests to the backend API.
-- `@react-native-async-storage/async-storage`: For storing data locally on the device.
-- `react-navigation`: For handling navigation between screens.
-- `react-navigation-stack`: For stack-based navigation.
-- `react-navigation-tabs`: For tab-based navigation.
-
-#### Development Dependencies:
-- `typescript`: For TypeScript support.
-- `@types/react`: Type definitions for React.
-- `@types/react-native`: Type definitions for React Native.
-- `@types/node`: Type definitions for Node.js.
-- `@types/bcrypt`: Type definitions for `bcrypt`.
-- `@types/jsonwebtoken`: Type definitions for `jsonwebtoken`.
-- `@types/react-navigation`: Type definitions for `react-navigation`.
-- `@types/react-native-vector-icons`: Type definitions for `react-native-vector-icons`.
-
----
 
 ### **Features**
-- User authentication (login, signup, and JWT-based authorization).
-- Profile management (edit dietary restrictions, calorie goals, and profile picture).
-- Password management (change password functionality).
-- Forgot password functionality (via email).
-- Meal plan calendar with navigation.
+### **Features**
+- **User Authentication**: Login, signup, and JWT-based authorization.
+- **Profile Management**: Edit dietary restrictions, calorie goals, and profile picture.
+- **Forgot Password**: Reset password functionality via email.
+- **Meal Plan Calendar**: 
+  - View meals in a calendar format for easy weekly planning.
+  - Add, edit, or delete meals directly from the calendar.
+- **Meal Management**:
+  - Save meals for quick access and reuse in the future.
+  - Create, edit, and delete meals with ingredients, descriptions, and images.
+  - Upload pictures of meals for better visualization.
+- **Community Features**:
+  - Discover meals created by other users (Community Meals).
+  - Upload meals to a shared database for others to view and add to their meal plans.
+  - Add and view reviews for meals to see which meals are popular and well-rated.
+  - Leave comments on other users' meals to discuss recipes and share feedback.
+- **Search and Filters**:
+  - Search meals by name or ingredients.
+  - Filter meals by category (e.g., vegetarian, low-calorie, high-protein).
+- **Nutritional Tracking**:
+  - View calorie counts for each meal to track nutritional intake.
+  - Set and track daily calorie goals.
+- **Cooking Assistance**:
+  - View ingredients and step-by-step cooking instructions for each meal.
+  - Zoom in on meal images for better presentation details.
+- **Theming**:
+  - Light and dark mode support for a personalized experience.
+- **Reporting**:
+  - Report meals that are inappropriate or violate community guidelines.
+- **Responsive Design**:
+  - Optimized for Android emulator and functional on the web (with some limitations). 
+
 
 ---
 
@@ -125,10 +124,6 @@ Exercise caution and ensure all inputs and actions are correct when using the we
   ```
 - **Backend Errors:** Use tools like Postman to test API endpoints and debug issues.
 
----
-
-### **Contributing**
-Feel free to fork this repository and submit pull requests for improvements or bug fixes.
 
 ---
 

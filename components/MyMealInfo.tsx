@@ -14,6 +14,9 @@ import { Meal } from "@/types/types";
 import { useTheme } from "@/context/ThemeContext";
 import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Picker } from "@react-native-picker/picker";
+import DateTimePicker from "@react-native-community/datetimepicker";
+import { format } from "date-fns";
 
 interface MyMealInfoProps {
   meal: Meal;
@@ -30,6 +33,7 @@ const MyMealInfo: React.FC<MyMealInfoProps> = ({ meal, onBack }) => {
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [selectedDate, setSelectedDate] = useState("");
   const [mealType, setMealType] = useState("Breakfast");
+  const [showDatePicker, setShowDatePicker] = useState(false);
 
   const handleAddToMealPlan = async () => {
     if (!selectedDate) {
@@ -66,6 +70,11 @@ const MyMealInfo: React.FC<MyMealInfoProps> = ({ meal, onBack }) => {
       console.error("Error adding meal to meal plan:", error);
       Alert.alert("Error", "Failed to add meal to the meal plan. Please try again later.");
     }
+  };
+
+  const handleDateSelection = (date: Date) => {
+    const formattedDate = format(date, "yyyy-MM-dd"); // Ensure consistent formatting
+    setSelectedDate(formattedDate);
   };
 
   const confirmDelete = () => {
@@ -108,7 +117,7 @@ const MyMealInfo: React.FC<MyMealInfoProps> = ({ meal, onBack }) => {
         Alert.alert("Error", "User not authenticated. Please log in.");
         return;
       }
-
+  
       const response = await axios.put(
         `${BASE_URL}/meals/${editedMeal.id}`,
         editedMeal,
@@ -116,14 +125,36 @@ const MyMealInfo: React.FC<MyMealInfoProps> = ({ meal, onBack }) => {
           headers: { Authorization: `Bearer ${token}` },
         }
       );
-
+  
       if (response.status === 200) {
         Alert.alert("Success", "Meal updated successfully!");
         setIsEditing(false);
+        fetchUpdatedMeal(); // Refresh the meal information
       }
     } catch (error) {
       console.error("Error saving meal:", error);
       Alert.alert("Error", "Failed to save meal. Please try again later.");
+    }
+  };
+
+  const fetchUpdatedMeal = async () => {
+    try {
+      const token = await AsyncStorage.getItem("token");
+      if (!token) {
+        Alert.alert("Error", "User not authenticated. Please log in.");
+        return;
+      }
+  
+      const response = await axios.get(`${BASE_URL}/meals/${meal.id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+  
+      if (response.status === 200) {
+        setEditedMeal(response.data); // Update the editedMeal state with the latest data
+      }
+    } catch (error) {
+      console.error("Error fetching updated meal:", error);
+      Alert.alert("Error", "Failed to refresh meal information. Please try again later.");
     }
   };
 
@@ -214,13 +245,13 @@ const MyMealInfo: React.FC<MyMealInfoProps> = ({ meal, onBack }) => {
       ) : (
         <>
           {/* Viewing UI */}
-          <Text style={[styles.title, { color: theme.text }]}>{meal.name}</Text>
-          <Text style={[styles.description, { color: theme.subtext }]}>{meal.description}</Text>
-          <Text style={[styles.details, { color: theme.text }]}>Ingredients: {meal.ingredients}</Text>
-          <Text style={[styles.details, { color: theme.text }]}>Calories: {meal.calories}</Text>
-          <Text style={[styles.details, { color: theme.text }]}>Protein: {meal.protein}g</Text>
-          <Text style={[styles.details, { color: theme.text }]}>Carbs: {meal.carbohydrates}g</Text>
-          <Text style={[styles.details, { color: theme.text }]}>Fat: {meal.fat}g</Text>
+          <Text style={[styles.title, { color: theme.text }]}>{editedMeal.name}</Text>
+          <Text style={[styles.description, { color: theme.subtext }]}>{editedMeal.description}</Text>
+          <Text style={[styles.details, { color: theme.text }]}>Ingredients: {editedMeal.ingredients}</Text>
+          <Text style={[styles.details, { color: theme.text }]}>Calories: {editedMeal.calories}</Text>
+          <Text style={[styles.details, { color: theme.text }]}>Protein: {editedMeal.protein}g</Text>
+          <Text style={[styles.details, { color: theme.text }]}>Carbs: {editedMeal.carbohydrates}g</Text>
+          <Text style={[styles.details, { color: theme.text }]}>Fat: {editedMeal.fat}g</Text>
           <Text style={[styles.details, { color: theme.text }]}>
             Visibility: {meal.visibility ? "Public" : "Private"}
           </Text>
@@ -256,20 +287,41 @@ const MyMealInfo: React.FC<MyMealInfoProps> = ({ meal, onBack }) => {
         <View style={styles.modalContainer}>
           <View style={[styles.modalContent, { backgroundColor: theme.background }]}>
             <Text style={[styles.modalTitle, { color: theme.text }]}>Add to Meal Plan</Text>
-            <TextInput
-              style={[styles.input, { borderColor: theme.border, color: theme.text }]}
-              placeholder="Select Date (YYYY-MM-DD)"
-              placeholderTextColor={theme.placeholder}
-              value={selectedDate}
-              onChangeText={setSelectedDate}
-            />
-            <TextInput
-              style={[styles.input, { borderColor: theme.border, color: theme.text }]}
-              placeholder="Meal Type (e.g., Breakfast, Lunch, Dinner)"
-              placeholderTextColor={theme.placeholder}
-              value={mealType}
-              onChangeText={setMealType}
-            />
+            <View>
+              <TouchableOpacity
+                style={[styles.input, { borderColor: theme.border }]}
+                onPress={() => setShowDatePicker(true)}
+              >
+                <Text style={{ color: theme.text }}>
+                  {selectedDate ? selectedDate : "Select Date"}
+                </Text>
+              </TouchableOpacity>
+              {showDatePicker && (
+                <DateTimePicker
+                  value={selectedDate ? new Date(selectedDate) : new Date()}
+                  mode="date"
+                  display="default"
+                  onChange={(event, date) => {
+                    setShowDatePicker(false);
+                    if (date) {
+                      handleDateSelection(date); 
+                    }
+                  }}
+                />
+              )}
+            </View>
+            <View style={[styles.pickerContainer, { borderColor: theme.border }]}>
+              <Picker
+                selectedValue={mealType}
+                onValueChange={(itemValue) => setMealType(itemValue)}
+                style={{ color: theme.text }}
+              >
+                <Picker.Item label="Breakfast" value="Breakfast" />
+                <Picker.Item label="Lunch" value="Lunch" />
+                <Picker.Item label="Dinner" value="Dinner" />
+                <Picker.Item label="Other" value="Other" />
+              </Picker>
+            </View>
             <TouchableOpacity
               style={[styles.button, { backgroundColor: theme.button }]}
               onPress={handleAddToMealPlan}
@@ -356,6 +408,12 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     marginBottom: 16,
   },
+  pickerContainer: {
+    borderWidth: 1,
+    borderRadius: 8,
+    marginBottom: 16,
+  },
 });
+
 
 export default MyMealInfo;

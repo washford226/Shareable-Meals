@@ -21,6 +21,11 @@ const AccountScreen: React.FC<AccountScreenProps> = ({ onLogout }) => {
   const [isEditingDietaryRestrictions, setIsEditingDietaryRestrictions] = useState<boolean>(false);
   const [newDietaryRestrictions, setNewDietaryRestrictions] = useState<string>('');
   const [profilePicture, setProfilePicture] = useState<string | null>(null); // State for profile picture
+  const [isEditingEmail, setIsEditingEmail] = useState(false);
+  const [newEmail, setNewEmail] = useState('');
+  const [isEditingPassword, setIsEditingPassword] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
+  const [currentPassword, setCurrentPassword] = useState('');
 
   const { theme, toggleTheme } = useTheme(); // Access theme and toggleTheme from ThemeContext
 
@@ -149,6 +154,64 @@ const AccountScreen: React.FC<AccountScreenProps> = ({ onLogout }) => {
     }
   };
 
+  const handleEditEmail = async () => {
+    try {
+      const token = await AsyncStorage.getItem('token');
+      if (!token) {
+        throw new Error('No token found');
+      }
+  
+      const response = await axios.put(
+        `${BASE_URL}/user/${username}/email`,
+        { email: newEmail, currentPassword },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+  
+      if (response.status === 200) {
+        Alert.alert('Success', 'Email updated successfully');
+        setIsEditingEmail(false);
+        setCurrentPassword('');
+        setNewEmail('');
+      }
+    } catch (error) {
+      console.error('Error updating email:', error);
+      Alert.alert('Error', 'Failed to update email. Please check your current password.');
+    }
+  };
+  
+  const handleEditPassword = async () => {
+    try {
+      const token = await AsyncStorage.getItem('token');
+      if (!token) {
+        throw new Error('No token found');
+      }
+  
+      const response = await axios.put(
+        `${BASE_URL}/user/${username}/password`,
+        { password: newPassword, currentPassword },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+  
+      if (response.status === 200) {
+        Alert.alert('Success', 'Password updated successfully');
+        setIsEditingPassword(false);
+        setCurrentPassword('');
+        setNewPassword('');
+      }
+    } catch (error) {
+      console.error('Error updating password:', error);
+      Alert.alert('Error', 'Failed to update password. Please check your current password.');
+    }
+  };
+
   const pickImage = async () => {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
@@ -257,6 +320,78 @@ const AccountScreen: React.FC<AccountScreenProps> = ({ onLogout }) => {
         </View>
       )}
 
+      {/* Change Email Button */}
+      <View style={[styles.centeredRow]}>
+        <TouchableOpacity
+          style={[styles.centeredButton, { backgroundColor: theme.button }]}
+          onPress={() => setIsEditingEmail(true)}
+        >
+          <Text style={[styles.buttonText, { color: theme.buttonText }]}>Change Email</Text>
+        </TouchableOpacity>
+      </View>
+      {isEditingEmail && (
+        <View>
+          <TextInput
+            style={[styles.input, { borderColor: theme.border, color: theme.text }]}
+            placeholder="Enter current password"
+            placeholderTextColor={theme.placeholder}
+            value={currentPassword}
+            onChangeText={setCurrentPassword}
+            secureTextEntry={true}
+          />
+          <TextInput
+            style={[styles.input, { borderColor: theme.border, color: theme.text }]}
+            placeholder="Enter new email"
+            placeholderTextColor={theme.placeholder}
+            value={newEmail}
+            onChangeText={setNewEmail}
+            keyboardType="email-address"
+          />
+          <TouchableOpacity onPress={handleEditEmail}>
+            <Text style={{ color: theme.button, marginTop: 10 }}>Save</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => setIsEditingEmail(false)}>
+            <Text style={{ color: theme.danger, marginTop: 10 }}>Cancel</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Change Password Button */}
+      <View style={[styles.centeredRow]}>
+        <TouchableOpacity
+          style={[styles.centeredButton, { backgroundColor: theme.button }]}
+          onPress={() => setIsEditingPassword(true)}
+        >
+          <Text style={[styles.buttonText, { color: theme.buttonText }]}>Change Password</Text>
+        </TouchableOpacity>
+      </View>
+      {isEditingPassword && (
+        <View>
+          <TextInput
+            style={[styles.input, { borderColor: theme.border, color: theme.text }]}
+            placeholder="Enter current password"
+            placeholderTextColor={theme.placeholder}
+            value={currentPassword}
+            onChangeText={setCurrentPassword}
+            secureTextEntry={true}
+          />
+          <TextInput
+            style={[styles.input, { borderColor: theme.border, color: theme.text }]}
+            placeholder="Enter new password"
+            placeholderTextColor={theme.placeholder}
+            value={newPassword}
+            onChangeText={setNewPassword}
+            secureTextEntry={true}
+          />
+          <TouchableOpacity onPress={handleEditPassword}>
+            <Text style={{ color: theme.button, marginTop: 10 }}>Save</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => setIsEditingPassword(false)}>
+            <Text style={{ color: theme.danger, marginTop: 10 }}>Cancel</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       {/* Logout and Delete Account */}
       <TouchableOpacity onPress={handleLogout}>
         <Text style={{ color: theme.danger, marginTop: 20 }}>Logout</Text>
@@ -353,6 +488,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   themeButtonText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  centeredRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginVertical: 10,
+  },
+  centeredButton: {
+    padding: 10,
+    borderRadius: 8,
+    alignItems: 'center',
+    width: '80%',
+  },
+  buttonText: {
     fontSize: 16,
     fontWeight: 'bold',
   },

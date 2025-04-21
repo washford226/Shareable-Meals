@@ -13,6 +13,7 @@ import jwt from 'jsonwebtoken';
 import multer from 'multer';
 import nodemailer from 'nodemailer';
 import authMiddleware from './authMiddleware';
+import crypto from 'crypto';
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage() });
@@ -102,49 +103,111 @@ router.post('/login', (req: Request, res: Response) => {
 });
 
 // Forgot Password or username
-router.post('/forgot-password', (req: Request, res: Response) => {
+router.post('/forgot-password', async (req: Request, res: Response): Promise<void> => {
   const { email } = req.body;
   const db = (req as any).db;
 
-  (async () => {
-    try {
-      const [rows]: [User[], any] = await db.query('SELECT username, password FROM users WHERE email = ?', [email]);
+  if (!email) {
+    res.status(400).json({ error: 'Email is required' });
+    return;
+  }
 
-      if (rows.length === 0) {
-        return res.status(404).send('No user found with this email');
-      }
-
-      const user = rows[0];
-
-      const transporter = nodemailer.createTransport({
-        service: 'gmail',
-        auth: {
-          user: process.env.EMAIL_USER,
-          pass: process.env.EMAIL_PASS,
-        },
-      });
-
-      const mailOptions = {
-        from: process.env.EMAIL_USER,
-        to: email,
-        subject: 'Your Account Information',
-        text: `Hello ${user.username},\n\nHere is your account information:\n\nUsername: ${user.username}\nPassword: ${user.password}\n\nIf you did not request this email, please ignore it.\n\nThank you!`,
-      };
-
-      await transporter.sendMail(mailOptions);
-
-      res.status(200).send('An email with your account information has been sent');
-    } catch (err) {
-      console.error('Error sending forgot password email:', err);
-      res.status(500).send('Error sending email');
+  try {
+    // Check if the user exists
+    const [rows] = await db.query('SELECT id FROM users WHERE email = ?', [email]);
+    if (rows.length === 0) {
+      res.status(404).json({ error: 'User with this email does not exist' });
+      return;
     }
-  })();
+
+    const userId = rows[0].id;
+
+    // Generate a secure token
+    const token = crypto.randomBytes(32).toString('hex');
+    const tokenExpiration = new Date(Date.now() + 3600000); // Token valid for 1 hour
+
+    // Save the token and expiration in the database
+    await db.query('INSERT INTO password_resets (user_id, token, expires_at) VALUES (?, ?, ?)', [
+      userId,
+      token,
+      tokenExpiration,
+    ]);
+
+    // Send the reset link via email
+    const transporter = nodemailer.createTransport({
+      service: 'Gmail', // Or another email service
+      auth: {
+        user: 'your-email@gmail.com',
+        pass: 'your-email-password',
+      },
+    });
+
+    const resetLink = `http://localhost:3000/reset-password?token=${token}`;
+    const mailOptions = {
+      from: 'your-email@gmail.com',
+      to: email,
+      subject: 'Password Reset Request',
+      text: `You requested a password reset. Click the link below to reset your password:\n\n${resetLink}\n\nIf you did not request this, please ignore this email.`,
+    };
+
+    await transporter.sendMail(mailOptions);
+
+    res.status(200).json({ message: 'Password reset link sent to your email' });
+  } catch (err) {
+    console.error('Error sending password reset email:', err);
+    res.status(500).json({ error: 'An error occurred while processing your request' });
+  }
+});
+
+//reset password
+router.post('/reset-password', async (req: Request, res: Response): Promise<void> => {
+  const { token, password } = req.body;
+  const db = (req as any).db;
+
+  if (!token || !password) {
+    res.status(400).json({ error: 'Token and new password are required' });
+    return;
+  }
+
+  if (password.length < 8) {
+    res.status(400).json({ error: 'Password must be at least 8 characters long' });
+    return;
+  }
+
+  try {
+    // Validate the token
+    const [rows] = await db.query('SELECT user_id, expires_at FROM password_resets WHERE token = ?', [token]);
+    if (rows.length === 0) {
+      res.status(400).json({ error: 'Invalid or expired token' });
+      return;
+    }
+
+    const { user_id, expires_at } = rows[0];
+    if (new Date() > new Date(expires_at)) {
+      res.status(400).json({ error: 'Token has expired' });
+      return;
+    }
+
+    // Hash the new password
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Update the user's password
+    await db.query('UPDATE users SET password = ? WHERE id = ?', [hashedPassword, user_id]);
+
+    // Delete the token
+    await db.query('DELETE FROM password_resets WHERE token = ?', [token]);
+
+    res.status(200).json({ message: 'Password reset successfully' });
+  } catch (err) {
+    console.error('Error resetting password:', err);
+    res.status(500).json({ error: 'An error occurred while resetting the password' });
+  }
 });
 
 // Update user information
 router.put('/user/:username', authMiddleware, async (req: Request, res: Response): Promise<void> => {
   const { username } = req.params;
-  const { email, password, calories_goal, dietary_restrictions } = req.body;
+  const { calories_goal, dietary_restrictions } = req.body; // Only allow these fields to be updated
   const user = (req as any).user;
   const db = (req as any).db;
 
@@ -153,7 +216,8 @@ router.put('/user/:username', authMiddleware, async (req: Request, res: Response
     return;
   }
 
-  const fields = { email, password, calories_goal, dietary_restrictions };
+  // Only include fields that are allowed to be updated
+  const fields = { calories_goal, dietary_restrictions };
   const { query, values } = buildUpdateQuery(fields);
 
   if (!query) {
@@ -162,14 +226,6 @@ router.put('/user/:username', authMiddleware, async (req: Request, res: Response
   }
 
   try {
-    if (password) {
-      const hashedPassword = await bcrypt.hash(password, 10);
-      const passwordIndex = Object.keys(fields).indexOf('password');
-      if (passwordIndex !== -1) {
-        values[passwordIndex] = hashedPassword;
-      }
-    }
-
     const sql = `UPDATE users SET ${query} WHERE username = ?`;
     values.push(username);
 
@@ -264,6 +320,108 @@ router.post('/upload-profile-picture', authMiddleware, upload.single('profile_pi
   }
 });
 
+//Change password
+router.put('/user/:username/password', authMiddleware, async (req: Request, res: Response): Promise<void> => {
+  const { username } = req.params;
+  const { currentPassword, password } = req.body;
+  const user = (req as any).user; // Authenticated user
+  const db = (req as any).db;
+
+  if (!currentPassword || !password) {
+    res.status(400).json({ error: 'Current password and new password are required' });
+    return;
+  }
+
+  if (password.length < 8) {
+    res.status(400).json({ error: 'New password must be at least 8 characters long' });
+    return;
+  }
+
+  if (username !== user.username) {
+    res.status(403).json({ error: 'You are not authorized to update this user' });
+    return;
+  }
+
+  try {
+    // Fetch the user's current hashed password from the database
+    const [rows] = await db.query('SELECT password FROM users WHERE username = ?', [username]);
+    if (rows.length === 0) {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+
+    const hashedPassword = rows[0].password;
+
+    // Compare the current password with the hashed password
+    const isMatch = await bcrypt.compare(currentPassword, hashedPassword);
+    if (!isMatch) {
+      res.status(401).json({ error: 'Current password is incorrect' });
+      return;
+    }
+
+    // Hash the new password
+    const newHashedPassword = await bcrypt.hash(password, 10);
+
+    // Update the password in the database
+    await db.query('UPDATE users SET password = ? WHERE username = ?', [newHashedPassword, username]);
+
+    res.status(200).json({ message: 'Password updated successfully' });
+  } catch (err) {
+    console.error('Error updating password:', err);
+    res.status(500).json({ error: 'An error occurred while updating the password' });
+  }
+});
+
+//Change email
+router.put('/user/:username/email', authMiddleware, async (req: Request, res: Response): Promise<void> => {
+  const { username } = req.params;
+  const { currentPassword, email } = req.body;
+  const user = (req as any).user; // Authenticated user
+  const db = (req as any).db;
+
+  if (!currentPassword || !email) {
+    res.status(400).json({ error: 'Current password and new email are required' });
+    return;
+  }
+
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(email)) {
+    res.status(400).json({ error: 'Invalid email format' });
+    return;
+  }
+
+  if (username !== user.username) {
+    res.status(403).json({ error: 'You are not authorized to update this user' });
+    return;
+  }
+
+  try {
+    // Fetch the user's current hashed password from the database
+    const [rows] = await db.query('SELECT password FROM users WHERE username = ?', [username]);
+    if (rows.length === 0) {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+
+    const hashedPassword = rows[0].password;
+
+    // Compare the current password with the hashed password
+    const isMatch = await bcrypt.compare(currentPassword, hashedPassword);
+    if (!isMatch) {
+      res.status(401).json({ error: 'Current password is incorrect' });
+      return;
+    }
+
+    // Update the email in the database
+    await db.query('UPDATE users SET email = ? WHERE username = ?', [email, username]);
+
+    res.status(200).json({ message: 'Email updated successfully' });
+  } catch (err) {
+    console.error('Error updating email:', err);
+    res.status(500).json({ error: 'An error occurred while updating the email' });
+  }
+});
+
 const buildUpdateQuery = (fields: Record<string, any>) => {
   const fieldsToUpdate = [];
   const values = [];
@@ -322,7 +480,7 @@ router.post("/meals", authMiddleware, async (req: Request, res: Response): Promi
 // Get all meals
 router.get('/meals', authMiddleware, (req: Request, res: Response) => {
   const db = (req as any).db;
-  const { search } = req.query; // Get the search query parameter
+  const { search, filters } = req.query; // Get the search and filters parameters
 
   let query = `
     SELECT 
@@ -357,6 +515,23 @@ router.get('/meals', authMiddleware, (req: Request, res: Response) => {
     `;
     const searchTerm = `%${search}%`;
     values.push(searchTerm, searchTerm, searchTerm);
+  }
+
+  // Add filtering logic for nutritional values
+  if (filters) {
+    const parsedFilters = JSON.parse(filters as string); // Parse the filters from the query string
+    parsedFilters.forEach((filter: { type: string; greaterThan: string; lessThan: string }) => {
+      if (filter.type) {
+        if (filter.greaterThan) {
+          query += ` AND meals.${filter.type} > ?`;
+          values.push(Number(filter.greaterThan));
+        }
+        if (filter.lessThan) {
+          query += ` AND meals.${filter.type} < ?`;
+          values.push(Number(filter.lessThan));
+        }
+      }
+    });
   }
 
   query += `
@@ -439,11 +614,11 @@ router.post('/add-meal', authMiddleware, (req: Request, res: Response) => {
     });
 });
 
-// Get meals for the current user (without reviews)
+// Get meals for the current user (with filters and search)
 router.get('/my-meals', authMiddleware, async (req: Request, res: Response): Promise<void> => {
   const user = (req as any).user; // Get the authenticated user
   const db = (req as any).db; // Get the database instance
-  const { search } = req.query; // Get the search query parameter
+  const { search, filters } = req.query; // Get the search and filters parameters
 
   if (!user) {
     res.status(401).send('User not authenticated');
@@ -478,6 +653,23 @@ router.get('/my-meals', authMiddleware, async (req: Request, res: Response): Pro
     `;
     const searchTerm = `%${search}%`;
     values.push(searchTerm, searchTerm);
+  }
+
+  // Add filtering logic for nutritional values
+  if (filters) {
+    const parsedFilters = JSON.parse(filters as string); // Parse the filters from the query string
+    parsedFilters.forEach((filter: { type: string; greaterThan: string; lessThan: string }) => {
+      if (filter.type) {
+        if (filter.greaterThan) {
+          query += ` AND meals.${filter.type} > ?`;
+          values.push(Number(filter.greaterThan));
+        }
+        if (filter.lessThan) {
+          query += ` AND meals.${filter.type} < ?`;
+          values.push(Number(filter.lessThan));
+        }
+      }
+    });
   }
 
   query += `
@@ -532,6 +724,46 @@ router.put('/meals/:meal_id', authMiddleware, async (req: Request, res: Response
   } catch (err) {
     console.error('Error updating meal:', err);
     res.status(500).send('Error updating meal');
+  }
+});
+
+// Get a specific meal by ID
+router.get('/meals/:meal_id', authMiddleware, async (req: Request, res: Response): Promise<void> => {
+  const { meal_id } = req.params; // Extract the meal ID from the URL
+  const db = (req as any).db; // Get the database instance
+
+  try {
+    const [rows]: [any[], any] = await db.query(
+      `
+      SELECT 
+        meals.id, 
+        meals.name, 
+        meals.description, 
+        meals.ingredients, 
+        meals.calories, 
+        meals.protein, 
+        meals.carbohydrates, 
+        meals.fat, 
+        meals.visibility, 
+        meals.created_at, 
+        users.username AS userName
+      FROM meals
+      INNER JOIN users ON meals.user_id = users.id
+      WHERE meals.id = ?
+      `,
+      [meal_id]
+    );
+
+    if (rows.length === 0) {
+      res.status(404).send('Meal not found');
+      return;
+    }
+
+    const meal = rows[0];
+    res.status(200).json(meal);
+  } catch (err) {
+    console.error('Error fetching meal:', err);
+    res.status(500).send('Error fetching meal');
   }
 });
 

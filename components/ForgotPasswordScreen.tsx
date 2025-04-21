@@ -6,6 +6,7 @@ import { Platform } from "react-native";
 const ForgotPasswordScreen = ({ onBackToLogin }: { onBackToLogin: () => void }) => {
   const [email, setEmail] = useState("");
 
+  // Determine the base URL for localhost (iOS/Android compatibility)
   const getBaseUrl = () => {
     return Platform.OS === "android" ? "http://10.0.2.2:5000" : "http://localhost:5000";
   };
@@ -15,12 +16,22 @@ const ForgotPasswordScreen = ({ onBackToLogin }: { onBackToLogin: () => void }) 
       const response = await axios.post(`${getBaseUrl()}/forgot-password`, { email });
 
       if (response.status === 200) {
-        Alert.alert("Success", "A password reset link has been sent to your email.");
-        onBackToLogin(); // Use the onBackToLogin prop to navigate back
+        const { username } = response.data; // Extract username from the backend response
+        Alert.alert(
+          "Success",
+          `A password reset link has been sent to your email.\n\nUsername: ${username}`
+        );
+        onBackToLogin(); // Navigate back to the login screen
       }
     } catch (error) {
       console.error("Error sending forgot password email:", error);
-      Alert.alert("Error", "Failed to send email. Please try again.");
+
+      // Handle specific errors
+      if ((error as any).response?.status === 404) {
+        Alert.alert("Error", "No account found with this email.");
+      } else {
+        Alert.alert("Error", "Failed to send email. Please try again.");
+      }
     }
   };
 
@@ -51,7 +62,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     padding: 16,
-    backgroundColor: "#f9f9f9", // Optional: Add a background color for consistency
+    backgroundColor: "#f9f9f9",
   },
   title: {
     fontSize: 24,

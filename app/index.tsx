@@ -164,7 +164,7 @@ function Index() {
               </TouchableOpacity>
               <TouchableOpacity style={styles.barButton} onPress={handleNavigateToOtherMeals}>
                 <Icon name="users" size={24} color="#000" />
-                <Text style={styles.barButtonText}>Other Meals</Text>
+                <Text style={styles.barButtonText}>Discover Meals</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.barButton} onPress={handleNavigateToAccount}>
                 <Icon name="user" size={24} color="#000" />
@@ -186,7 +186,7 @@ function Index() {
               </TouchableOpacity>
               <TouchableOpacity style={styles.barButton} onPress={handleNavigateToOtherMeals}>
                 <Icon name="users" size={24} color="#000" />
-                <Text style={styles.barButtonText}>Other Meals</Text>
+                <Text style={styles.barButtonText}>Discover Meals</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.barButton} onPress={handleNavigateToAccount}>
                 <Icon name="user" size={24} color="#000" />
@@ -208,7 +208,7 @@ function Index() {
               </TouchableOpacity>
               <TouchableOpacity style={styles.barButton} onPress={handleNavigateToOtherMeals}>
                 <Icon name="users" size={24} color="#000" />
-                <Text style={styles.barButtonText}>Other Meals</Text>
+                <Text style={styles.barButtonText}>Discover Meals</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.barButton} onPress={handleNavigateToAccount}>
                 <Icon name="user" size={24} color="#000" />
@@ -234,7 +234,7 @@ function Index() {
               </TouchableOpacity>
               <TouchableOpacity style={styles.barButton} onPress={handleNavigateToOtherMeals}>
                 <Icon name="users" size={24} color="#000" />
-                <Text style={styles.barButtonText}>Other Meals</Text>
+                <Text style={styles.barButtonText}>Discover Meals</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.barButton} onPress={handleNavigateToAccount}>
                 <Icon name="user" size={24} color="#000" />
