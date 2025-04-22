@@ -1,8 +1,9 @@
 import React, { useState } from "react";
-import { View, Text, StyleSheet, TouchableOpacity, Alert, Modal, TextInput, Platform } from "react-native";
+import { View, Text, StyleSheet, TouchableOpacity, Alert, Modal, TextInput, Platform, Image } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Meal } from "@/types/types";
 import { useTheme } from "@/context/ThemeContext";
+import { ScrollView } from "react-native";
 
 const BASE_URL = Platform.OS === "android" ? "http://10.0.2.2:5000" : "http://localhost:5000";
 
@@ -90,7 +91,17 @@ const MealDetails: React.FC<MealDetailsProps> = ({ meal, onBack, onAddReview, on
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.background }]}>
+    <ScrollView contentContainerStyle={styles.scrollContainer}>
+      <View style={[styles.container, { backgroundColor: theme.background }]}>
+        {typeof meal.picture === "string" ? (
+    <Image source={{ uri: meal.picture }} style={styles.mealPicture} />
+  ) : (
+    <View style={styles.mealPicturePlaceholder}>
+      <Text style={[styles.mealPicturePlaceholderText, { color: theme.placeholder }]}>
+        No Picture
+      </Text>
+    </View>
+  )}
       <Text style={[styles.title, { color: theme.text }]}>{meal.name}</Text>
       <Text style={[styles.description, { color: theme.subtext }]}>{meal.description}</Text>
       <Text style={[styles.sectionTitle, { color: theme.text }]}>Ingredients:</Text>
@@ -188,6 +199,7 @@ const MealDetails: React.FC<MealDetailsProps> = ({ meal, onBack, onAddReview, on
         </View>
       </Modal>
     </View>
+  </ScrollView>
   );
 };
 
@@ -312,6 +324,33 @@ const styles = StyleSheet.create({
   modalButtonText: {
     fontSize: 16,
     fontWeight: "bold",
+  },
+  mealPicture: {
+    width: 200,
+    height: 200,
+    borderRadius: 8,
+    marginBottom: 16,
+    borderWidth: 2,
+    borderColor: "#ccc",
+    alignSelf: "center",
+  },
+  mealPicturePlaceholder: {
+    width: 200,
+    height: 200,
+    borderRadius: 8,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#f0f0f0",
+    marginBottom: 16,
+    alignSelf: "center",
+  },
+  mealPicturePlaceholderText: {
+    fontSize: 16,
+    color: "#888",
+  },
+  scrollContainer: {
+    flexGrow: 1,
+    padding: 16,
   },
 });
 

@@ -10,6 +10,7 @@ import {
   Platform,
   TextInput,
   Modal,
+  Image,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
@@ -216,6 +217,16 @@ const OtherMeals: React.FC<OtherMealsProps> = ({ onMealSelect }) => {
             style={[styles.mealItem, { backgroundColor: theme.card, borderColor: theme.border }]}
             onPress={() => onMealSelect(item)}
           >
+            {/*Display meal picture or placeholder*/}
+            {item.picture && typeof item.picture === "string" ? (
+              <Image source={{ uri: item.picture }} style={styles.mealPicture} />
+            ) : (
+              <View style={styles.mealPicturePlaceholder}>
+                <Text style={styles.mealPicturePlaceholderText}>No Image</Text>
+              </View>
+            )}
+
+            {/* Meal Name, Description, and User Name */}
             <Text style={[styles.mealName, { color: theme.text }]}>{item.name}</Text>
             <Text style={[styles.mealDescription, { color: theme.subtext }]}>{item.description}</Text>
             <Text style={[styles.mealUser, { color: theme.subtext }]}>By: {item.userName}</Text>
@@ -403,6 +414,25 @@ const styles = StyleSheet.create({
   reviewCount: {
     fontSize: 12,
     marginLeft: 4,
+  },
+  mealPicture: {
+    width: "100%",
+    height: 150,
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  mealPicturePlaceholder: {
+    width: "100%",
+    height: 150,
+    borderRadius: 8,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#f0f0f0",
+    marginBottom: 8,
+  },
+  mealPicturePlaceholderText: {
+    fontSize: 16,
+    color: "#888",
   },
 });
 

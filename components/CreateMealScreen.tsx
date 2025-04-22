@@ -1,6 +1,7 @@
 import React, { useState } from "react";
-import { View, Text, TextInput, Button, StyleSheet, Alert, Platform } from "react-native";
+import { View, Text, TextInput, Button, StyleSheet, Alert, Image, TouchableOpacity, Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as ImagePicker from "expo-image-picker";
 
 const BASE_URL = Platform.OS === "android" ? "http://10.0.2.2:5000" : "http://localhost:5000";
 
@@ -13,22 +14,66 @@ const CreateMealScreen = ({ route, navigation }: any) => {
   const [mealProtein, setMealProtein] = useState("");
   const [mealCarbohydrates, setMealCarbohydrates] = useState("");
   const [mealFat, setMealFat] = useState("");
+  const [mealPicture, setMealPicture] = useState<string | null>(null);
+
+  const requestPermission = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== "granted") {
+      Alert.alert("Permission Required", "We need access to your gallery to pick an image.");
+    }
+  };
+
+  const pickMealImage = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [3, 3],
+        quality: 1,
+      });
+
+      if (!result.canceled) {
+        const uriParts = result.assets[0].uri.split(".");
+        const fileType = uriParts[uriParts.length - 1].toLowerCase();
+
+        if (!["jpg", "jpeg", "png"].includes(fileType)) {
+          Alert.alert("Error", "Only JPEG and PNG images are allowed.");
+          return;
+        }
+
+        setMealPicture(result.assets[0].uri);
+      }
+    } catch (error) {
+      console.error("Error picking image:", error);
+      Alert.alert("Error", "Failed to pick an image.");
+    }
+  };
 
   const handleAddMeal = async () => {
-    console.log(mealName, mealDescription, mealIngredients, mealCalories, mealProtein, mealCarbohydrates, mealFat);
     if (!mealName || !mealDescription || !mealIngredients) {
       Alert.alert("Error", "Please fill in all required fields.");
       return;
     }
-    const newMeal = {
-      name: mealName,
-      description: mealDescription,
-      ingredients: mealIngredients.split(",").map((ingredient) => ingredient.trim()),
-      calories: parseInt(mealCalories, 10) || 0,
-      protein: parseInt(mealProtein, 10) || 0,
-      carbohydrates: parseInt(mealCarbohydrates, 10) || 0,
-      fat: parseInt(mealFat, 10) || 0,
-    };
+
+    const formData = new FormData();
+    formData.append("name", mealName);
+    formData.append("description", mealDescription);
+    formData.append("ingredients", JSON.stringify(mealIngredients.split(",").map((ingredient) => ingredient.trim())));
+    formData.append("calories", mealCalories);
+    formData.append("protein", mealProtein);
+    formData.append("carbohydrates", mealCarbohydrates);
+    formData.append("fat", mealFat);
+    formData.append("day", selectedDay);
+
+    if (mealPicture) {
+      const uriParts = mealPicture.split(".");
+      const fileType = uriParts[uriParts.length - 1];
+      formData.append("picture", {
+        uri: mealPicture,
+        name: `meal_picture.${fileType}`,
+        type: `image/${fileType}`,
+      } as any);
+    }
 
     try {
       const token = await AsyncStorage.getItem("token");
@@ -40,10 +85,9 @@ const CreateMealScreen = ({ route, navigation }: any) => {
       const response = await fetch(`${BASE_URL}/meals`, {
         method: "POST",
         headers: {
-          "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ meal: newMeal, day: selectedDay }),
+        body: formData,
       });
 
       if (!response.ok) {
@@ -68,8 +112,14 @@ const CreateMealScreen = ({ route, navigation }: any) => {
       <TextInput style={styles.input} placeholder="Protein (g)" value={mealProtein} onChangeText={setMealProtein} keyboardType="numeric" />
       <TextInput style={styles.input} placeholder="Carbs (g)" value={mealCarbohydrates} onChangeText={setMealCarbohydrates} keyboardType="numeric" />
       <TextInput style={styles.input} placeholder="Fat (g)" value={mealFat} onChangeText={setMealFat} keyboardType="numeric" />
+
+      {/* Image Picker */}
+      <TouchableOpacity style={styles.imagePicker} onPress={pickMealImage}>
+        <Text style={styles.imagePickerText}>Pick a Meal Image</Text>
+      </TouchableOpacity>
+      {mealPicture && <Image source={{ uri: mealPicture }} style={styles.mealPicture} />}
+
       <Button title="Create Meal" onPress={handleAddMeal} />
-      <Button title="Add Meal" onPress={handleAddMeal} />
       <Button title="Cancel" onPress={() => navigation.goBack()} />
     </View>
   );
@@ -93,6 +143,24 @@ const styles = StyleSheet.create({
     marginBottom: 15,
     paddingHorizontal: 10,
     width: "80%",
+  },
+  imagePicker: {
+    backgroundColor: "#007BFF",
+    padding: 10,
+    borderRadius: 5,
+    marginBottom: 15,
+  },
+  imagePickerText: {
+    color: "#FFFFFF",
+    fontSize: 16,
+  },
+  mealPicture: {
+    width: 150,
+    height: 150,
+    borderRadius: 8,
+    marginBottom: 15,
+    borderWidth: 2,
+    borderColor: "#ccc",
   },
 });
 

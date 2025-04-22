@@ -10,6 +10,7 @@ import {
   Platform,
   TextInput,
   Modal,
+  Image,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
@@ -230,6 +231,13 @@ const applyFilters = async () => {
             style={[styles.mealItem, { backgroundColor: theme.card, borderColor: theme.border }]}
             onPress={() => onMealSelect(item)}
           >
+            {item.picture && typeof item.picture === "string" ? (
+              <Image source={{ uri: item.picture }} style={styles.mealPicture} />
+            ) : (
+              <View style={styles.mealPicturePlaceholder}>
+                <Text style={styles.mealPicturePlaceholderText}>No Image</Text>
+              </View>
+            )}
             <Text style={[styles.mealName, { color: theme.text }]}>{item.name}</Text>
             <Text style={[styles.mealDescription, { color: theme.subtext }]}>{item.description}</Text>
           </TouchableOpacity>
@@ -421,6 +429,25 @@ const styles = StyleSheet.create({
   addMealButtonText: {
     fontSize: 16,
     fontWeight: "bold",
+  },
+  mealPicture: {
+    width: "100%",
+    height: 150,
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  mealPicturePlaceholder: {
+    width: "100%",
+    height: 150,
+    borderRadius: 8,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#f0f0f0",
+    marginBottom: 8,
+  },
+  mealPicturePlaceholderText: {
+    fontSize: 16,
+    color: "#888",
   },
 });
 
