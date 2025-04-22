@@ -316,6 +316,8 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 16,
     paddingBottom: 16,
+    width: "100%",
+    height: "100%",
   },
   searchBarContainer: {
     flexDirection: "row",
@@ -422,6 +424,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     bottom: 50, // Place it above the navigation bar
     padding: 12,
+    left: "40%",
     borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",

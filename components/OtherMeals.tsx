@@ -305,6 +305,7 @@ const OtherMeals: React.FC<OtherMealsProps> = ({ onMealSelect }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    width: "100%",
   },
   loadingText: {
     marginTop: 16,
