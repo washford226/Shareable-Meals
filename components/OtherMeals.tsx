@@ -10,6 +10,7 @@ import {
   Platform,
   TextInput,
   Modal,
+  Image,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
@@ -209,20 +210,30 @@ const OtherMeals: React.FC<OtherMealsProps> = ({ onMealSelect }) => {
 
       {/* Meals List */}
       <FlatList
-        data={filteredMeals}
-        keyExtractor={(item) => item.id.toString()}
-        renderItem={({ item }) => (
-          <TouchableOpacity
-            style={[styles.mealItem, { backgroundColor: theme.card, borderColor: theme.border }]}
-            onPress={() => onMealSelect(item)}
-          >
+      data={filteredMeals}
+      keyExtractor={(item) => item.id.toString()}
+      renderItem={({ item }) => (
+        <TouchableOpacity
+          style={[styles.mealItem, { backgroundColor: theme.card, borderColor: theme.border }]}
+          onPress={() => onMealSelect(item)}
+        >
+          {/* Display meal picture or placeholder */}
+          {item.picture && typeof item.picture === "string" ? (
+            <Image source={{ uri: item.picture }} style={styles.mealPicture} />
+          ) : (
+            <View style={styles.mealPicturePlaceholder}>
+              <Text style={styles.mealPicturePlaceholderText}>No Image</Text>
+            </View>
+          )}
+
+          {/* Meal Details */}
+          <View style={{ flex: 1 }}>
             <Text style={[styles.mealName, { color: theme.text }]}>{item.name}</Text>
             <Text style={[styles.mealDescription, { color: theme.subtext }]}>{item.description}</Text>
             <Text style={[styles.mealUser, { color: theme.subtext }]}>By: {item.userName}</Text>
 
             {/* Rating and Review Count */}
             <View style={styles.ratingContainer}>
-              {/* Render stars based on the rating */}
               {[...Array(5)].map((_, index) => (
                 <Icon
                   key={index}
@@ -235,9 +246,12 @@ const OtherMeals: React.FC<OtherMealsProps> = ({ onMealSelect }) => {
                 ({item.reviewCount} reviews)
               </Text>
             </View>
-          </TouchableOpacity>
-        )}
-      />
+          </View>
+        </TouchableOpacity>
+      )}
+      contentContainerStyle={{ paddingBottom: 60 }}
+    />
+
 
       {/* Filter Modal */}
       <Modal visible={isFilterModalVisible} transparent animationType="slide">
@@ -294,6 +308,7 @@ const OtherMeals: React.FC<OtherMealsProps> = ({ onMealSelect }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    width: "100%",
   },
   loadingText: {
     marginTop: 16,
@@ -331,8 +346,10 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
   },
   mealItem: {
-    marginBottom: 16,
+    flexDirection: "row", // Align picture and text horizontally
+    alignItems: "center", // Center align items vertically
     padding: 16,
+    marginBottom: 16,
     borderWidth: 1,
     borderRadius: 8,
   },
@@ -403,6 +420,25 @@ const styles = StyleSheet.create({
   reviewCount: {
     fontSize: 12,
     marginLeft: 4,
+  },
+  mealPicture: {
+    width: 80, // Smaller width
+    height: 80, // Smaller height
+    borderRadius: 8,
+    marginRight: 16, // Add space between the picture and text
+  },
+  mealPicturePlaceholder: {
+    width: 80,
+    height: 80,
+    borderRadius: 8,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#f0f0f0",
+    marginBottom: 8,
+  },
+  mealPicturePlaceholderText: {
+    fontSize: 16,
+    color: "#888",
   },
 });
 

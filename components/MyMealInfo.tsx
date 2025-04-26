@@ -9,6 +9,7 @@ import {
   Switch,
   TouchableOpacity,
   Modal,
+  Image,
 } from "react-native";
 import { Meal } from "@/types/types";
 import { useTheme } from "@/context/ThemeContext";
@@ -17,6 +18,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Picker } from "@react-native-picker/picker";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { format } from "date-fns";
+import * as ImagePicker from "expo-image-picker";
 
 interface MyMealInfoProps {
   meal: Meal;
@@ -34,6 +36,7 @@ const MyMealInfo: React.FC<MyMealInfoProps> = ({ meal, onBack }) => {
   const [selectedDate, setSelectedDate] = useState("");
   const [mealType, setMealType] = useState("Breakfast");
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [picture, setPicture] = useState(meal.picture);
 
   const handleAddToMealPlan = async () => {
     if (!selectedDate) {
@@ -69,6 +72,48 @@ const MyMealInfo: React.FC<MyMealInfoProps> = ({ meal, onBack }) => {
     } catch (error) {
       console.error("Error adding meal to meal plan:", error);
       Alert.alert("Error", "Failed to add meal to the meal plan. Please try again later.");
+    }
+  };
+  
+  const pickImage = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1], // Square aspect ratio
+        quality: 1,
+      });
+  
+      if (!result.canceled) {
+        const token = await AsyncStorage.getItem("token");
+        if (!token) {
+          throw new Error("No token found");
+        }
+  
+        const formData = new FormData();
+        formData.append("picture", {
+          uri: result.assets[0].uri,
+          name: "meal_picture.jpg",
+          type: "image/jpeg",
+        } as any);
+  
+        const response = await fetch(`${BASE_URL}/meals/${meal.id}/image`, {
+          method: "PUT",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "multipart/form-data",
+          },
+          body: formData,
+        });
+  
+        if (response.status === 200) {
+          Alert.alert("Success", "Meal image updated successfully");
+          setPicture(result.assets[0].uri); // Update the picture state
+        }
+      }
+    } catch (error) {
+      console.error("Error updating meal image:", error);
+      Alert.alert("Error", "Failed to update meal image");
     }
   };
 
@@ -117,7 +162,7 @@ const MyMealInfo: React.FC<MyMealInfoProps> = ({ meal, onBack }) => {
         Alert.alert("Error", "User not authenticated. Please log in.");
         return;
       }
-  
+
       const response = await axios.put(
         `${BASE_URL}/meals/${editedMeal.id}`,
         editedMeal,
@@ -125,7 +170,7 @@ const MyMealInfo: React.FC<MyMealInfoProps> = ({ meal, onBack }) => {
           headers: { Authorization: `Bearer ${token}` },
         }
       );
-  
+
       if (response.status === 200) {
         Alert.alert("Success", "Meal updated successfully!");
         setIsEditing(false);
@@ -144,11 +189,11 @@ const MyMealInfo: React.FC<MyMealInfoProps> = ({ meal, onBack }) => {
         Alert.alert("Error", "User not authenticated. Please log in.");
         return;
       }
-  
+
       const response = await axios.get(`${BASE_URL}/meals/${meal.id}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-  
+
       if (response.status === 200) {
         setEditedMeal(response.data); // Update the editedMeal state with the latest data
       }
@@ -229,6 +274,9 @@ const MyMealInfo: React.FC<MyMealInfoProps> = ({ meal, onBack }) => {
               thumbColor={editedMeal.visibility ? theme.primary : theme.border}
             />
           </View>
+          <TouchableOpacity style={[styles.button, { backgroundColor: theme.button }]} onPress={pickImage}>
+            <Text style={[styles.buttonText, { color: theme.buttonText }]}>Update Image</Text>
+          </TouchableOpacity>
           <TouchableOpacity
             style={[styles.button, { backgroundColor: theme.button }]}
             onPress={handleSave}
@@ -245,6 +293,23 @@ const MyMealInfo: React.FC<MyMealInfoProps> = ({ meal, onBack }) => {
       ) : (
         <>
           {/* Viewing UI */}
+          {editedMeal.picture ? (
+            typeof picture === "string" ? (
+              <Image source={{ uri: picture }} style={styles.mealPicture} />
+            ) : (
+              <View style={styles.mealPicturePlaceholder}>
+                <Text style={[styles.mealPicturePlaceholderText, { color: theme.placeholder }]}>
+                  No Picture
+                </Text>
+              </View>
+            )
+          ) : (
+            <View style={styles.mealPicturePlaceholder}>
+              <Text style={[styles.mealPicturePlaceholderText, { color: theme.placeholder }]}>
+                No Picture
+              </Text>
+            </View>
+          )}
           <Text style={[styles.title, { color: theme.text }]}>{editedMeal.name}</Text>
           <Text style={[styles.description, { color: theme.subtext }]}>{editedMeal.description}</Text>
           <Text style={[styles.details, { color: theme.text }]}>Ingredients: {editedMeal.ingredients}</Text>
@@ -304,7 +369,7 @@ const MyMealInfo: React.FC<MyMealInfoProps> = ({ meal, onBack }) => {
                   onChange={(event, date) => {
                     setShowDatePicker(false);
                     if (date) {
-                      handleDateSelection(date); 
+                      handleDateSelection(date);
                     }
                   }}
                 />
@@ -345,6 +410,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 16,
+    width: "100%",
   },
   title: {
     fontSize: 24,
@@ -413,7 +479,29 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginBottom: 16,
   },
+  mealPicture: {
+    width: 200,
+    height: 200,
+    borderRadius: 8,
+    marginBottom: 16,
+    borderWidth: 2,
+    borderColor: "#ccc",
+    alignSelf: "center",
+  },
+  mealPicturePlaceholder: {
+    width: 200,
+    height: 200,
+    borderRadius: 8,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#f0f0f0",
+    marginBottom: 16,
+    alignSelf: "center",
+  },
+  mealPicturePlaceholderText: {
+    fontSize: 16,
+    color: "#888",
+  },
 });
-
 
 export default MyMealInfo;

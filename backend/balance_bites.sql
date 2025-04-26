@@ -45,6 +45,7 @@ CREATE TABLE IF NOT EXISTS meals (
     protein INT NOT NULL,
     carbohydrates INT NOT NULL,
     fat INT NOT NULL,
+    picture BLOB,
     visibility BOOLEAN DEFAULT TRUE, -- True for public, false for private
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
@@ -97,7 +98,7 @@ CREATE TABLE Meal_Plan (
     user_id INT NOT NULL, -- Foreign key to the users table
     date DATE NOT NULL, -- The specific date the meal is planned for
     meal_type ENUM('Breakfast', 'Lunch', 'Dinner', 'Other') NOT NULL, -- Type of meal
-    FOREIGN KEY (meal_id) REFERENCES meals(id) ON DELETE CASCADE -- Cascade delete if the meal is deleted
+    FOREIGN KEY (meal_id) REFERENCES meals(id) ON DELETE CASCADE, -- Cascade delete if the meal is deleted
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE -- Cascade delete if the user is deleted
 );
 

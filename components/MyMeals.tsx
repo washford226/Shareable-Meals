@@ -10,6 +10,7 @@ import {
   Platform,
   TextInput,
   Modal,
+  Image,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
@@ -223,19 +224,28 @@ const applyFilters = async () => {
 
       {/* Meal List */}
       <FlatList
-        data={filteredMeals}
-        keyExtractor={(item) => item.id.toString()}
-        renderItem={({ item }) => (
-          <TouchableOpacity
-            style={[styles.mealItem, { backgroundColor: theme.card, borderColor: theme.border }]}
-            onPress={() => onMealSelect(item)}
-          >
-            <Text style={[styles.mealName, { color: theme.text }]}>{item.name}</Text>
-            <Text style={[styles.mealDescription, { color: theme.subtext }]}>{item.description}</Text>
-          </TouchableOpacity>
-        )}
-        contentContainerStyle={{ paddingBottom: 60 }} // Add padding to the bottom of the list
-      />
+  data={filteredMeals}
+  keyExtractor={(item) => item.id.toString()}
+  renderItem={({ item }) => (
+    <TouchableOpacity
+      style={[styles.mealItem, { backgroundColor: theme.card, borderColor: theme.border }]}
+      onPress={() => onMealSelect(item)}
+    >
+      {item.picture && typeof item.picture === "string" ? (
+        <Image source={{ uri: item.picture }} style={styles.mealPicture} />
+      ) : (
+        <View style={styles.mealPicturePlaceholder}>
+          <Text style={styles.mealPicturePlaceholderText}>No Image</Text>
+        </View>
+      )}
+      <View style={{ flex: 1 }}>
+        <Text style={[styles.mealName, { color: theme.text }]}>{item.name}</Text>
+        <Text style={[styles.mealDescription, { color: theme.subtext }]}>{item.description}</Text>
+      </View>
+    </TouchableOpacity>
+  )}
+  contentContainerStyle={{ paddingBottom: 60 }}
+/>
       
 
       {/* Filter Modal */}
@@ -308,6 +318,8 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 16,
     paddingBottom: 16,
+    width: "100%",
+    height: "100%",
   },
   searchBarContainer: {
     flexDirection: "row",
@@ -335,6 +347,8 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
   },
   mealItem: {
+    flexDirection: "row", // Align picture and text horizontally
+    alignItems: "center", // Center align items vertically
     padding: 16,
     marginBottom: 16,
     borderWidth: 1,
@@ -414,6 +428,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     bottom: 50, // Place it above the navigation bar
     padding: 12,
+    left: "40%",
     borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
@@ -421,6 +436,25 @@ const styles = StyleSheet.create({
   addMealButtonText: {
     fontSize: 16,
     fontWeight: "bold",
+  },
+  mealPicture: {
+    width: 80, // Smaller width
+    height: 80, // Smaller height
+    borderRadius: 8,
+    marginRight: 16, // Add space between the picture and text
+  },
+  mealPicturePlaceholder: {
+    width: 80,
+    height: 80,
+    borderRadius: 8,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#f0f0f0",
+    marginBottom: 8,
+  },
+  mealPicturePlaceholderText: {
+    fontSize: 16,
+    color: "#888",
   },
 });
 
