@@ -45,6 +45,9 @@ CREATE TABLE IF NOT EXISTS meals (
     protein INT NOT NULL,
     carbohydrates INT NOT NULL,
     fat INT NOT NULL,
+    picture BLOB,
+    instructions TEXT NOT NULL,
+    recipeLink VARCHAR(255) DEFAULT NULL,
     visibility BOOLEAN DEFAULT TRUE, -- True for public, false for private
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
@@ -94,7 +97,28 @@ CREATE TABLE Reviews (
 CREATE TABLE Meal_Plan (
     meal_plan_id INT AUTO_INCREMENT PRIMARY KEY, -- Unique identifier for each entry
     meal_id INT NOT NULL, -- Foreign key to the meals table
+    user_id INT NOT NULL, -- Foreign key to the users table
     date DATE NOT NULL, -- The specific date the meal is planned for
     meal_type ENUM('Breakfast', 'Lunch', 'Dinner', 'Other') NOT NULL, -- Type of meal
-    FOREIGN KEY (meal_id) REFERENCES meals(id) ON DELETE CASCADE -- Cascade delete if the meal is deleted
+    FOREIGN KEY (meal_id) REFERENCES meals(id) ON DELETE CASCADE, -- Cascade delete if the meal is deleted
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE -- Cascade delete if the user is deleted
+);
+
+CREATE TABLE IF NOT EXISTS REPORTS (
+    report_id INT AUTO_INCREMENT PRIMARY KEY UNIQUE,
+    user_id INT NOT NULL,
+    meal_id INT NOT NULL,
+    reason VARCHAR(255) NOT NULL,
+    status ENUM('Pending', 'Reviewed', 'Resolved') DEFAULT 'Pending', -- Track report status
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (meal_id) REFERENCES meals(id) ON DELETE CASCADE
+);
+
+CREATE TABLE password_resets (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NOT NULL,
+  token VARCHAR(64) NOT NULL,
+  expires_at DATETIME NOT NULL,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );

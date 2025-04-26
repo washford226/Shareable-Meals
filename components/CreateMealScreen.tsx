@@ -13,6 +13,45 @@ const CreateMealScreen = ({ route, navigation }: any) => {
   const [mealProtein, setMealProtein] = useState("");
   const [mealCarbohydrates, setMealCarbohydrates] = useState("");
   const [mealFat, setMealFat] = useState("");
+<<<<<<< Updated upstream
+=======
+  const [mealPicture, setMealPicture] = useState<string | null>(null);
+  const [mealInstructions, setMealInstructions] = useState("");
+  const [recipeLink, setRecipeLink] = useState("");
+
+  const requestPermission = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== "granted") {
+      Alert.alert("Permission Required", "We need access to your gallery to pick an image.");
+    }
+  };
+
+  const pickMealImage = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [3, 3],
+        quality: 1,
+      });
+
+      if (!result.canceled) {
+        const uriParts = result.assets[0].uri.split(".");
+        const fileType = uriParts[uriParts.length - 1].toLowerCase();
+
+        if (!["jpg", "jpeg", "png"].includes(fileType)) {
+          Alert.alert("Error", "Only JPEG and PNG images are allowed.");
+          return;
+        }
+
+        setMealPicture(result.assets[0].uri);
+      }
+    } catch (error) {
+      console.error("Error picking image:", error);
+      Alert.alert("Error", "Failed to pick an image.");
+    }
+  };
+>>>>>>> Stashed changes
 
   const handleAddMeal = async () => {
     console.log(mealName, mealDescription, mealIngredients, mealCalories, mealProtein, mealCarbohydrates, mealFat);
@@ -20,6 +59,7 @@ const CreateMealScreen = ({ route, navigation }: any) => {
       Alert.alert("Error", "Please fill in all required fields.");
       return;
     }
+<<<<<<< Updated upstream
     const newMeal = {
       name: mealName,
       description: mealDescription,
@@ -29,6 +69,36 @@ const CreateMealScreen = ({ route, navigation }: any) => {
       carbohydrates: parseInt(mealCarbohydrates, 10) || 0,
       fat: parseInt(mealFat, 10) || 0,
     };
+=======
+
+    const youtubeRegex = /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be)\/.+$/;
+    if (recipeLink && !youtubeRegex.test(recipeLink)) {
+      Alert.alert("Error", "Please provide a valid YouTube link for the recipe.");
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append("name", mealName);
+    formData.append("description", mealDescription);
+    formData.append("ingredients", JSON.stringify(mealIngredients.split(",").map((ingredient) => ingredient.trim())));
+    formData.append("calories", mealCalories);
+    formData.append("protein", mealProtein);
+    formData.append("carbohydrates", mealCarbohydrates);
+    formData.append("fat", mealFat);
+    formData.append("instructions", mealInstructions);
+    formData.append("recipeLink", recipeLink);
+    formData.append("day", selectedDay);
+
+    if (mealPicture) {
+      const uriParts = mealPicture.split(".");
+      const fileType = uriParts[uriParts.length - 1];
+      formData.append("picture", {
+        uri: mealPicture,
+        name: `meal_picture.${fileType}`,
+        type: `image/${fileType}`,
+      } as any);
+    }
+>>>>>>> Stashed changes
 
     try {
       const token = await AsyncStorage.getItem("token");
@@ -68,6 +138,18 @@ const CreateMealScreen = ({ route, navigation }: any) => {
       <TextInput style={styles.input} placeholder="Protein (g)" value={mealProtein} onChangeText={setMealProtein} keyboardType="numeric" />
       <TextInput style={styles.input} placeholder="Carbs (g)" value={mealCarbohydrates} onChangeText={setMealCarbohydrates} keyboardType="numeric" />
       <TextInput style={styles.input} placeholder="Fat (g)" value={mealFat} onChangeText={setMealFat} keyboardType="numeric" />
+<<<<<<< Updated upstream
+=======
+      <TextInput style={styles.input} placeholder="Instructions" value={mealInstructions} onChangeText={setMealInstructions} multiline numberOfLines={4} />
+      <TextInput style={styles.input} placeholder="Recipe Link" value={recipeLink} onChangeText={setRecipeLink} />
+
+      {/* Image Picker */}
+      <TouchableOpacity style={styles.imagePicker} onPress={pickMealImage}>
+        <Text style={styles.imagePickerText}>Pick a Meal Image</Text>
+      </TouchableOpacity>
+      {mealPicture && <Image source={{ uri: mealPicture }} style={styles.mealPicture} />}
+
+>>>>>>> Stashed changes
       <Button title="Create Meal" onPress={handleAddMeal} />
       <Button title="Add Meal" onPress={handleAddMeal} />
       <Button title="Cancel" onPress={() => navigation.goBack()} />
