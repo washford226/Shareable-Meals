@@ -52,41 +52,31 @@ const MealDetails: React.FC<MealDetailsProps> = ({ meal, onBack, onAddReview, on
     }
   };
 
-  const handleAddMeal = async (meal: Meal) => {
+  const handleCopyMeal = async (mealId: number) => {
     try {
       const token = await AsyncStorage.getItem("token");
       if (!token) {
         Alert.alert("Error", "User not authenticated. Please log in.");
         return;
       }
-
-      const response = await fetch(`${BASE_URL}/add-meal`, {
+  
+      const response = await fetch(`${BASE_URL}/meals/${mealId}`, {
         method: "POST",
         headers: {
-          "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({
-          name: meal.name,
-          description: meal.description,
-          ingredients: meal.ingredients,
-          calories: meal.calories,
-          protein: meal.protein,
-          carbohydrates: meal.carbohydrates,
-          fat: meal.fat,
-        }),
       });
-
+  
       if (response.ok) {
-        Alert.alert("Success", "Meal added successfully!");
+        Alert.alert("Success", "Meal copied successfully!");
       } else {
         const error = await response.text();
         console.error("Error response:", error);
-        Alert.alert("Error", `Failed to add meal: ${error}`);
+        Alert.alert("Error", `Failed to copy meal: ${error}`);
       }
     } catch (err) {
-      console.error("Error adding meal:", err);
-      Alert.alert("Error", "An error occurred while adding the meal.");
+      console.error("Error copying meal:", err);
+      Alert.alert("Error", "An error occurred while copying the meal.");
     }
   };
 
@@ -135,7 +125,7 @@ const MealDetails: React.FC<MealDetailsProps> = ({ meal, onBack, onAddReview, on
       {/* Add Meal Button */}
       <TouchableOpacity
         style={[styles.addMealButton, { backgroundColor: theme.button }]}
-        onPress={() => handleAddMeal(meal)}
+        onPress={() => handleCopyMeal(meal.id)}
       >
         <Text style={[styles.addMealButtonText, { color: theme.buttonText }]}>Add Meal</Text>
       </TouchableOpacity>

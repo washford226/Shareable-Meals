@@ -19,6 +19,7 @@ import { Picker } from "@react-native-picker/picker";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { format } from "date-fns";
 import * as ImagePicker from "expo-image-picker";
+import { ScrollView } from "react-native";
 
 interface MyMealInfoProps {
   meal: Meal;
@@ -204,6 +205,7 @@ const MyMealInfo: React.FC<MyMealInfoProps> = ({ meal, onBack }) => {
   };
 
   return (
+    <ScrollView contentContainerStyle={[styles.scrollContainer, { backgroundColor: theme.background }]}>
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       {isEditing ? (
         <>
@@ -428,6 +430,7 @@ const MyMealInfo: React.FC<MyMealInfoProps> = ({ meal, onBack }) => {
         </View>
       </Modal>
     </View>
+  </ScrollView>
   );
 };
 
@@ -436,6 +439,9 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 16,
     width: "100%",
+  },
+  scrollContainer: {
+    flexGrow: 1,
   },
   title: {
     fontSize: 24,
