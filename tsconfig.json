@@ -18,4 +18,9 @@
     ".expo/types/**/*.ts",
     "expo-env.d.ts"
   ]
-}
+  ,
+ "baseUrl": "./",
+    "paths": {
+      "@/*": ["app/*"]
+    }
+  }

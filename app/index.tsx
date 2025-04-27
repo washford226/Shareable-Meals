@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Text, View, StyleSheet, TouchableOpacity } from "react-native";
 import MealPlanCalendar from "@/components/MealPlanCalendar";
 import LoginScreen from "@/components/LoginScreen";
@@ -7,6 +7,7 @@ import AccountScreen from "@/components/AccountScreen";
 import ForgotPasswordScreen from "@/components/ForgotPasswordScreen";
 import OtherMeals from "@/components/OtherMeals";
 import MealDetails from "@/components/MealDetails";
+import { fetchFoodsFromUSDA } from "./api/usdaApi";
 import CreateReview from "@/components/CreateReview";
 import ViewReviews from "@/components/ViewReviews";
 import CreateMealScreen from "@/components/CreateMealScreen";
@@ -31,6 +32,8 @@ function Index() {
   const [isCreatingMeal, setIsCreatingMeal] = useState(false);
   const [isAddMealToDate, setIsAddMealToDate] = useState(false); // New state for AddMealToDate screen
   const [selectedDate, setSelectedDate] = useState<string | null>(null); // Track the selected date
+  const [foods, setFoods] = useState([]); // Store USDA food data
+  const [groupedFoods, setGroupedFoods] = useState<Record<string, any[]>>({}); // Group foods by category
 
   const handleLogin = () => setIsLoggedIn(true);
 
@@ -102,6 +105,28 @@ function Index() {
     setIsCreatingMeal(true);
   };
 
+  useEffect(() => {
+    const loadFoods = async () => {
+      const data = await fetchFoodsFromUSDA();
+      setFoods(data);
+      groupFoodsByCategory(data);
+    };
+
+    loadFoods();
+  }, []);
+
+  const groupFoodsByCategory = (foods: any[]) => {
+    const grouped = foods.reduce((acc: any, food: any) => {
+      const category = food.foodCategory || "Uncategorized";
+      if (!acc[category]) {
+        acc[category] = [];
+      }
+      acc[category].push(food);
+      return acc;
+    }, {});
+    setGroupedFoods(grouped);
+  };
+
   const handleNavigateToAddMealToDate = (date: string) => {
     setSelectedDate(date); // Set the selected date
     setIsAddMealToDate(true); // Navigate to AddMealToDate screen
@@ -109,6 +134,21 @@ function Index() {
 
   return (
     <View style={styles.container}>
+      {/* Render categories and foods */}
+      {Object.keys(groupedFoods).map((category) => (
+        <View key={category}>
+          <Text style={styles.categoryTitle}>{category}</Text>
+          {groupedFoods[category].map((food: any) => (
+            <View key={food.fdcId} style={styles.foodItem}>
+              <Text>{food.description}</Text>
+              <Text>
+                Calories:{" "}
+                {food.foodNutrients?.find((n: any) => n.nutrientName === "Energy")?.value || "N/A"}
+              </Text>
+            </View>
+          ))}
+        </View>
+      ))}
       {isLoggedIn ? (
         isCreatingMeal ? (
           <CreateMealScreen
@@ -265,6 +305,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingTop: 25,
   },
+  categoryTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    marginVertical: 10,
+  },
   calendarContainer: {
     flex: 1,
     justifyContent: "flex-start",
@@ -290,6 +335,12 @@ const styles = StyleSheet.create({
   barButtonText: {
     fontSize: 12,
     marginTop: 4,
+  },
+  foodItem: {
+    padding: 10,
+    marginVertical: 5,
+    backgroundColor: "#f0f0f0",
+    borderRadius: 5,
   },
 });
 

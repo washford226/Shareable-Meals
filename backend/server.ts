@@ -45,3 +45,10 @@ app.listen(PORT, async () => {
     process.exit(1); // Exit the process with failure
   }
 });
+
+// Use the foods route
+app.use('/v1/foods', routes);
+
+app.listen(PORT, () => {
+  console.log(`Server is running on port ${PORT}`);
+});

@@ -1049,54 +1049,16 @@ router.post('/report', authMiddleware, async (req: Request, res: Response): Prom
   }
 });
 
-//Retrieve nutritional information from USDA API endpoint
-router.get('/nutrition/:food', authMiddleware, async (req: Request, res: Response): Promise<void> => {
-  const { food } = req.params;
-  const apiKey = process.env.USDA_API_KEY;
 
-  if (!apiKey) {
-    res.status(500).send('USDA API key not configured');
-    return;
-  }
-
-  try {
-    const searchUrl = `https://api.nal.usda.gov/fdc/v1/foods/search?query=${encodeURIComponent(food)}&api_key=${apiKey}`;
-    const searchResponse = await fetch(searchUrl);
-    const searchData = await searchResponse.json();
-
-    if (!searchData.foods || searchData.foods.length === 0) {
-      res.status(404).json({ message: 'Food not found' });
-      return;
-    }
-
-    const foodId = searchData.foods[0].fdcId;
-
-    // Get detailed food info
-    const detailsUrl = `https://api.nal.usda.gov/fdc/v1/food/${foodId}?api_key=${apiKey}`;
-    const detailsResponse = await fetch(detailsUrl);
-    const details = await detailsResponse.json();
-
-    const getNutrient = (name: string) => {
-      const nutrient: { nutrientName: string; value: number | null } | undefined = details.foodNutrients?.find((n: { nutrientName: string; value: number | null }) => n.nutrientName === name);
-      return nutrient?.value ?? null;
-    };
-
-    const result = {
-      name: details.description,
-      calories: getNutrient('Energy'),
-      protein: getNutrient('Protein'),
-      fat: getNutrient('Total lipid (fat)'),
-      carbohydrates: getNutrient('Carbohydrate, by difference'),
-      servingSize: details.servingSize || 'Varies',
-      servingUnit: details.servingSizeUnit || '',
-    };
-
-    res.status(200).json(result);
-  } catch (error) {
-    console.error('Error fetching nutrition data:', error);
-    res.status(500).send('Failed to fetch nutrition data');
-  }
-});
+  router.get('/', authMiddleware, (req, res) => {
+    // Example: Fetch and return food data
+    const foods = [
+      { id: 1, name: 'Apple', category: 'Fruits' },
+      { id: 2, name: 'Carrot', category: 'Vegetables' },
+      { id: 3, name: 'Chicken', category: 'Proteins' },
+    ];
+    res.json(foods);
+  });
 
 
 export default router;
