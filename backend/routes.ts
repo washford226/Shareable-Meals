@@ -438,10 +438,21 @@ const buildUpdateQuery = (fields: Record<string, any>) => {
 
 // Create a new meal
 router.post('/meals', authMiddleware, upload.single('picture'), async (req: Request, res: Response): Promise<void> => {
-  const { name, description, ingredients, calories, protein, carbohydrates, fat, visibility } = req.body;
-  const user_id = req.user?.id;
+  const { 
+    name, 
+    description, 
+    ingredients, 
+    calories, 
+    protein, 
+    carbohydrates, 
+    fat, 
+    visibility, // Include visibility from the request body
+    instructions, 
+    recipeLink 
+  } = req.body; // Extract additional fields from the request body
+  const user_id = req.user?.id; // Get the authenticated user's ID
   const picture = req.file ? req.file.buffer : null; // Get the uploaded image as a buffer
-  const db = (req as any).db;
+  const db = (req as any).db; // Get the database instance
 
   if (!user_id) {
     res.status(401).send('User is not authenticated');
@@ -455,20 +466,35 @@ router.post('/meals', authMiddleware, upload.single('picture'), async (req: Requ
 
   try {
     const query = `
-      INSERT INTO meals (name, description, ingredients, calories, protein, carbohydrates, fat, visibility, user_id, picture)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO meals (
+        name, 
+        description, 
+        ingredients, 
+        calories, 
+        protein, 
+        carbohydrates, 
+        fat, 
+        visibility, 
+        user_id, 
+        picture, 
+        instructions, 
+        recipeLink
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
     const values = [
       name,
       description,
-      JSON.stringify(ingredients),
+      ingredients, // Ensure ingredients are passed as a valid JSON string or array
       calories,
       protein,
       carbohydrates,
       fat,
-      visibility ?? true,
+      visibility ?? true, // Default to true if visibility is not provided
       user_id,
       picture,
+      instructions,
+      recipeLink,
     ];
 
     await db.query(query, values);
@@ -520,9 +546,9 @@ router.put('/meals/:meal_id/image', authMiddleware, upload.single('picture'), as
 
 
 // Get all meals
-router.get('/meals', authMiddleware, (req: Request, res: Response) => {
-  const db = (req as any).db;
-  const { search, filters } = req.query; // Get the search and filters parameters
+router.get('/meals', authMiddleware, async (req: Request, res: Response): Promise<void> => {
+  const db = (req as any).db; // Get the database instance
+  const { search, filters } = req.query; // Extract search and filters from query parameters
 
   let query = `
     SELECT 
@@ -534,6 +560,9 @@ router.get('/meals', authMiddleware, (req: Request, res: Response) => {
       meals.protein, 
       meals.carbohydrates, 
       meals.fat, 
+      meals.instructions, -- Include instructions
+      meals.recipeLink, -- Include recipe link
+      meals.visibility, 
       meals.created_at, 
       meals.picture, -- Include the picture column
       users.username AS userName,
@@ -582,20 +611,20 @@ router.get('/meals', authMiddleware, (req: Request, res: Response) => {
     ORDER BY meals.created_at DESC
   `;
 
-  db.query(query, values)
-    .then(([rows]: [any[], any]) => {
-      // Convert the picture BLOB to Base64 for frontend display
-      const mealsWithImages = rows.map((meal: any) => ({
-        ...meal,
-        picture: meal.picture ? `data:image/jpeg;base64,${meal.picture.toString('base64')}` : null,
-      }));
+  try {
+    const [rows]: [any[], any] = await db.query(query, values);
 
-      res.status(200).json(mealsWithImages);
-    })
-    .catch((err: Error) => {
-      console.error('Error fetching meals:', err);
-      res.status(500).send('Error fetching meals');
-    });
+    // Convert the picture BLOB to Base64 for frontend display
+    const mealsWithImages = rows.map((meal: any) => ({
+      ...meal,
+      picture: meal.picture ? `data:image/jpeg;base64,${meal.picture.toString('base64')}` : null,
+    }));
+
+    res.status(200).json(mealsWithImages);
+  } catch (err) {
+    console.error('Error fetching meals:', err);
+    res.status(500).send('Error fetching meals');
+  }
 });
 
 //make a review
@@ -639,54 +668,84 @@ router.get('/reviews', authMiddleware, (req: Request, res: Response) => {
 });
 
 //Copy meal
-router.post('/add-meal', authMiddleware, async (req: Request, res: Response): Promise<void> => {
-  const user = (req as any).user; // Get the authenticated user
+router.get('/meals', authMiddleware, async (req: Request, res: Response): Promise<void> => {
   const db = (req as any).db; // Get the database instance
-  const { meal_id } = req.body; // The ID of the meal to copy
+  const { search, filters } = req.query; // Extract search and filters from query parameters
 
-  if (!user) {
-    res.status(401).send('User not authenticated');
-    return;
+  let query = `
+    SELECT 
+      meals.id, 
+      meals.name, 
+      meals.description, 
+      meals.ingredients, 
+      meals.calories, 
+      meals.protein, 
+      meals.carbohydrates, 
+      meals.fat, 
+      meals.instructions, -- Include instructions
+      meals.recipeLink, -- Include recipe link
+      meals.visibility, 
+      meals.created_at, 
+      meals.picture, -- Include the picture column
+      users.username AS userName,
+      COALESCE(AVG(reviews.rating), 0) AS averageRating, -- Calculate the average rating
+      COUNT(reviews.review_id) AS reviewCount -- Count the number of reviews
+    FROM meals
+    INNER JOIN users ON meals.user_id = users.id
+    LEFT JOIN reviews ON meals.id = reviews.meal_id -- Join with the reviews table
+    WHERE meals.visibility = TRUE
+  `;
+
+  const values: any[] = [];
+
+  // Add search filtering if the search query is provided
+  if (search) {
+    query += `
+      AND (
+        meals.name LIKE ? OR
+        meals.description LIKE ? OR
+        users.username LIKE ?
+      )
+    `;
+    const searchTerm = `%${search}%`;
+    values.push(searchTerm, searchTerm, searchTerm);
   }
 
-  if (!meal_id) {
-    res.status(400).send('Meal ID is required');
-    return;
+  // Add filtering logic for nutritional values
+  if (filters) {
+    const parsedFilters = JSON.parse(filters as string); // Parse the filters from the query string
+    parsedFilters.forEach((filter: { type: string; greaterThan: string; lessThan: string }) => {
+      if (filter.type) {
+        if (filter.greaterThan) {
+          query += ` AND meals.${filter.type} > ?`;
+          values.push(Number(filter.greaterThan));
+        }
+        if (filter.lessThan) {
+          query += ` AND meals.${filter.type} < ?`;
+          values.push(Number(filter.lessThan));
+        }
+      }
+    });
   }
+
+  query += `
+    GROUP BY meals.id, users.username -- Group by meal ID and username
+    ORDER BY meals.created_at DESC
+  `;
 
   try {
-    // Fetch the meal to copy
-    const [rows]: [any[], any] = await db.query('SELECT * FROM meals WHERE id = ?', [meal_id]);
-    if (rows.length === 0) {
-      res.status(404).send('Meal not found');
-      return;
-    }
+    const [rows]: [any[], any] = await db.query(query, values);
 
-    const meal = rows[0];
+    // Convert the picture BLOB to Base64 for frontend display
+    const mealsWithImages = rows.map((meal: any) => ({
+      ...meal,
+      picture: meal.picture ? `data:image/jpeg;base64,${meal.picture.toString('base64')}` : null,
+    }));
 
-    // Insert the copied meal for the current user
-    const query = `
-      INSERT INTO meals (name, description, ingredients, calories, protein, carbohydrates, fat, visibility, user_id, picture)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `;
-    const values = [
-      meal.name,
-      meal.description,
-      meal.ingredients,
-      meal.calories,
-      meal.protein,
-      meal.carbohydrates,
-      meal.fat,
-      false, // Set visibility to false for copied meals
-      user.id,
-      meal.picture, // Copy the picture
-    ];
-
-    await db.query(query, values);
-    res.status(201).send('Meal copied successfully');
+    res.status(200).json(mealsWithImages);
   } catch (err) {
-    console.error('Error copying meal:', err);
-    res.status(500).send('Error copying meal');
+    console.error('Error fetching meals:', err);
+    res.status(500).send('Error fetching meals');
   }
 });
 
@@ -711,6 +770,8 @@ router.get('/my-meals', authMiddleware, async (req: Request, res: Response): Pro
       meals.protein, 
       meals.carbohydrates, 
       meals.fat, 
+      meals.instructions, -- Include instructions
+      meals.recipeLink, -- Include recipe link
       meals.visibility,
       meals.created_at,
       meals.picture -- Include the picture column
@@ -772,7 +833,18 @@ router.get('/my-meals', authMiddleware, async (req: Request, res: Response): Pro
 // Edit a meal
 router.put('/meals/:meal_id', authMiddleware, async (req: Request, res: Response): Promise<void> => {
   const { meal_id } = req.params; // Extract the meal ID from the URL
-  const { name, description, ingredients, calories, protein, carbohydrates, fat, visibility } = req.body; // Extract updated fields from the request body
+  const {
+    name,
+    description,
+    ingredients,
+    calories,
+    protein,
+    carbohydrates,
+    fat,
+    visibility,
+    instructions,
+    recipeLink,
+  } = req.body; // Extract updated fields from the request body
   const user = (req as any).user; // Get the authenticated user
   const db = (req as any).db; // Get the database instance
 
@@ -782,8 +854,8 @@ router.put('/meals/:meal_id', authMiddleware, async (req: Request, res: Response
   }
 
   // Validate input
-  if (!name || !description || !ingredients || calories === undefined || protein === undefined || carbohydrates === undefined || fat === undefined) {
-    res.status(400).send('All fields are required');
+  if (!name || !description || !ingredients) {
+    res.status(400).send('Name, description, and ingredients are required');
     return;
   }
 
@@ -798,10 +870,33 @@ router.put('/meals/:meal_id', authMiddleware, async (req: Request, res: Response
     // Update the meal
     const query = `
       UPDATE meals
-      SET name = ?, description = ?, ingredients = ?, calories = ?, protein = ?, carbohydrates = ?, fat = ?, visibility = ?
+      SET 
+        name = ?, 
+        description = ?, 
+        ingredients = ?, 
+        calories = ?, 
+        protein = ?, 
+        carbohydrates = ?, 
+        fat = ?, 
+        visibility = ?, 
+        instructions = ?, 
+        recipeLink = ?
       WHERE id = ? AND user_id = ?
     `;
-    const values = [name, description, ingredients, calories, protein, carbohydrates, fat, visibility ?? false, meal_id, user.id];
+    const values = [
+      name,
+      description,
+      JSON.stringify(ingredients), // Convert ingredients to JSON if it's an array
+      calories,
+      protein,
+      carbohydrates,
+      fat,
+      visibility ?? true, // Default to true if visibility is not provided
+      instructions,
+      recipeLink,
+      meal_id,
+      user.id,
+    ];
 
     await db.query(query, values);
     res.status(200).send('Meal updated successfully');
@@ -828,6 +923,8 @@ router.get('/meals/:meal_id', authMiddleware, async (req: Request, res: Response
         meals.protein, 
         meals.carbohydrates, 
         meals.fat, 
+        meals.instructions, -- Include instructions
+        meals.recipeLink, -- Include recipe link
         meals.visibility, 
         meals.created_at, 
         meals.picture, -- Include the picture column

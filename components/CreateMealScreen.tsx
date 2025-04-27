@@ -1,11 +1,13 @@
 import React, { useState } from "react";
-import { View, Text, TextInput, Button, StyleSheet, Alert, Image, TouchableOpacity, Platform } from "react-native";
+import { View, Text, TextInput, Button, StyleSheet, Alert, Image, TouchableOpacity, Platform, ScrollView, Switch } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as ImagePicker from "expo-image-picker";
+import { useTheme } from "../context/ThemeContext"; // Import the theme context
 
 const BASE_URL = Platform.OS === "android" ? "http://10.0.2.2:5000" : "http://localhost:5000";
 
 const CreateMealScreen = ({ route, navigation }: any) => {
+  const { theme } = useTheme(); // Access the current theme
   const { selectedDay } = route.params || {};
   const [mealName, setMealName] = useState("");
   const [mealDescription, setMealDescription] = useState("");
@@ -14,7 +16,10 @@ const CreateMealScreen = ({ route, navigation }: any) => {
   const [mealProtein, setMealProtein] = useState("");
   const [mealCarbohydrates, setMealCarbohydrates] = useState("");
   const [mealFat, setMealFat] = useState("");
+  const [mealInstructions, setMealInstructions] = useState("");
+  const [mealRecipeLink, setMealRecipeLink] = useState("");
   const [mealPicture, setMealPicture] = useState<string | null>(null);
+  const [mealVisibility, setMealVisibility] = useState(true);
 
   const requestPermission = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -58,11 +63,17 @@ const CreateMealScreen = ({ route, navigation }: any) => {
     const formData = new FormData();
     formData.append("name", mealName);
     formData.append("description", mealDescription);
-    formData.append("ingredients", JSON.stringify(mealIngredients.split(",").map((ingredient) => ingredient.trim())));
+    formData.append(
+      "ingredients",
+      JSON.stringify(mealIngredients.split(",").map((ingredient) => ingredient.trim()))
+    );
     formData.append("calories", mealCalories);
     formData.append("protein", mealProtein);
     formData.append("carbohydrates", mealCarbohydrates);
     formData.append("fat", mealFat);
+    formData.append("instructions", mealInstructions);
+    formData.append("recipeLink", mealRecipeLink);
+    formData.append("visibility", mealVisibility ? "1" : "0");
     formData.append("day", selectedDay);
 
     if (mealPicture) {
@@ -103,64 +114,175 @@ const CreateMealScreen = ({ route, navigation }: any) => {
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Create a New Meal</Text>
-      <TextInput style={styles.input} placeholder="Meal Name" value={mealName} onChangeText={setMealName} />
-      <TextInput style={styles.input} placeholder="Meal Description" value={mealDescription} onChangeText={setMealDescription} />
-      <TextInput style={styles.input} placeholder="Ingredients (comma-separated)" value={mealIngredients} onChangeText={setMealIngredients} />
-      <TextInput style={styles.input} placeholder="Calories" value={mealCalories} onChangeText={setMealCalories} keyboardType="numeric" />
-      <TextInput style={styles.input} placeholder="Protein (g)" value={mealProtein} onChangeText={setMealProtein} keyboardType="numeric" />
-      <TextInput style={styles.input} placeholder="Carbs (g)" value={mealCarbohydrates} onChangeText={setMealCarbohydrates} keyboardType="numeric" />
-      <TextInput style={styles.input} placeholder="Fat (g)" value={mealFat} onChangeText={setMealFat} keyboardType="numeric" />
+    <ScrollView contentContainerStyle={[styles.container, { backgroundColor: theme.background }]}>
+      <Text style={[styles.title, { color: theme.text }]}>Create a New Meal</Text>
+      <TextInput
+        style={[styles.input, { backgroundColor: theme.card, borderColor: theme.border, color: theme.text }]}
+        placeholder="Meal Name"
+        placeholderTextColor={theme.placeholder}
+        value={mealName}
+        onChangeText={setMealName}
+        multiline
+      />
+      <TextInput
+        style={[styles.input, { backgroundColor: theme.card, borderColor: theme.border, color: theme.text }]}
+        placeholder="Meal Description"
+        placeholderTextColor={theme.placeholder}
+        value={mealDescription}
+        onChangeText={setMealDescription}
+        multiline
+      />
+      <TextInput
+        style={[styles.input, { backgroundColor: theme.card, borderColor: theme.border, color: theme.text }]}
+        placeholder="Ingredients (comma-separated)"
+        placeholderTextColor={theme.placeholder}
+        value={mealIngredients}
+        onChangeText={setMealIngredients}
+        multiline
+      />
+      <TextInput
+        style={[styles.input, { backgroundColor: theme.card, borderColor: theme.border, color: theme.text }]}
+        placeholder="Calories"
+        placeholderTextColor={theme.placeholder}
+        value={mealCalories}
+        onChangeText={setMealCalories}
+        keyboardType="numeric"
+        multiline
+      />
+      <TextInput
+        style={[styles.input, { backgroundColor: theme.card, borderColor: theme.border, color: theme.text }]}
+        placeholder="Protein (g)"
+        placeholderTextColor={theme.placeholder}
+        value={mealProtein}
+        onChangeText={setMealProtein}
+        keyboardType="numeric"
+        multiline
+      />
+      <TextInput
+        style={[styles.input, { backgroundColor: theme.card, borderColor: theme.border, color: theme.text }]}
+        placeholder="Carbs (g)"
+        placeholderTextColor={theme.placeholder}
+        value={mealCarbohydrates}
+        onChangeText={setMealCarbohydrates}
+        keyboardType="numeric"
+        multiline
+      />
+      <TextInput
+        style={[styles.input, { backgroundColor: theme.card, borderColor: theme.border, color: theme.text }]}
+        placeholder="Fat (g)"
+        placeholderTextColor={theme.placeholder}
+        value={mealFat}
+        onChangeText={setMealFat}
+        keyboardType="numeric"
+        multiline
+      />
+      <TextInput
+        style={[styles.input, { backgroundColor: theme.card, borderColor: theme.border, color: theme.text }]}
+        placeholder="Instructions"
+        placeholderTextColor={theme.placeholder}
+        value={mealInstructions}
+        onChangeText={setMealInstructions}
+        multiline
+      />
+      <TextInput
+        style={[styles.input, { backgroundColor: theme.card, borderColor: theme.border, color: theme.text }]}
+        placeholder="Recipe Link"
+        placeholderTextColor={theme.placeholder}
+        value={mealRecipeLink}
+        onChangeText={setMealRecipeLink}
+        multiline
+      />
 
-      {/* Image Picker */}
-      <TouchableOpacity style={styles.imagePicker} onPress={pickMealImage}>
-        <Text style={styles.imagePickerText}>Pick a Meal Image</Text>
+      <View style={styles.switchContainer}>
+        <Text style={[styles.label, { color: theme.text }]}>Make Meal Public</Text>
+        <Switch
+          value={mealVisibility}
+          onValueChange={setMealVisibility}
+          thumbColor={mealVisibility ? theme.primary : theme.border}
+          trackColor={{ false: theme.border, true: theme.primary }}
+        />
+      </View>
+
+      <TouchableOpacity style={[styles.imagePicker, { backgroundColor: theme.primary }]} onPress={pickMealImage}>
+        <Text style={[styles.imagePickerText, { color: theme.buttonText }]}>Pick a Meal Image</Text>
       </TouchableOpacity>
       {mealPicture && <Image source={{ uri: mealPicture }} style={styles.mealPicture} />}
 
-      <Button title="Create Meal" onPress={handleAddMeal} />
-      <Button title="Cancel" onPress={() => navigation.goBack()} />
-    </View>
+      <View style={styles.buttonContainer}>
+        <View style={styles.button}>
+          <Button title="Create Meal" onPress={handleAddMeal} color={theme.primary} />
+        </View>
+        <View style={styles.button}>
+          <Button title="Cancel" onPress={() => navigation.goBack()} color={theme.danger} />
+        </View>
+      </View>
+    </ScrollView>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
-    justifyContent: "center",
+    flexGrow: 1,
+    justifyContent: "flex-start",
     alignItems: "center",
     padding: 20,
   },
   title: {
-    fontSize: 20,
+    fontSize: 24,
+    fontWeight: "bold",
     marginBottom: 20,
+    textAlign: "center",
   },
   input: {
-    height: 40,
-    borderColor: "gray",
+    height: 50,
     borderWidth: 1,
-    marginBottom: 15,
-    paddingHorizontal: 10,
-    width: "80%",
-  },
-  imagePicker: {
-    backgroundColor: "#007BFF",
-    padding: 10,
-    borderRadius: 5,
-    marginBottom: 15,
-  },
-  imagePickerText: {
-    color: "#FFFFFF",
-    fontSize: 16,
-  },
-  mealPicture: {
-    width: 150,
-    height: 150,
     borderRadius: 8,
     marginBottom: 15,
+    paddingHorizontal: 15,
+    width: "100%",
+  },
+  textArea: {
+    height: 100, // Increase height for taller input boxes
+    textAlignVertical: "top", // Align text to the top
+  },
+  switchContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    width: "100%",
+    marginBottom: 20,
+    paddingHorizontal: 10,
+  },
+  label: {
+    fontSize: 16,
+  },
+  imagePicker: {
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 20,
+    width: "100%",
+    alignItems: "center",
+  },
+  imagePickerText: {
+    fontSize: 16,
+    fontWeight: "bold",
+  },
+  mealPicture: {
+    width: 200,
+    height: 200,
+    borderRadius: 10,
+    marginBottom: 20,
     borderWidth: 2,
-    borderColor: "#ccc",
+  },
+  buttonContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    width: "100%",
+    marginTop: 20,
+  },
+  button: {
+    flex: 1,
+    marginHorizontal: 5,
   },
 });
 

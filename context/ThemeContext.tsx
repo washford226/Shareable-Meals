@@ -21,6 +21,7 @@ const lightTheme = {
     other: '#9c27b0', // Purple for other
   },
   mealText: '#ffffff', // White text for meal blocks
+  link: '#007bff', // Blue for clickable links
 };
 
 const darkTheme = {
@@ -43,6 +44,7 @@ const darkTheme = {
     other: '#9c27b0', // Purple for other
   },
   mealText: '#ffffff', // White text for meal blocks
+  link: '#1e90ff', // Bright blue for clickable links
 };
 
 const ThemeContext = createContext({
