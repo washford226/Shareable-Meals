@@ -10,7 +10,7 @@ import {
   TouchableOpacity,
   Modal,
   Image,
-} from "react-native";
+  Linking } from "react-native";
 import { Meal } from "@/types/types";
 import { useTheme } from "@/context/ThemeContext";
 import axios from "axios";
@@ -208,143 +208,168 @@ const MyMealInfo: React.FC<MyMealInfoProps> = ({ meal, onBack }) => {
       {isEditing ? (
         <>
           {/* Editing UI */}
-          <TextInput
-            style={[styles.input, { borderColor: theme.border, color: theme.text }]}
-            value={editedMeal.name}
-            onChangeText={(text) => setEditedMeal({ ...editedMeal, name: text })}
-            placeholder="Meal Name"
-            placeholderTextColor={theme.placeholder}
-          />
-          <TextInput
-            style={[styles.input, { borderColor: theme.border, color: theme.text }]}
-            value={editedMeal.description}
-            onChangeText={(text) => setEditedMeal({ ...editedMeal, description: text })}
-            placeholder="Description"
-            placeholderTextColor={theme.placeholder}
-          />
-          <TextInput
-            style={[styles.ingredientsInput, { borderColor: theme.border, color: theme.text }]}
-            value={editedMeal.ingredients}
-            onChangeText={(text) => setEditedMeal({ ...editedMeal, ingredients: text })}
-            placeholder="Ingredients"
-            placeholderTextColor={theme.placeholder}
-            multiline={true}
-            numberOfLines={4}
-          />
-          <TextInput
-            style={[styles.input, { borderColor: theme.border, color: theme.text }]}
-            value={editedMeal.calories.toString()}
-            onChangeText={(text) => setEditedMeal({ ...editedMeal, calories: parseInt(text) || 0 })}
-            placeholder="Calories"
-            placeholderTextColor={theme.placeholder}
-            keyboardType="numeric"
-          />
-          <TextInput
-            style={[styles.input, { borderColor: theme.border, color: theme.text }]}
-            value={editedMeal.protein.toString()}
-            onChangeText={(text) => setEditedMeal({ ...editedMeal, protein: parseFloat(text) || 0 })}
-            placeholder="Protein (g)"
-            placeholderTextColor={theme.placeholder}
-            keyboardType="numeric"
-          />
-          <TextInput
-            style={[styles.input, { borderColor: theme.border, color: theme.text }]}
-            value={editedMeal.carbohydrates.toString()}
-            onChangeText={(text) =>
-              setEditedMeal({ ...editedMeal, carbohydrates: parseFloat(text) || 0 })
-            }
-            placeholder="Carbs (g)"
-            placeholderTextColor={theme.placeholder}
-            keyboardType="numeric"
-          />
-          <TextInput
-            style={[styles.input, { borderColor: theme.border, color: theme.text }]}
-            value={editedMeal.fat.toString()}
-            onChangeText={(text) => setEditedMeal({ ...editedMeal, fat: parseFloat(text) || 0 })}
-            placeholder="Fat (g)"
-            placeholderTextColor={theme.placeholder}
-            keyboardType="numeric"
-          />
-          <View style={styles.switchContainer}>
-            <Text style={[styles.switchLabel, { color: theme.text }]}>Visibility:</Text>
-            <Switch
-              value={editedMeal.visibility}
-              onValueChange={(value) => setEditedMeal({ ...editedMeal, visibility: value })}
-              trackColor={{ false: theme.border, true: theme.primary }}
-              thumbColor={editedMeal.visibility ? theme.primary : theme.border}
-            />
-          </View>
-          <TouchableOpacity style={[styles.button, { backgroundColor: theme.button }]} onPress={pickImage}>
-            <Text style={[styles.buttonText, { color: theme.buttonText }]}>Update Image</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.button, { backgroundColor: theme.button }]}
-            onPress={handleSave}
-          >
-            <Text style={[styles.buttonText, { color: theme.buttonText }]}>Save</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.button, { backgroundColor: theme.danger }]}
-            onPress={() => setIsEditing(false)}
-          >
-            <Text style={[styles.buttonText, { color: theme.buttonText }]}>Cancel</Text>
-          </TouchableOpacity>
-        </>
-      ) : (
-        <>
-          {/* Viewing UI */}
-          {editedMeal.picture ? (
-            typeof picture === "string" ? (
-              <Image source={{ uri: picture }} style={styles.mealPicture} />
-            ) : (
-              <View style={styles.mealPicturePlaceholder}>
-                <Text style={[styles.mealPicturePlaceholderText, { color: theme.placeholder }]}>
-                  No Picture
-                </Text>
-              </View>
-            )
-          ) : (
-            <View style={styles.mealPicturePlaceholder}>
-              <Text style={[styles.mealPicturePlaceholderText, { color: theme.placeholder }]}>
-                No Picture
-              </Text>
-            </View>
-          )}
-          <Text style={[styles.title, { color: theme.text }]}>{editedMeal.name}</Text>
-          <Text style={[styles.description, { color: theme.subtext }]}>{editedMeal.description}</Text>
-          <Text style={[styles.details, { color: theme.text }]}>Ingredients: {editedMeal.ingredients}</Text>
-          <Text style={[styles.details, { color: theme.text }]}>Calories: {editedMeal.calories}</Text>
-          <Text style={[styles.details, { color: theme.text }]}>Protein: {editedMeal.protein}g</Text>
-          <Text style={[styles.details, { color: theme.text }]}>Carbs: {editedMeal.carbohydrates}g</Text>
-          <Text style={[styles.details, { color: theme.text }]}>Fat: {editedMeal.fat}g</Text>
-          <Text style={[styles.details, { color: theme.text }]}>
-            Visibility: {meal.visibility ? "Public" : "Private"}
-          </Text>
-          <TouchableOpacity
-            style={[styles.button, { backgroundColor: theme.button }]}
-            onPress={() => setIsEditing(true)}
-          >
-            <Text style={[styles.buttonText, { color: theme.buttonText }]}>Edit Meal</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.button, { backgroundColor: theme.danger }]}
-            onPress={confirmDelete}
-          >
-            <Text style={[styles.buttonText, { color: theme.buttonText }]}>Delete Meal</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.button, { backgroundColor: theme.button }]}
-            onPress={() => setIsModalVisible(true)}
-          >
-            <Text style={[styles.buttonText, { color: theme.buttonText }]}>Save to Calendar</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.button, { backgroundColor: theme.button }]}
-            onPress={onBack}
-          >
-            <Text style={[styles.buttonText, { color: theme.buttonText }]}>Back to My Meals</Text>
-          </TouchableOpacity>
-        </>
+    <TextInput
+      style={[styles.input, { borderColor: theme.border, color: theme.text }]}
+      value={editedMeal.name}
+      onChangeText={(text) => setEditedMeal({ ...editedMeal, name: text })}
+      placeholder="Meal Name"
+      placeholderTextColor={theme.placeholder}
+    />
+    <TextInput
+      style={[styles.input, { borderColor: theme.border, color: theme.text }]}
+      value={editedMeal.description}
+      onChangeText={(text) => setEditedMeal({ ...editedMeal, description: text })}
+      placeholder="Description"
+      placeholderTextColor={theme.placeholder}
+    />
+    <TextInput
+      style={[styles.ingredientsInput, { borderColor: theme.border, color: theme.text }]}
+      value={Array.isArray(editedMeal.ingredients) ? editedMeal.ingredients.join(", ") : editedMeal.ingredients}
+      onChangeText={(text) =>
+        setEditedMeal({
+          ...editedMeal,
+          ingredients: text.split(",").map((ingredient) => ingredient.trim()),
+        })
+      }
+      placeholder="Ingredients (comma-separated)"
+      placeholderTextColor={theme.placeholder}
+      multiline={true}
+      numberOfLines={4}
+    />
+    <TextInput
+  style={[styles.instructionsInput, { borderColor: theme.border, color: theme.text }]}
+  value={editedMeal.instructions}
+  onChangeText={(text) => setEditedMeal({ ...editedMeal, instructions: text })}
+  placeholder="Instructions"
+  placeholderTextColor={theme.placeholder}
+  multiline={true}
+  numberOfLines={6}
+/>
+    <TextInput
+      style={[styles.input, { borderColor: theme.border, color: theme.text }]}
+      value={editedMeal.calories.toString()}
+      onChangeText={(text) => setEditedMeal({ ...editedMeal, calories: parseInt(text) || 0 })}
+      placeholder="Calories"
+      placeholderTextColor={theme.placeholder}
+      keyboardType="numeric"
+    />
+    <TextInput
+      style={[styles.input, { borderColor: theme.border, color: theme.text }]}
+      value={editedMeal.protein.toString()}
+      onChangeText={(text) => setEditedMeal({ ...editedMeal, protein: parseFloat(text) || 0 })}
+      placeholder="Protein (g)"
+      placeholderTextColor={theme.placeholder}
+      keyboardType="numeric"
+    />
+    <TextInput
+      style={[styles.input, { borderColor: theme.border, color: theme.text }]}
+      value={editedMeal.carbohydrates.toString()}
+      onChangeText={(text) =>
+        setEditedMeal({ ...editedMeal, carbohydrates: parseFloat(text) || 0 })
+      }
+      placeholder="Carbs (g)"
+      placeholderTextColor={theme.placeholder}
+      keyboardType="numeric"
+    />
+    <TextInput
+      style={[styles.input, { borderColor: theme.border, color: theme.text }]}
+      value={editedMeal.fat.toString()}
+      onChangeText={(text) => setEditedMeal({ ...editedMeal, fat: parseFloat(text) || 0 })}
+      placeholder="Fat (g)"
+      placeholderTextColor={theme.placeholder}
+      keyboardType="numeric"
+    />
+    <View style={styles.switchContainer}>
+      <Text style={[styles.switchLabel, { color: theme.text }]}>Visibility:</Text>
+      <Switch
+        value={editedMeal.visibility}
+        onValueChange={(value) => setEditedMeal({ ...editedMeal, visibility: value })}
+        trackColor={{ false: theme.border, true: theme.primary }}
+        thumbColor={editedMeal.visibility ? theme.primary : theme.border}
+      />
+    </View>
+    <TouchableOpacity style={[styles.button, { backgroundColor: theme.button }]} onPress={pickImage}>
+      <Text style={[styles.buttonText, { color: theme.buttonText }]}>Update Image</Text>
+    </TouchableOpacity>
+    <TouchableOpacity
+      style={[styles.button, { backgroundColor: theme.button }]}
+      onPress={handleSave}
+    >
+      <Text style={[styles.buttonText, { color: theme.buttonText }]}>Save</Text>
+    </TouchableOpacity>
+    <TouchableOpacity
+      style={[styles.button, { backgroundColor: theme.danger }]}
+      onPress={() => setIsEditing(false)}
+    >
+      <Text style={[styles.buttonText, { color: theme.buttonText }]}>Cancel</Text>
+    </TouchableOpacity>
+  </>
+) : (
+  <>
+  {/* Viewing UI */}
+  {editedMeal.picture ? (
+    typeof picture === "string" ? (
+      <Image source={{ uri: picture }} style={styles.mealPicture} />
+    ) : (
+      <View style={styles.mealPicturePlaceholder}>
+        <Text style={[styles.mealPicturePlaceholderText, { color: theme.placeholder }]}>
+          No Picture
+        </Text>
+      </View>
+    )
+  ) : (
+    <View style={styles.mealPicturePlaceholder}>
+      <Text style={[styles.mealPicturePlaceholderText, { color: theme.placeholder }]}>
+        No Picture
+      </Text>
+    </View>
+  )}
+  <Text style={[styles.title, { color: theme.text }]}>{editedMeal.name}</Text>
+  <Text style={[styles.description, { color: theme.subtext }]}>{editedMeal.description}</Text>
+  <Text style={[styles.details, { color: theme.text }]}>Ingredients: {editedMeal.ingredients}</Text>
+  <Text style={[styles.details, { color: theme.text }]}>Instructions: {editedMeal.instructions}</Text>
+  <Text style={[styles.details, { color: theme.text }]}>Calories: {editedMeal.calories}</Text>
+  <Text style={[styles.details, { color: theme.text }]}>Protein: {editedMeal.protein}g</Text>
+  <Text style={[styles.details, { color: theme.text }]}>Carbs: {editedMeal.carbohydrates}g</Text>
+  <Text style={[styles.details, { color: theme.text }]}>Fat: {editedMeal.fat}g</Text>
+  <Text style={[styles.details, { color: theme.text }]}>
+    Visibility: {meal.visibility ? "Public" : "Private"}
+  </Text>
+  {editedMeal.recipeLink ? (
+    <Text
+      style={[styles.link, { color: theme.primary }]}
+      onPress={() => editedMeal.recipeLink && Linking.openURL(editedMeal.recipeLink)}
+    >
+      View Recipe
+    </Text>
+  ) : (
+    <Text style={[styles.details, { color: theme.subtext }]}>No Recipe Link</Text>
+  )}
+  <TouchableOpacity
+    style={[styles.button, { backgroundColor: theme.button }]}
+    onPress={() => setIsEditing(true)}
+  >
+    <Text style={[styles.buttonText, { color: theme.buttonText }]}>Edit Meal</Text>
+  </TouchableOpacity>
+  <TouchableOpacity
+    style={[styles.button, { backgroundColor: theme.danger }]}
+    onPress={confirmDelete}
+  >
+    <Text style={[styles.buttonText, { color: theme.buttonText }]}>Delete Meal</Text>
+  </TouchableOpacity>
+  <TouchableOpacity
+    style={[styles.button, { backgroundColor: theme.button }]}
+    onPress={() => setIsModalVisible(true)}
+  >
+    <Text style={[styles.buttonText, { color: theme.buttonText }]}>Save to Calendar</Text>
+  </TouchableOpacity>
+  <TouchableOpacity
+    style={[styles.button, { backgroundColor: theme.button }]}
+    onPress={onBack}
+  >
+    <Text style={[styles.buttonText, { color: theme.buttonText }]}>Back to My Meals</Text>
+  </TouchableOpacity>
+</>
       )}
 
       {/* Modal for Adding to Meal Plan */}
@@ -415,6 +440,19 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 24,
     fontWeight: "bold",
+    marginBottom: 16,
+  },
+  instructionsInput: {
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 16,
+    height: 120,
+    textAlignVertical: "top",
+  },
+  link: {
+    fontSize: 16,
+    textDecorationLine: "underline",
     marginBottom: 16,
   },
   description: {
