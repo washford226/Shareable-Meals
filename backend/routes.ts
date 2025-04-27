@@ -667,7 +667,7 @@ router.get('/reviews', authMiddleware, (req: Request, res: Response) => {
     });
 });
 
-//Copy meal
+//get all meals
 router.get('/meals', authMiddleware, async (req: Request, res: Response): Promise<void> => {
   const db = (req as any).db; // Get the database instance
   const { search, filters } = req.query; // Extract search and filters from query parameters
@@ -746,6 +746,68 @@ router.get('/meals', authMiddleware, async (req: Request, res: Response): Promis
   } catch (err) {
     console.error('Error fetching meals:', err);
     res.status(500).send('Error fetching meals');
+  }
+});
+
+// Copy a meal
+router.post('/meals/:meal_id', authMiddleware, async (req: Request, res: Response): Promise<void> => {
+  const { meal_id } = req.params; // Extract the meal ID from the URL
+  const user = (req as any).user; // Get the authenticated user
+  const db = (req as any).db; // Get the database instance
+
+  if (!user) {
+    res.status(401).send('User not authenticated');
+    return;
+  }
+
+  try {
+    // Fetch the meal to be copied
+    const [rows]: [any[], any] = await db.query('SELECT * FROM meals WHERE id = ?', [meal_id]);
+    if (rows.length === 0) {
+      res.status(404).send('Meal not found');
+      return;
+    }
+
+    const meal = rows[0];
+
+    // Insert a new meal with the same data but a new ID, user_id, and visibility set to 0
+    const query = `
+      INSERT INTO meals (
+        name, 
+        description, 
+        ingredients, 
+        calories, 
+        protein, 
+        carbohydrates, 
+        fat, 
+        visibility, 
+        user_id, 
+        picture, 
+        instructions, 
+        recipeLink
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `;
+    const values = [
+      meal.name, // Keep the original name
+      meal.description,
+      meal.ingredients,
+      meal.calories,
+      meal.protein,
+      meal.carbohydrates,
+      meal.fat,
+      0, // Set visibility to 0 (private)
+      user.id, // Assign the copied meal to the current user
+      meal.picture,
+      meal.instructions,
+      meal.recipeLink,
+    ];
+
+    await db.query(query, values);
+    res.status(201).send('Meal copied successfully');
+  } catch (err) {
+    console.error('Error copying meal:', err);
+    res.status(500).send('Error copying meal');
   }
 });
 
@@ -1123,6 +1185,7 @@ router.delete('/meal-plan-clear', authMiddleware, (req: Request, res: Response) 
       res.status(500).send('Error clearing meal plan');
     });
 });
+
 
 router.post('/report', authMiddleware, async (req: Request, res: Response): Promise<void> => {
   const { meal_id, reason } = req.body;
