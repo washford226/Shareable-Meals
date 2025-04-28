@@ -305,7 +305,6 @@ const applyFilters = async () => {
       style={[styles.createMealButton, { backgroundColor: theme.button }]}
       onPress={() => {
         {onCreateMeal()}
-        Alert.alert("Add Meal", "Navigate to Add Meal screen");
       }}
     >
       <Text style={[styles.createMealButtonText, { color: theme.buttonText }]}>Create Meal</Text>
