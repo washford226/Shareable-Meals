@@ -40,6 +40,7 @@ router.post('/signup', upload.single('profile_picture'), async (req: Request, re
   // Validate file type
   if (req.file && !['image/jpeg', 'image/png'].includes(req.file.mimetype)) {
     res.status(400).send({ message: 'Invalid file type. Only JPEG and PNG are allowed.' });
+    return;
   }
 
   // Validate file size
@@ -48,25 +49,117 @@ router.post('/signup', upload.single('profile_picture'), async (req: Request, re
     return;
   }
 
-  db.query('SELECT * FROM users WHERE username = ? OR email = ?', [username, email])
-    .then(async ([rows]: [User[], any]) => {
-      if (rows.length > 0) {
-        return res.status(400).send({ message: 'Username or email already exists' });
-      }
+  try {
+    // Check if the username or email already exists
+    const [existingUsers]: [User[], any] = await db.query('SELECT * FROM users WHERE username = ? OR email = ?', [username, email]);
+    if (existingUsers.length > 0) {
+      res.status(400).send({ message: 'Username or email already exists' });
+      return;
+    }
 
-      return bcrypt.hash(password, 10);
-    })
-    .then(async (hashedPassword: string) => {
-      const query = 'INSERT INTO users (username, email, password, calories_goal, dietary_restrictions, profile_picture) VALUES (?, ?, ?, ?, ?, ?)';
-      return db.query(query, [username, email, hashedPassword, calories_goal, dietary_restrictions, profilePicture]);
-    })
-    .then(() => {
-      res.status(200).send('User signed up successfully');
-    })
-    .catch((err: Error) => {
-      console.error('Error inserting data:', err);
-      res.status(500).send('Error inserting data');
-    });
+    // Hash the password
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Insert the new user into the database
+    const query = `
+      INSERT INTO users (username, email, password, calories_goal, dietary_restrictions, profile_picture)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `;
+    const [result]: any = await db.query(query, [username, email, hashedPassword, calories_goal, dietary_restrictions, profilePicture]);
+
+    // Get the newly created user's ID
+    const userId = result.insertId;
+
+    // Define default meals
+    const defaultMeals = [
+      {
+        name: 'Grilled Chicken Salad',
+        description: 'A healthy grilled chicken salad with fresh vegetables.',
+        ingredients: JSON.stringify(['Chicken', 'Lettuce', 'Tomatoes', 'Cucumber']),
+        calories: 350,
+        protein: 30,
+        carbohydrates: 10,
+        fat: 15,
+        visibility: 0,
+        instructions: 'Grill the chicken and mix with vegetables.',
+        recipeLink: 'https://example.com/grilled-chicken-salad',
+      },
+      {
+        name: 'Oatmeal with Fruits',
+        description: 'A bowl of oatmeal topped with fresh fruits.',
+        ingredients: JSON.stringify(['Oats', 'Milk', 'Banana', 'Strawberries']),
+        calories: 300,
+        protein: 10,
+        carbohydrates: 50,
+        fat: 5,
+        visibility: 0,
+        instructions: 'Cook oats with milk and top with fruits.',
+        recipeLink: 'https://example.com/oatmeal-fruits',
+      },
+      {
+        name: 'Spaghetti Bolognese',
+        description: 'Classic spaghetti with a rich bolognese sauce.',
+        ingredients: JSON.stringify(['Spaghetti', 'Ground Beef', 'Tomato Sauce', 'Onions', 'Garlic']),
+        calories: 600,
+        protein: 25,
+        carbohydrates: 75,
+        fat: 20,
+        visibility: 0,
+        instructions: 'Cook spaghetti and prepare the bolognese sauce.',
+        recipeLink: 'https://example.com/spaghetti-bolognese',
+      },
+      {
+        name: 'Vegetable Stir Fry',
+        description: 'A quick and easy vegetable stir fry.',
+        ingredients: JSON.stringify(['Broccoli', 'Carrots', 'Bell Peppers', 'Soy Sauce']),
+        calories: 200,
+        protein: 5,
+        carbohydrates: 30,
+        fat: 5,
+        visibility: 0,
+        instructions: 'Stir fry vegetables with soy sauce.',
+        recipeLink: 'https://example.com/vegetable-stir-fry',
+      },
+      {
+        name: 'Grilled Salmon',
+        description: 'A simple grilled salmon with lemon.',
+        ingredients: JSON.stringify(['Salmon', 'Lemon', 'Olive Oil', 'Garlic']),
+        calories: 400,
+        protein: 35,
+        carbohydrates: 0,
+        fat: 25,
+        visibility: 0,
+        instructions: 'Grill the salmon and serve with lemon.',
+        recipeLink: 'https://example.com/grilled-salmon',
+      },
+    ];
+
+    // Insert default meals into the database
+    const mealQuery = `
+      INSERT INTO meals (name, description, ingredients, calories, protein, carbohydrates, fat, visibility, user_id, instructions, recipeLink)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `;
+    for (const meal of defaultMeals) {
+      await db.query(mealQuery, [
+        meal.name,
+        meal.description,
+        meal.ingredients,
+        meal.calories,
+        meal.protein,
+        meal.carbohydrates,
+        meal.fat,
+        meal.visibility,
+        userId,
+        meal.instructions,
+        meal.recipeLink,
+      ]);
+    }
+
+    res.status(200).send('User signed up successfully with default meals added');
+  } catch (err) {
+    console.error('Error during signup:', err);
+    res.status(500).send('Error during signup');
+  }
 });
 
 // Login user
