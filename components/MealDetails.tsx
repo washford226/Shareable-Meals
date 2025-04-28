@@ -18,6 +18,27 @@ const MealDetails: React.FC<MealDetailsProps> = ({ meal, onBack, onAddReview, on
   const { theme } = useTheme();
   const [isReportModalVisible, setIsReportModalVisible] = useState(false);
   const [reportReason, setReportReason] = useState("");
+    <View style={styles.container}>
+      <Text style={styles.title}>{meal.name}</Text>
+      <Text style={styles.sectionTitle}>Ingredients:</Text>
+      {Array.isArray(meal.ingredients) ? meal.ingredients.map((ingredient: string, index: number) => (
+        <Text key={index} style={styles.text}>
+          - {ingredient}
+        </Text>
+      )) : (
+        <Text style={styles.text}>No ingredients available</Text>
+      )}
+      <Text style={styles.subtitle}>Nutritional Data:</Text>
+      {meal.nutritionalData.map((data: any, index: number) => (
+        <View key={index} style={styles.nutritionalItem}>
+          <Text style={styles.text}>Ingredient: {data.ingredient}</Text>
+          <Text style={styles.text}>Calories: {data.calories}</Text>
+          <Text style={styles.text}>Protein: {data.protein}</Text>
+          <Text style={styles.text}>Fat: {data.fat}</Text>
+        </View>
+      ))}
+    </View>
+  
 
   const handleReportMeal = async (mealId: number, reason: string) => {
     try {
@@ -208,6 +229,22 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 16,
     width: "100%",
+  },
+  nutritionalItem: {
+    marginBottom: 16,
+    padding: 8,
+    borderWidth: 1,
+    borderColor: "#ccc",
+    borderRadius: 8,
+  },
+  text: {
+    fontSize: 16,
+    marginBottom: 8,
+  },
+  subtitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    marginBottom: 8,
   },
   title: {
     fontSize: 24,

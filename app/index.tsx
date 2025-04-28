@@ -7,7 +7,6 @@ import AccountScreen from "@/components/AccountScreen";
 import ForgotPasswordScreen from "@/components/ForgotPasswordScreen";
 import OtherMeals from "@/components/OtherMeals";
 import MealDetails from "@/components/MealDetails";
-import { fetchFoodsFromUSDA } from "./api/usdaApi";
 import CreateReview from "@/components/CreateReview";
 import ViewReviews from "@/components/ViewReviews";
 import CreateMealScreen from "@/components/CreateMealScreen";
@@ -105,15 +104,7 @@ function Index() {
     setIsCreatingMeal(true);
   };
 
-  useEffect(() => {
-    const loadFoods = async () => {
-      const data = await fetchFoodsFromUSDA();
-      setFoods(data);
-      groupFoodsByCategory(data);
-    };
 
-    loadFoods();
-  }, []);
 
   const groupFoodsByCategory = (foods: any[]) => {
     const grouped = foods.reduce((acc: any, food: any) => {
