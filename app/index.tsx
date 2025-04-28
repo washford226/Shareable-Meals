@@ -236,7 +236,10 @@ function Index() {
           </>
         ) : isMyMealsScreen ? (
           <>
-            <MyMeals onMealSelect={handleNavigateToMyMealInfo} />
+            <MyMeals 
+              onMealSelect={handleNavigateToMyMealInfo}
+              onCreateMeal={handleNavigateToCreateMeal} 
+            />
             <View style={styles.bottomBar}>
               <TouchableOpacity style={styles.barButton} onPress={handleBackToCalendar}>
                 <Icon name="calendar" size={24} color="#000" />

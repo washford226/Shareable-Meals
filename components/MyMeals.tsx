@@ -20,11 +20,12 @@ import { jwtDecode } from "jwt-decode"; // Use named import for jwtDecode
 
 interface MyMealsProps {
   onMealSelect: (meal: Meal) => void;
+  onCreateMeal: () => void;
 }
 
 const BASE_URL = Platform.OS === "android" ? "http://10.0.2.2:5000" : "http://localhost:5000";
 
-const MyMeals: React.FC<MyMealsProps> = ({ onMealSelect }) => {
+const MyMeals: React.FC<MyMealsProps> = ({ onMealSelect, onCreateMeal}) => {
   const [meals, setMeals] = useState<Meal[]>([]);
   const [filteredMeals, setFilteredMeals] = useState<Meal[]>([]);
   const [searchQuery, setSearchQuery] = useState<string>("");
@@ -196,8 +197,8 @@ const applyFilters = async () => {
     return (
       <View style={[styles.container, { backgroundColor: theme.background }]}>
         <Text style={[styles.noMealsText, { color: theme.text }]}>No meals found.</Text>
-        <TouchableOpacity style={[styles.addMealButton, { backgroundColor: theme.button }]}>
-          <Text style={[styles.addMealButtonText, { color: theme.buttonText }]}>Add Meals</Text>
+        <TouchableOpacity style={[styles.createMealButton, { backgroundColor: theme.button }]}>
+          <Text style={[styles.createMealButtonText, { color: theme.buttonText }]}>Create Meal</Text>
         </TouchableOpacity>
       </View>
     );
@@ -301,13 +302,13 @@ const applyFilters = async () => {
       </Modal>
     {/* Add Meal Button */}
     <TouchableOpacity
-      style={[styles.addMealButton, { backgroundColor: theme.button }]}
+      style={[styles.createMealButton, { backgroundColor: theme.button }]}
       onPress={() => {
-        // Add your navigation or action logic here
+        {onCreateMeal()}
         Alert.alert("Add Meal", "Navigate to Add Meal screen");
       }}
     >
-      <Text style={[styles.addMealButtonText, { color: theme.buttonText }]}>Add Meal</Text>
+      <Text style={[styles.createMealButtonText, { color: theme.buttonText }]}>Create Meal</Text>
     </TouchableOpacity>
   </View>
   );
@@ -424,7 +425,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "bold",
   },
-  addMealButton: {
+  createMealButton: {
     position: "absolute",
     bottom: 50, // Place it above the navigation bar
     padding: 12,
@@ -433,7 +434,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  addMealButtonText: {
+  createMealButtonText: {
     fontSize: 16,
     fontWeight: "bold",
   },
