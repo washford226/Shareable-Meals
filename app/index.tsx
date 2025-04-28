@@ -7,7 +7,6 @@ import AccountScreen from "@/components/AccountScreen";
 import ForgotPasswordScreen from "@/components/ForgotPasswordScreen";
 import OtherMeals from "@/components/OtherMeals";
 import MealDetails from "@/components/MealDetails";
-import { fetchFoodsFromUSDA } from "./api/usdaApi";
 import CreateReview from "@/components/CreateReview";
 import ViewReviews from "@/components/ViewReviews";
 import CreateMealScreen from "@/components/CreateMealScreen";
@@ -17,6 +16,7 @@ import MealPlanDetails from "@/components/MealPlanDetails";
 import AddMealToDate from "@/components/AddMealToDate";
 import Icon from "react-native-vector-icons/FontAwesome";
 import { Meal } from "@/types/types";
+import FoodSearch from "@/components/SearchFoods";
 
 function Index() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -34,6 +34,15 @@ function Index() {
   const [selectedDate, setSelectedDate] = useState<string | null>(null); // Track the selected date
   const [foods, setFoods] = useState([]); // Store USDA food data
   const [groupedFoods, setGroupedFoods] = useState<Record<string, any[]>>({}); // Group foods by category
+  const [isFoodSearchScreen, setIsFoodSearchScreen] = useState(false);
+
+
+  const handleNavigateToFoodSearch = () => {
+    setIsFoodSearchScreen(true);
+  }
+  const handleBackToFoodSearch = () => {
+    setIsFoodSearchScreen(false);
+  }
 
   const handleLogin = () => setIsLoggedIn(true);
 
@@ -104,17 +113,7 @@ function Index() {
   const handleNavigateToCreateMeal = () => {
     setIsCreatingMeal(true);
   };
-
-  useEffect(() => {
-    const loadFoods = async () => {
-      const data = await fetchFoodsFromUSDA();
-      setFoods(data);
-      groupFoodsByCategory(data);
-    };
-
-    loadFoods();
-  }, []);
-
+  
   const groupFoodsByCategory = (foods: any[]) => {
     const grouped = foods.reduce((acc: any, food: any) => {
       const category = food.foodCategory || "Uncategorized";
@@ -149,11 +148,20 @@ function Index() {
           ))}
         </View>
       ))}
-      {isLoggedIn ? (
+      {isFoodSearchScreen ? (
+        <FoodSearch 
+          onBack={handleBackToFoodSearch}
+          onFoodSelect={(food)=> {
+            setIsFoodSearchScreen(false);
+            setIsCreatingMeal(true);
+          }}
+        />
+      ) : isLoggedIn ? (
         isCreatingMeal ? (
           <CreateMealScreen
             route={{ params: { selectedDay: "2023-04-07" } }}
             navigation={{ goBack: handleBackToCalendar }}
+            onNavigateFoodSearch={handleNavigateToFoodSearch}
           />
         ) : isCreatingReview && selectedMeal ? (
           <CreateReview

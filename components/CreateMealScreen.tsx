@@ -6,7 +6,13 @@ import { useTheme } from "../context/ThemeContext"; // Import the theme context
 
 const BASE_URL = Platform.OS === "android" ? "http://10.0.2.2:5000" : "http://localhost:5000";
 
-const CreateMealScreen = ({ route, navigation }: any) => {
+interface CreateMealScreenProps {
+  route: any;
+  navigation: any;
+  onNavigateFoodSearch: () => void;
+}
+
+const CreateMealScreen: React.FC<CreateMealScreenProps> = ({ route, navigation, onNavigateFoodSearch}: any) => {
   const { theme } = useTheme(); // Access the current theme
   const { selectedDay } = route.params || {};
   const [mealName, setMealName] = useState("");
@@ -20,6 +26,10 @@ const CreateMealScreen = ({ route, navigation }: any) => {
   const [mealRecipeLink, setMealRecipeLink] = useState("");
   const [mealPicture, setMealPicture] = useState<string | null>(null);
   const [mealVisibility, setMealVisibility] = useState(true);
+
+  const handleFoodSelect = (food: {fdcId: number; description: string}) => {
+    setMealName(food.description);
+  };
 
   const requestPermission = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -215,6 +225,13 @@ const CreateMealScreen = ({ route, navigation }: any) => {
         <View style={styles.button}>
           <Button title="Cancel" onPress={() => navigation.goBack()} color={theme.danger} />
         </View>
+      </View>
+      <View style={styles.button}>
+        <Button
+          title="Search USDA Foods"
+          onPress={onNavigateFoodSearch}
+          color={theme.primary}
+        />
       </View>
     </ScrollView>
   );
