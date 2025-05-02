@@ -1,45 +1,63 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { View, Text, StyleSheet, TouchableOpacity, Alert, Platform, FlatList } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
-import { Meal } from "@/types/types";
-import { useTheme } from "@/context/ThemeContext"; // Import the ThemeContext
-
-interface MealPlanDetailsProps {
-  meal: Meal;
-  onBack: () => void;
-}
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { Meal } from "../../../../types/types";
+import { useTheme } from "../../../../context/ThemeContext";
 
 const BASE_URL = Platform.OS === "android" ? "http://10.0.2.2:5000" : "http://localhost:5000";
 
-const MealPlanDetails: React.FC<MealPlanDetailsProps> = ({ meal, onBack }) => {
-  const { theme } = useTheme(); // Access the theme from the context
+const MealPlanDetails = () => {
+  const { id } = useLocalSearchParams(); // Assumes the route is /meal-plan/[id]
+  const router = useRouter();
+  const { theme } = useTheme();
+
+  const [meal, setMeal] = useState<Meal | null>(null);
+
+  useEffect(() => {
+    const fetchMeal = async () => {
+      try {
+        const token = await AsyncStorage.getItem("token");
+        const response = await axios.get(`${BASE_URL}/meal-plan/${id}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        setMeal(response.data);
+      } catch (error) {
+        console.error("Failed to fetch meal:", error);
+        Alert.alert("Error", "Could not fetch meal details.");
+      }
+    };
+
+    if (id) fetchMeal();
+  }, [id]);
 
   const handleDeleteMeal = async () => {
     try {
       const token = await AsyncStorage.getItem("token");
-      if (!token) {
-        Alert.alert("Error", "You are not logged in. Please log in to delete meals.");
+      if (!token || !meal) {
+        Alert.alert("Error", "You are not logged in or meal not loaded.");
         return;
       }
 
-      // Use meal.meal_plan_id for the DELETE request
       await axios.delete(`${BASE_URL}/meal-plan/${meal.meal_plan_id}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
       Alert.alert("Success", "Meal deleted successfully.");
-      onBack(); // Navigate back to the calendar after deletion
+      router.back(); // Go back instead of onBack()
     } catch (error) {
       console.error("Error deleting meal:", error);
       Alert.alert("Error", "Failed to delete the meal. Please try again.");
     }
   };
 
-  // Split ingredients string into an array if it's a comma-separated string
-  const ingredients = typeof meal.ingredients === "string" 
-    ? meal.ingredients.split(",").map((ingredient) => ingredient.trim()) 
-    : meal.ingredients;
+  if (!meal) return <Text>Loading...</Text>;
+
+  const ingredients =
+    typeof meal.ingredients === "string"
+      ? meal.ingredients.split(",").map((ingredient) => ingredient.trim())
+      : meal.ingredients;
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
@@ -58,7 +76,6 @@ const MealPlanDetails: React.FC<MealPlanDetailsProps> = ({ meal, onBack }) => {
         Meal Type: {meal.meal_type}
       </Text>
 
-      {/* Ingredients Section */}
       <Text style={[styles.ingredientsTitle, { color: theme.text }]}>Ingredients:</Text>
       {ingredients && ingredients.length > 0 ? (
         <FlatList
@@ -69,9 +86,7 @@ const MealPlanDetails: React.FC<MealPlanDetailsProps> = ({ meal, onBack }) => {
           )}
         />
       ) : (
-        <Text style={[styles.noIngredientsText, { color: theme.subtext }]}>
-          No ingredients available
-        </Text>
+        <Text style={[styles.noIngredientsText, { color: theme.subtext }]}>No ingredients available</Text>
       )}
 
       <TouchableOpacity
@@ -83,7 +98,7 @@ const MealPlanDetails: React.FC<MealPlanDetailsProps> = ({ meal, onBack }) => {
 
       <TouchableOpacity
         style={[styles.backButton, { backgroundColor: theme.button }]}
-        onPress={onBack}
+        onPress={() => router.back()}
       >
         <Text style={[styles.backButtonText, { color: theme.buttonText }]}>Back to Calendar</Text>
       </TouchableOpacity>
@@ -92,64 +107,17 @@ const MealPlanDetails: React.FC<MealPlanDetailsProps> = ({ meal, onBack }) => {
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 16,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: "bold",
-    marginBottom: 16,
-    textAlign: "center",
-  },
-  description: {
-    fontSize: 16,
-    marginBottom: 16,
-    textAlign: "center",
-  },
-  details: {
-    fontSize: 14,
-    marginBottom: 8,
-    textAlign: "center",
-  },
-  ingredientsTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
-    marginTop: 16,
-    marginBottom: 8,
-    textAlign: "center",
-  },
-  ingredientItem: {
-    fontSize: 14,
-    marginBottom: 4,
-    textAlign: "center",
-  },
-  noIngredientsText: {
-    fontSize: 14,
-    fontStyle: "italic",
-    textAlign: "center",
-    marginBottom: 16,
-  },
-  deleteButton: {
-    marginTop: 16,
-    padding: 12,
-    borderRadius: 8,
-    alignItems: "center",
-  },
-  deleteButtonText: {
-    fontSize: 16,
-    fontWeight: "bold",
-  },
-  backButton: {
-    marginTop: 24,
-    padding: 12,
-    borderRadius: 8,
-    alignItems: "center",
-  },
-  backButtonText: {
-    fontSize: 16,
-    fontWeight: "bold",
-  },
+  container: { flex: 1, padding: 16 },
+  title: { fontSize: 24, fontWeight: "bold", marginBottom: 16, textAlign: "center" },
+  description: { fontSize: 16, marginBottom: 16, textAlign: "center" },
+  details: { fontSize: 14, marginBottom: 8, textAlign: "center" },
+  ingredientsTitle: { fontSize: 18, fontWeight: "bold", marginTop: 16, marginBottom: 8, textAlign: "center" },
+  ingredientItem: { fontSize: 14, marginBottom: 4, textAlign: "center" },
+  noIngredientsText: { fontSize: 14, fontStyle: "italic", textAlign: "center", marginBottom: 16 },
+  deleteButton: { marginTop: 16, padding: 12, borderRadius: 8, alignItems: "center" },
+  deleteButtonText: { fontSize: 16, fontWeight: "bold" },
+  backButton: { marginTop: 24, padding: 12, borderRadius: 8, alignItems: "center" },
+  backButtonText: { fontSize: 16, fontWeight: "bold" },
 });
 
 export default MealPlanDetails;

@@ -14,18 +14,19 @@ import {
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
-import { Meal } from "@/types/types";
-import { useTheme } from "@/context/ThemeContext";
-import { jwtDecode } from "jwt-decode"; // Use named import for jwtDecode
+import { Meal } from "../../../types/types";
+import { useTheme } from "../../../context/ThemeContext";
+import { jwtDecode } from "jwt-decode"; 
+import { useRouter } from "expo-router";  // Import Expo Router hook
+import BottomNav from "components/bottomNav";
 
 interface MyMealsProps {
-  onMealSelect: (meal: Meal) => void;
   onCreateMeal: () => void;
 }
 
 const BASE_URL = Platform.OS === "android" ? "http://10.0.2.2:5000" : "http://localhost:5000";
 
-const MyMeals: React.FC<MyMealsProps> = ({ onMealSelect, onCreateMeal}) => {
+const MyMeals: React.FC<MyMealsProps> = ({ onCreateMeal}) => {
   const [meals, setMeals] = useState<Meal[]>([]);
   const [filteredMeals, setFilteredMeals] = useState<Meal[]>([]);
   const [searchQuery, setSearchQuery] = useState<string>("");
@@ -45,6 +46,7 @@ const MyMeals: React.FC<MyMealsProps> = ({ onMealSelect, onCreateMeal}) => {
   ]);
 
   const { theme } = useTheme();
+  const router = useRouter(); // Initialize router
 
   useEffect(() => {
     const fetchMyMeals = async () => {
@@ -55,23 +57,23 @@ const MyMeals: React.FC<MyMealsProps> = ({ onMealSelect, onCreateMeal}) => {
           return;
         }
     
-        const userId = await getUserIdFromToken(); // Get the user's ID from the token
+        const userId = await getUserIdFromToken(); 
         if (!userId) {
           Alert.alert("Error", "User not authenticated. Please log in.");
           return;
         }
     
-        const savedFilters = await AsyncStorage.getItem(`filters_MyMeals_${userId}`); // Use MyMeals-specific key
-        const savedSearchQuery = await AsyncStorage.getItem(`searchQuery_MyMeals_${userId}`); // Use MyMeals-specific key
+        const savedFilters = await AsyncStorage.getItem(`filters_MyMeals_${userId}`); 
+        const savedSearchQuery = await AsyncStorage.getItem(`searchQuery_MyMeals_${userId}`); 
     
         if (savedFilters) {
           const parsedFilters = JSON.parse(savedFilters);
-          setFilters(parsedFilters); // Restore filters
-          setTempFilters(parsedFilters); // Initialize tempFilters with saved filters
+          setFilters(parsedFilters); 
+          setTempFilters(parsedFilters); 
         }
     
         if (savedSearchQuery) {
-          setSearchQuery(savedSearchQuery); // Restore search query
+          setSearchQuery(savedSearchQuery); 
         }
     
         const response = await axios.get(`${BASE_URL}/my-meals`, {
@@ -79,7 +81,7 @@ const MyMeals: React.FC<MyMealsProps> = ({ onMealSelect, onCreateMeal}) => {
         });
     
         setMeals(response.data);
-        setFilteredMeals(response.data); // Initialize filteredMeals with all meals
+        setFilteredMeals(response.data); 
       } catch (error) {
         console.error("Error fetching meals:", error);
         Alert.alert("Error", "Failed to fetch meals. Please try again later.");
@@ -92,7 +94,6 @@ const MyMeals: React.FC<MyMealsProps> = ({ onMealSelect, onCreateMeal}) => {
   }, []);
 
   useEffect(() => {
-    // Apply filters and search query
     const filtered = meals.filter((meal) => {
       const passesFilters = filters.every((filter) => {
         const greaterThanValue = parseFloat(filter.greaterThan);
@@ -101,12 +102,10 @@ const MyMeals: React.FC<MyMealsProps> = ({ onMealSelect, onCreateMeal}) => {
         if (filter.type in meal) {
           const mealValue = parseFloat(meal[filter.type as keyof Meal] as unknown as string);
   
-          // Apply "greater than" filter if a value is provided
           if (!isNaN(greaterThanValue) && mealValue <= greaterThanValue) {
             return false;
           }
   
-          // Apply "less than" filter if a value is provided
           if (!isNaN(lessThanValue) && mealValue >= lessThanValue) {
             return false;
           }
@@ -115,7 +114,6 @@ const MyMeals: React.FC<MyMealsProps> = ({ onMealSelect, onCreateMeal}) => {
         return true;
       });
   
-      // Apply search query
       const passesSearch =
         !searchQuery ||
         meal.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -125,64 +123,68 @@ const MyMeals: React.FC<MyMealsProps> = ({ onMealSelect, onCreateMeal}) => {
     });
   
     setFilteredMeals(filtered);
-  }, [searchQuery, filters, meals]); // Only apply filters when the filters state changes
+  }, [searchQuery, filters, meals]);
+
+  const onMealSelect = (meal: Meal) => {
+    router.push(`/my-meals/${meal.id}/info`); // Navigate to the meal details screen
+  };
 
   const handleSearchChange = async (text: string) => {
-    setSearchQuery(text); // Update the search query state
+    setSearchQuery(text); 
     try {
-      const userId = await getUserIdFromToken(); // Get the user's ID from the token
+      const userId = await getUserIdFromToken(); 
       if (!userId) {
         Alert.alert("Error", "User not authenticated. Please log in.");
         return;
       }
   
-      await AsyncStorage.setItem(`searchQuery_MyMeals_${userId}`, text); // Save search query with MyMeals-specific key
+      await AsyncStorage.setItem(`searchQuery_MyMeals_${userId}`, text); 
     } catch (error) {
       console.error("Error saving search query:", error);
     }
   };
 
-const getUserIdFromToken = async (): Promise<number | null> => {
-  try {
-    const token = await AsyncStorage.getItem("token");
-    if (!token) {
+  const getUserIdFromToken = async (): Promise<number | null> => {
+    try {
+      const token = await AsyncStorage.getItem("token");
+      if (!token) {
+        return null;
+      }
+
+      const decodedToken = jwtDecode<{ id: number }>(token); 
+      return decodedToken.id;
+    } catch (error) {
+      console.error("Error decoding token:", error);
       return null;
     }
+  };
 
-    const decodedToken = jwtDecode<{ id: number }>(token); // Use generic type for jwtDecode
-    return decodedToken.id;
-  } catch (error) {
-    console.error("Error decoding token:", error);
-    return null;
-  }
-};
+  const applyFilters = async () => {
+    try {
+      const userId = await getUserIdFromToken(); 
+      if (!userId) {
+        Alert.alert("Error", "User not authenticated. Please log in.");
+        return;
+      }
 
-const applyFilters = async () => {
-  try {
-    const userId = await getUserIdFromToken(); // Get the user's ID from the token
-    if (!userId) {
-      Alert.alert("Error", "User not authenticated. Please log in.");
-      return;
+      const isValid = tempFilters.every(
+        (filter) =>
+          (!filter.greaterThan || !isNaN(parseFloat(filter.greaterThan))) &&
+          (!filter.lessThan || !isNaN(parseFloat(filter.lessThan)))
+      );
+
+      if (!isValid) {
+        Alert.alert("Invalid Filters", "Please enter valid numeric values for the filters.");
+        return;
+      }
+
+      setFilters(tempFilters); 
+      await AsyncStorage.setItem(`filters_MyMeals_${userId}`, JSON.stringify(tempFilters)); 
+      setIsFilterModalVisible(false); 
+    } catch (error) {
+      console.error("Error saving filters:", error);
     }
-
-    const isValid = tempFilters.every(
-      (filter) =>
-        (!filter.greaterThan || !isNaN(parseFloat(filter.greaterThan))) &&
-        (!filter.lessThan || !isNaN(parseFloat(filter.lessThan)))
-    );
-
-    if (!isValid) {
-      Alert.alert("Invalid Filters", "Please enter valid numeric values for the filters.");
-      return;
-    }
-
-    setFilters(tempFilters); // Copy tempFilters into filters
-    await AsyncStorage.setItem(`filters_MyMeals_${userId}`, JSON.stringify(tempFilters)); // Save filters with MyMeals-specific key
-    setIsFilterModalVisible(false); // Close the filter modal
-  } catch (error) {
-    console.error("Error saving filters:", error);
-  }
-};
+  };
 
   if (loading) {
     return (
@@ -197,7 +199,10 @@ const applyFilters = async () => {
     return (
       <View style={[styles.container, { backgroundColor: theme.background }]}>
         <Text style={[styles.noMealsText, { color: theme.text }]}>No meals found.</Text>
-        <TouchableOpacity style={[styles.createMealButton, { backgroundColor: theme.button }]}>
+        <TouchableOpacity 
+          style={[styles.createMealButton, { backgroundColor: theme.button }]} 
+          onPress={() => router.push("/my-meals/create")} // Use Expo Router to navigate
+        >
           <Text style={[styles.createMealButtonText, { color: theme.buttonText }]}>Create Meal</Text>
         </TouchableOpacity>
       </View>
@@ -206,14 +211,13 @@ const applyFilters = async () => {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
-      {/* Search Bar and Filter Button */}
       <View style={styles.searchBarContainer}>
         <TextInput
           style={[styles.searchBar, { borderColor: theme.border, color: theme.text }]}
           placeholder="Search meals..."
           placeholderTextColor={theme.placeholder}
           value={searchQuery}
-          onChangeText={handleSearchChange} // Save search query when it changes
+          onChangeText={handleSearchChange} 
         />
         <TouchableOpacity
           style={[styles.filterButton, { backgroundColor: theme.button }]}
@@ -223,33 +227,30 @@ const applyFilters = async () => {
         </TouchableOpacity>
       </View>
 
-      {/* Meal List */}
       <FlatList
-  data={filteredMeals}
-  keyExtractor={(item) => item.id.toString()}
-  renderItem={({ item }) => (
-    <TouchableOpacity
-      style={[styles.mealItem, { backgroundColor: theme.card, borderColor: theme.border }]}
-      onPress={() => onMealSelect(item)}
-    >
-      {item.picture && typeof item.picture === "string" ? (
-        <Image source={{ uri: item.picture }} style={styles.mealPicture} />
-      ) : (
-        <View style={styles.mealPicturePlaceholder}>
-          <Text style={styles.mealPicturePlaceholderText}>No Image</Text>
-        </View>
-      )}
-      <View style={{ flex: 1 }}>
-        <Text style={[styles.mealName, { color: theme.text }]}>{item.name}</Text>
-        <Text style={[styles.mealDescription, { color: theme.subtext }]}>{item.description}</Text>
-      </View>
-    </TouchableOpacity>
-  )}
-  contentContainerStyle={{ paddingBottom: 60 }}
-/>
-      
+        data={filteredMeals}
+        keyExtractor={(item) => item.id.toString()}
+        renderItem={({ item }) => (
+          <TouchableOpacity
+            style={[styles.mealItem, { backgroundColor: theme.card, borderColor: theme.border }]}
+            onPress={() => onMealSelect(item)}
+          >
+            {item.picture && typeof item.picture === "string" ? (
+              <Image source={{ uri: item.picture }} style={styles.mealPicture} />
+            ) : (
+              <View style={styles.mealPicturePlaceholder}>
+                <Text style={styles.mealPicturePlaceholderText}>No Image</Text>
+              </View>
+            )}
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.mealName, { color: theme.text }]}>{item.name}</Text>
+              <Text style={[styles.mealDescription, { color: theme.subtext }]}>{item.description}</Text>
+            </View>
+          </TouchableOpacity>
+        )}
+        contentContainerStyle={{ paddingBottom: 60 }}
+      />
 
-      {/* Filter Modal */}
       <Modal visible={isFilterModalVisible} transparent animationType="slide">
         <View style={styles.modalContainer}>
           <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
@@ -291,8 +292,8 @@ const applyFilters = async () => {
             <TouchableOpacity
               style={[styles.cancelButton, { backgroundColor: theme.danger }]}
               onPress={() => {
-                setTempFilters(filters); // Reset tempFilters to the current filters
-                setIsFilterModalVisible(false); // Close the modal
+                setTempFilters(filters); 
+                setIsFilterModalVisible(false); 
               }}
             >
               <Text style={[styles.cancelButtonText, { color: theme.buttonText }]}>Cancel</Text>
@@ -300,16 +301,15 @@ const applyFilters = async () => {
           </View>
         </View>
       </Modal>
-    {/* Add Meal Button */}
-    <TouchableOpacity
-      style={[styles.createMealButton, { backgroundColor: theme.button }]}
-      onPress={() => {
-        {onCreateMeal()}
-      }}
-    >
-      <Text style={[styles.createMealButtonText, { color: theme.buttonText }]}>Create Meal</Text>
-    </TouchableOpacity>
-  </View>
+
+      <TouchableOpacity
+        style={[styles.createMealButton, { backgroundColor: theme.button }]}
+        onPress={() => router.push("/my-meals/create")} // Use Expo Router to navigate
+      >
+        <Text style={[styles.createMealButtonText, { color: theme.buttonText }]}>Create Meal</Text>
+      </TouchableOpacity>
+      <BottomNav /> 
+    </View>
   );
 };
 
@@ -320,6 +320,18 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
     width: "100%",
     height: "100%",
+  },
+  mealPicturePlaceholder: {
+    width: 60,
+    height: 60,
+    borderRadius: 8,
+    backgroundColor: "#e0e0e0",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  mealPicturePlaceholderText: {
+    fontSize: 12,
+    color: "#888",
   },
   searchBarContainer: {
     flexDirection: "row",
@@ -347,12 +359,18 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
   },
   mealItem: {
-    flexDirection: "row", // Align picture and text horizontally
-    alignItems: "center", // Center align items vertically
+    flexDirection: "row", 
+    alignItems: "center", 
     padding: 16,
     marginBottom: 16,
     borderWidth: 1,
     borderRadius: 8,
+  },
+  mealPicture: {
+    width: 60,
+    height: 60,
+    borderRadius: 8,
+    marginRight: 16,
   },
   mealName: {
     fontSize: 18,
@@ -426,35 +444,17 @@ const styles = StyleSheet.create({
   },
   createMealButton: {
     position: "absolute",
-    bottom: 50, // Place it above the navigation bar
-    padding: 12,
-    left: "40%",
+    bottom: 20,
+    left: "50%",
+    transform: [{ translateX: -60 }],
+    paddingVertical: 12,
+    paddingHorizontal: 24,
     borderRadius: 8,
     alignItems: "center",
-    justifyContent: "center",
   },
   createMealButtonText: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: "bold",
-  },
-  mealPicture: {
-    width: 80, // Smaller width
-    height: 80, // Smaller height
-    borderRadius: 8,
-    marginRight: 16, // Add space between the picture and text
-  },
-  mealPicturePlaceholder: {
-    width: 80,
-    height: 80,
-    borderRadius: 8,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "#f0f0f0",
-    marginBottom: 8,
-  },
-  mealPicturePlaceholderText: {
-    fontSize: 16,
-    color: "#888",
   },
 });
 

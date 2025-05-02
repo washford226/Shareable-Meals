@@ -1,14 +1,14 @@
-// filepath: c:\School\Spring 2025\Capstone\MealPlanApp\tsconfig.json
 {
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "jsx": "react", // Add this line to enable JSX support
+    "jsx": "react",
+    "baseUrl": "./",
     "paths": {
       "@/*": [
-        "./*"
+        "app/*"   // <-- correctly points to your "app" folder
       ]
     }
   },
@@ -18,9 +18,4 @@
     ".expo/types/**/*.ts",
     "expo-env.d.ts"
   ]
-  ,
- "baseUrl": "./",
-    "paths": {
-      "@/*": ["app/*"]
-    }
-  }
+}

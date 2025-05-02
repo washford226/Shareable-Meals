@@ -1,28 +1,37 @@
 import React, { useState } from "react";
-import { Platform } from "react-native";
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from "react-native";
+import {
+  Platform,
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
+  Alert,
+  ActivityIndicator,
+} from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
-import { Meal } from "@/types/types";
-import StarRating from "react-native-star-rating-widget"; // Import the star rating widget
-import { useTheme } from "@/context/ThemeContext"; // Import ThemeContext
-
-interface CreateReviewProps {
-  meal: Meal; // The meal for which the review is being created
-  onReviewSubmit: () => void; // Callback to handle review submission
-  onCancel: () => void; // Callback to handle cancel action
-}
+import StarRating from "react-native-star-rating-widget";
+import { useTheme } from "../../../../context/ThemeContext";
+import { useLocalSearchParams, useRouter } from "expo-router";
 
 const BASE_URL = Platform.OS === "android" ? "http://10.0.2.2:5000" : "http://localhost:5000";
 
-const CreateReview: React.FC<CreateReviewProps> = ({ meal, onReviewSubmit, onCancel }) => {
-  const [rating, setRating] = useState<number>(0); // Star rating input
-  const [comment, setComment] = useState<string>(""); // Comment input
-  const [loading, setLoading] = useState(false); // Loading state
+const CreateReview = () => {
+  const [rating, setRating] = useState<number>(0);
+  const [comment, setComment] = useState<string>("");
+  const [loading, setLoading] = useState(false);
 
-  const { theme } = useTheme(); // Access the theme from ThemeContext
+  const { theme } = useTheme();
+  const router = useRouter();
+  const { id: mealId, mealName } = useLocalSearchParams<{ id: string; mealName: string }>();
 
   const handleSubmit = async () => {
+    if (!mealId) {
+      Alert.alert("Error", "Meal ID is missing. Please try again.");
+      return;
+    }
+
     if (rating < 1 || rating > 5) {
       Alert.alert("Invalid Rating", "Please select a rating between 1 and 5 stars.");
       return;
@@ -32,11 +41,16 @@ const CreateReview: React.FC<CreateReviewProps> = ({ meal, onReviewSubmit, onCan
 
     try {
       const token = await AsyncStorage.getItem("token");
+      if (!token) {
+        Alert.alert("Error", "User not authenticated. Please log in.");
+        return;
+      }
+
       await axios.post(
         `${BASE_URL}/reviews`,
         {
-          meal_id: meal.id,
-          rating, // Use the selected star rating
+          meal_id: mealId,
+          rating,
           comment,
         },
         {
@@ -47,7 +61,7 @@ const CreateReview: React.FC<CreateReviewProps> = ({ meal, onReviewSubmit, onCan
       );
 
       Alert.alert("Success", "Your review has been submitted!");
-      onReviewSubmit(); // Notify parent component of successful submission
+      router.back(); // Navigate back after submission
     } catch (error) {
       console.error("Error submitting review:", error);
       Alert.alert("Error", "Failed to submit your review. Please try again later.");
@@ -58,18 +72,18 @@ const CreateReview: React.FC<CreateReviewProps> = ({ meal, onReviewSubmit, onCan
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
-      <Text style={[styles.title, { color: theme.text }]}>Create Review for {meal.name}</Text>
+      <Text style={[styles.title, { color: theme.text }]}>
+        Create Review for {mealName || "Meal"}
+      </Text>
 
-      {/* Star Rating Component */}
       <StarRating
         rating={rating}
         onChange={setRating}
         maxStars={5}
         starSize={30}
-        color={theme.starColor} // Use theme's starColor
+        color={theme.starColor}
       />
 
-      {/* Comment Input */}
       <TextInput
         style={[styles.input, styles.commentInput, { borderColor: theme.border, color: theme.text }]}
         placeholder="Enter a comment (optional)"
@@ -79,20 +93,21 @@ const CreateReview: React.FC<CreateReviewProps> = ({ meal, onReviewSubmit, onCan
         onChangeText={setComment}
       />
 
-      {/* Buttons */}
       <View style={styles.buttonContainer}>
         <TouchableOpacity
           style={[styles.submitButton, { backgroundColor: theme.button }]}
           onPress={handleSubmit}
           disabled={loading}
         >
-          <Text style={[styles.submitButtonText, { color: theme.buttonText }]}>
-            {loading ? "Submitting..." : "Submit Review"}
-          </Text>
+          {loading ? (
+            <ActivityIndicator size="small" color={theme.buttonText} />
+          ) : (
+            <Text style={[styles.submitButtonText, { color: theme.buttonText }]}>Submit Review</Text>
+          )}
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.cancelButton, { backgroundColor: theme.background, borderColor: theme.border }]}
-          onPress={onCancel}
+          style={[styles.cancelButton, { borderColor: theme.border }]}
+          onPress={() => router.back()}
         >
           <Text style={[styles.cancelButtonText, { color: theme.text }]}>Cancel</Text>
         </TouchableOpacity>
@@ -102,15 +117,8 @@ const CreateReview: React.FC<CreateReviewProps> = ({ meal, onReviewSubmit, onCan
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 16,
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: "bold",
-    marginBottom: 16,
-  },
+  container: { flex: 1, padding: 16 },
+  title: { fontSize: 20, fontWeight: "bold", marginBottom: 16 },
   input: {
     borderWidth: 1,
     borderRadius: 8,
@@ -118,14 +126,8 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     fontSize: 16,
   },
-  commentInput: {
-    height: 100,
-    textAlignVertical: "top",
-  },
-  buttonContainer: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
+  commentInput: { height: 100, textAlignVertical: "top" },
+  buttonContainer: { flexDirection: "row", justifyContent: "space-between" },
   submitButton: {
     flex: 1,
     padding: 12,
@@ -133,10 +135,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginRight: 8,
   },
-  submitButtonText: {
-    fontSize: 16,
-    fontWeight: "bold",
-  },
+  submitButtonText: { fontSize: 16, fontWeight: "bold" },
   cancelButton: {
     flex: 1,
     padding: 12,
@@ -144,9 +143,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     borderWidth: 1,
   },
-  cancelButtonText: {
-    fontSize: 16,
-  },
+  cancelButtonText: { fontSize: 16 },
 });
 
 export default CreateReview;

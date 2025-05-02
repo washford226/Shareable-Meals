@@ -1,12 +1,12 @@
 import React, { useState } from "react";
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from "react-native";
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, Platform } from "react-native";
+import { useRouter } from "expo-router";
 import axios from "axios";
-import { Platform } from "react-native";
 
-const ForgotPasswordScreen = ({ onBackToLogin }: { onBackToLogin: () => void }) => {
+const ForgotPasswordScreen = () => {
   const [email, setEmail] = useState("");
+  const router = useRouter();
 
-  // Determine the base URL for localhost (iOS/Android compatibility)
   const getBaseUrl = () => {
     return Platform.OS === "android" ? "http://10.0.2.2:5000" : "http://localhost:5000";
   };
@@ -16,17 +16,18 @@ const ForgotPasswordScreen = ({ onBackToLogin }: { onBackToLogin: () => void }) 
       const response = await axios.post(`${getBaseUrl()}/forgot-password`, { email });
 
       if (response.status === 200) {
-        const { username } = response.data; // Extract username from the backend response
+        const { username } = response.data;
         Alert.alert(
           "Success",
-          `A password reset link has been sent to your email.\n\nUsername: ${username}`
+          `A password reset link has been sent to your email.\n\nUsername: ${username}`,
+          [
+            { text: "OK", onPress: () => router.replace("../(auth)/login") } // <-- Go back to login screen
+          ]
         );
-        onBackToLogin(); // Navigate back to the login screen
       }
     } catch (error) {
       console.error("Error sending forgot password email:", error);
 
-      // Handle specific errors
       if ((error as any).response?.status === 404) {
         Alert.alert("Error", "No account found with this email.");
       } else {
@@ -49,7 +50,10 @@ const ForgotPasswordScreen = ({ onBackToLogin }: { onBackToLogin: () => void }) 
       <TouchableOpacity style={styles.button} onPress={handleForgotPassword}>
         <Text style={styles.buttonText}>Send Reset Link</Text>
       </TouchableOpacity>
-      <TouchableOpacity style={[styles.button, styles.secondaryButton]} onPress={onBackToLogin}>
+      <TouchableOpacity
+        style={[styles.button, styles.secondaryButton]}
+        onPress={() => router.back()} // <-- this goes back to previous screen
+      >
         <Text style={[styles.buttonText, styles.secondaryButtonText]}>Back to Login</Text>
       </TouchableOpacity>
     </View>

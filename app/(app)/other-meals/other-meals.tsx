@@ -14,26 +14,22 @@ import {
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
-import { Meal } from "@/types/types";
-import { useTheme } from "@/context/ThemeContext";
+import { Meal } from "../../../types/types";
+import { useTheme } from "../../../context/ThemeContext";
 import { jwtDecode } from "jwt-decode"; // Use named import for jwtDecode
 import Icon from "react-native-vector-icons/FontAwesome"; // Import FontAwesome icons
-
-
-interface OtherMealsProps {
-  onMealSelect: (meal: Meal) => void;
-}
+import { useRouter } from "expo-router"; // Import useRouter from expo-router
+import BottomNav from "components/bottomNav";
 
 const BASE_URL = Platform.OS === "android" ? "http://10.0.2.2:5000" : "http://localhost:5000";
 
-const OtherMeals: React.FC<OtherMealsProps> = ({ onMealSelect }) => {
+const OtherMeals: React.FC = () => {
   const [meals, setMeals] = useState<Meal[]>([]);
   const [filteredMeals, setFilteredMeals] = useState<Meal[]>([]);
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [isFilterModalVisible, setIsFilterModalVisible] = useState(false);
 
-  // Separate filters and tempFilters
   const [filters, setFilters] = useState<{ type: string; greaterThan: string; lessThan: string }[]>([
     { type: "calories", greaterThan: "", lessThan: "" },
     { type: "fat", greaterThan: "", lessThan: "" },
@@ -48,8 +44,8 @@ const OtherMeals: React.FC<OtherMealsProps> = ({ onMealSelect }) => {
   ]);
 
   const { theme } = useTheme();
+  const router = useRouter(); 
 
-  // Helper function to decode the token and get the user's ID
   const getUserIdFromToken = async (): Promise<number | null> => {
     try {
       const token = await AsyncStorage.getItem("token");
@@ -57,7 +53,7 @@ const OtherMeals: React.FC<OtherMealsProps> = ({ onMealSelect }) => {
         return null;
       }
 
-      const decodedToken: { id: number } = jwtDecode(token); // Assuming the token contains an `id` field
+      const decodedToken: { id: number } = jwtDecode(token); 
       return decodedToken.id;
     } catch (error) {
       console.error("Error decoding token:", error);
@@ -65,7 +61,10 @@ const OtherMeals: React.FC<OtherMealsProps> = ({ onMealSelect }) => {
     }
   };
 
-  // Fetch meals and restore filters and search query
+  const onMealSelect = (meal: Meal) => {
+    router.push(`/other-meals/${meal.id}/other-meals-info`); // Navigate to the meal details screen
+  };
+
   useEffect(() => {
     const fetchMeals = async () => {
       try {
@@ -87,7 +86,7 @@ const OtherMeals: React.FC<OtherMealsProps> = ({ onMealSelect }) => {
         if (savedFilters) {
           const parsedFilters = JSON.parse(savedFilters);
           setFilters(parsedFilters);
-          setTempFilters(parsedFilters); // Sync tempFilters with saved filters
+          setTempFilters(parsedFilters);
         }
 
         if (savedSearchQuery) {
@@ -99,7 +98,7 @@ const OtherMeals: React.FC<OtherMealsProps> = ({ onMealSelect }) => {
         });
 
         setMeals(response.data);
-        setFilteredMeals(response.data); // Initialize filteredMeals with all meals
+        setFilteredMeals(response.data);
       } catch (error) {
         console.error("Error fetching meals:", error);
         Alert.alert("Error", "Failed to fetch meals. Please try again later.");
@@ -111,7 +110,6 @@ const OtherMeals: React.FC<OtherMealsProps> = ({ onMealSelect }) => {
     fetchMeals();
   }, []);
 
-  // Apply filters and search query
   useEffect(() => {
     const filtered = meals.filter((meal) => {
       const passesFilters = filters.every((filter) => {
@@ -121,12 +119,10 @@ const OtherMeals: React.FC<OtherMealsProps> = ({ onMealSelect }) => {
         if (filter.type in meal) {
           const mealValue = parseFloat(meal[filter.type as keyof Meal] as unknown as string);
 
-          // Apply "greater than" filter if a value is provided
           if (!isNaN(greaterThanValue) && mealValue <= greaterThanValue) {
             return false;
           }
 
-          // Apply "less than" filter if a value is provided
           if (!isNaN(lessThanValue) && mealValue >= lessThanValue) {
             return false;
           }
@@ -147,7 +143,6 @@ const OtherMeals: React.FC<OtherMealsProps> = ({ onMealSelect }) => {
     setFilteredMeals(filtered);
   }, [searchQuery, filters, meals]);
 
-  // Save filters to AsyncStorage and apply them
   const applyFilters = async () => {
     try {
       const userId = await getUserIdFromToken();
@@ -156,7 +151,7 @@ const OtherMeals: React.FC<OtherMealsProps> = ({ onMealSelect }) => {
         return;
       }
 
-      setFilters(tempFilters); // Apply tempFilters to filters
+      setFilters(tempFilters);
       await AsyncStorage.setItem(`filters_OtherMeals_${userId}`, JSON.stringify(tempFilters));
       setIsFilterModalVisible(false);
     } catch (error) {
@@ -164,7 +159,6 @@ const OtherMeals: React.FC<OtherMealsProps> = ({ onMealSelect }) => {
     }
   };
 
-  // Save search query to AsyncStorage
   const handleSearchChange = async (text: string) => {
     setSearchQuery(text);
     try {
@@ -191,7 +185,6 @@ const OtherMeals: React.FC<OtherMealsProps> = ({ onMealSelect }) => {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
-      {/* Search Bar and Filter Button */}
       <View style={styles.searchBarContainer}>
         <TextInput
           style={[styles.searchBar, { borderColor: theme.border, color: theme.text }]}
@@ -208,52 +201,46 @@ const OtherMeals: React.FC<OtherMealsProps> = ({ onMealSelect }) => {
         </TouchableOpacity>
       </View>
 
-      {/* Meals List */}
       <FlatList
-      data={filteredMeals}
-      keyExtractor={(item) => item.id.toString()}
-      renderItem={({ item }) => (
-        <TouchableOpacity
-          style={[styles.mealItem, { backgroundColor: theme.card, borderColor: theme.border }]}
-          onPress={() => onMealSelect(item)}
-        >
-          {/* Display meal picture or placeholder */}
-          {item.picture && typeof item.picture === "string" ? (
-            <Image source={{ uri: item.picture }} style={styles.mealPicture} />
-          ) : (
-            <View style={styles.mealPicturePlaceholder}>
-              <Text style={styles.mealPicturePlaceholderText}>No Image</Text>
+        data={filteredMeals}
+        keyExtractor={(item) => item.id.toString()}
+        renderItem={({ item }) => (
+          <TouchableOpacity
+            style={[styles.mealItem, { backgroundColor: theme.card, borderColor: theme.border }]}
+            onPress={() => {
+              onMealSelect(item);
+              router.push(`/other-meals/${item.id}/other-meals-info`); 
+            }}
+          >
+            {item.picture && typeof item.picture === "string" ? (
+              <Image source={{ uri: item.picture }} style={styles.mealPicture} />
+            ) : (
+              <View style={styles.mealPicturePlaceholder}>
+                <Text style={styles.mealPicturePlaceholderText}>No Image</Text>
+              </View>
+            )}
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.mealName, { color: theme.text }]}>{item.name}</Text>
+              <Text style={[styles.mealDescription, { color: theme.subtext }]}>{item.description}</Text>
+              <Text style={[styles.mealUser, { color: theme.subtext }]}>By: {item.userName}</Text>
+              <View style={styles.ratingContainer}>
+                {[...Array(5)].map((_, index) => (
+                  <Icon
+                    key={index}
+                    name="star"
+                    size={16}
+                    color={index < Math.floor(item.averageRating) ? "#FFD700" : "#CCCCCC"}
+                  />
+                ))}
+                <Text style={[styles.reviewCount, { color: theme.subtext }]}>
+                  ({item.reviewCount} reviews)
+                </Text>
+              </View>
             </View>
-          )}
-
-          {/* Meal Details */}
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.mealName, { color: theme.text }]}>{item.name}</Text>
-            <Text style={[styles.mealDescription, { color: theme.subtext }]}>{item.description}</Text>
-            <Text style={[styles.mealUser, { color: theme.subtext }]}>By: {item.userName}</Text>
-
-            {/* Rating and Review Count */}
-            <View style={styles.ratingContainer}>
-              {[...Array(5)].map((_, index) => (
-                <Icon
-                  key={index}
-                  name="star"
-                  size={16}
-                  color={index < Math.floor(item.averageRating) ? "#FFD700" : "#CCCCCC"} // Gold for filled stars, gray for empty
-                />
-              ))}
-              <Text style={[styles.reviewCount, { color: theme.subtext }]}>
-                ({item.reviewCount} reviews)
-              </Text>
-            </View>
-          </View>
-        </TouchableOpacity>
-      )}
-      contentContainerStyle={{ paddingBottom: 60 }}
-    />
-
-
-      {/* Filter Modal */}
+          </TouchableOpacity>
+        )}
+        contentContainerStyle={{ paddingBottom: 60 }}
+      />
       <Modal visible={isFilterModalVisible} transparent animationType="slide">
         <View style={styles.modalContainer}>
           <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
@@ -301,6 +288,7 @@ const OtherMeals: React.FC<OtherMealsProps> = ({ onMealSelect }) => {
           </View>
         </View>
       </Modal>
+      <BottomNav /> 
     </View>
   );
 };
@@ -346,8 +334,8 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
   },
   mealItem: {
-    flexDirection: "row", // Align picture and text horizontally
-    alignItems: "center", // Center align items vertically
+    flexDirection: "row",
+    alignItems: "center",
     padding: 16,
     marginBottom: 16,
     borderWidth: 1,
@@ -422,22 +410,21 @@ const styles = StyleSheet.create({
     marginLeft: 4,
   },
   mealPicture: {
-    width: 80, // Smaller width
-    height: 80, // Smaller height
+    width: 80,
+    height: 80,
     borderRadius: 8,
-    marginRight: 16, // Add space between the picture and text
+    marginRight: 16,
   },
   mealPicturePlaceholder: {
     width: 80,
     height: 80,
     borderRadius: 8,
+    backgroundColor: "#f0f0f0",
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#f0f0f0",
-    marginBottom: 8,
   },
   mealPicturePlaceholderText: {
-    fontSize: 16,
+    fontSize: 12,
     color: "#888",
   },
 });

@@ -1,14 +1,29 @@
 import React, { useState } from "react";
-import { View, Text, TextInput, Button, StyleSheet, Alert, Image, TouchableOpacity, Platform, ScrollView, Switch } from "react-native";
+import {
+  View,
+  Text,
+  TextInput,
+  Button,
+  StyleSheet,
+  Alert,
+  Image,
+  TouchableOpacity,
+  Platform,
+  ScrollView,
+  Switch,
+} from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as ImagePicker from "expo-image-picker";
-import { useTheme } from "../context/ThemeContext"; // Import the theme context
+import { useTheme } from "../../../context/ThemeContext";
+import { useLocalSearchParams, useRouter } from "expo-router";
 
 const BASE_URL = Platform.OS === "android" ? "http://10.0.2.2:5000" : "http://localhost:5000";
 
-const CreateMealScreen = ({ route, navigation }: any) => {
-  const { theme } = useTheme(); // Access the current theme
-  const { selectedDay } = route.params || {};
+const CreateMealScreen = () => {
+  const { theme } = useTheme();
+  const router = useRouter();
+  const { selectedDay } = useLocalSearchParams<{ selectedDay?: string }>();
+
   const [mealName, setMealName] = useState("");
   const [mealDescription, setMealDescription] = useState("");
   const [mealIngredients, setMealIngredients] = useState("");
@@ -20,13 +35,6 @@ const CreateMealScreen = ({ route, navigation }: any) => {
   const [mealRecipeLink, setMealRecipeLink] = useState("");
   const [mealPicture, setMealPicture] = useState<string | null>(null);
   const [mealVisibility, setMealVisibility] = useState(true);
-
-  const requestPermission = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== "granted") {
-      Alert.alert("Permission Required", "We need access to your gallery to pick an image.");
-    }
-  };
 
   const pickMealImage = async () => {
     try {
@@ -74,7 +82,7 @@ const CreateMealScreen = ({ route, navigation }: any) => {
     formData.append("instructions", mealInstructions);
     formData.append("recipeLink", mealRecipeLink);
     formData.append("visibility", mealVisibility ? "1" : "0");
-    formData.append("day", selectedDay);
+    formData.append("day", selectedDay || "");
 
     if (mealPicture) {
       const uriParts = mealPicture.split(".");
@@ -106,7 +114,7 @@ const CreateMealScreen = ({ route, navigation }: any) => {
       }
 
       Alert.alert("Success", "Meal added successfully!");
-      navigation.goBack();
+      router.back();
     } catch (error) {
       console.error("Error adding meal:", error);
       Alert.alert("Error", "Failed to add the meal to the database.");
@@ -116,6 +124,7 @@ const CreateMealScreen = ({ route, navigation }: any) => {
   return (
     <ScrollView contentContainerStyle={[styles.container, { backgroundColor: theme.background }]}>
       <Text style={[styles.title, { color: theme.text }]}>Create a New Meal</Text>
+
       <TextInput
         style={[styles.input, { backgroundColor: theme.card, borderColor: theme.border, color: theme.text }]}
         placeholder="Meal Name"
@@ -124,6 +133,7 @@ const CreateMealScreen = ({ route, navigation }: any) => {
         onChangeText={setMealName}
         multiline
       />
+
       <TextInput
         style={[styles.input, { backgroundColor: theme.card, borderColor: theme.border, color: theme.text }]}
         placeholder="Meal Description"
@@ -132,6 +142,7 @@ const CreateMealScreen = ({ route, navigation }: any) => {
         onChangeText={setMealDescription}
         multiline
       />
+
       <TextInput
         style={[styles.input, { backgroundColor: theme.card, borderColor: theme.border, color: theme.text }]}
         placeholder="Ingredients (comma-separated)"
@@ -140,6 +151,7 @@ const CreateMealScreen = ({ route, navigation }: any) => {
         onChangeText={setMealIngredients}
         multiline
       />
+
       <TextInput
         style={[styles.input, { backgroundColor: theme.card, borderColor: theme.border, color: theme.text }]}
         placeholder="Calories"
@@ -149,6 +161,7 @@ const CreateMealScreen = ({ route, navigation }: any) => {
         keyboardType="numeric"
         multiline
       />
+
       <TextInput
         style={[styles.input, { backgroundColor: theme.card, borderColor: theme.border, color: theme.text }]}
         placeholder="Protein (g)"
@@ -158,6 +171,7 @@ const CreateMealScreen = ({ route, navigation }: any) => {
         keyboardType="numeric"
         multiline
       />
+
       <TextInput
         style={[styles.input, { backgroundColor: theme.card, borderColor: theme.border, color: theme.text }]}
         placeholder="Carbs (g)"
@@ -167,6 +181,7 @@ const CreateMealScreen = ({ route, navigation }: any) => {
         keyboardType="numeric"
         multiline
       />
+
       <TextInput
         style={[styles.input, { backgroundColor: theme.card, borderColor: theme.border, color: theme.text }]}
         placeholder="Fat (g)"
@@ -176,6 +191,7 @@ const CreateMealScreen = ({ route, navigation }: any) => {
         keyboardType="numeric"
         multiline
       />
+
       <TextInput
         style={[styles.input, { backgroundColor: theme.card, borderColor: theme.border, color: theme.text }]}
         placeholder="Instructions"
@@ -184,6 +200,7 @@ const CreateMealScreen = ({ route, navigation }: any) => {
         onChangeText={setMealInstructions}
         multiline
       />
+
       <TextInput
         style={[styles.input, { backgroundColor: theme.card, borderColor: theme.border, color: theme.text }]}
         placeholder="Recipe Link"
@@ -213,7 +230,7 @@ const CreateMealScreen = ({ route, navigation }: any) => {
           <Button title="Create Meal" onPress={handleAddMeal} color={theme.primary} />
         </View>
         <View style={styles.button}>
-          <Button title="Cancel" onPress={() => navigation.goBack()} color={theme.danger} />
+          <Button title="Cancel" onPress={() => router.back()} color={theme.danger} />
         </View>
       </View>
     </ScrollView>
@@ -240,10 +257,6 @@ const styles = StyleSheet.create({
     marginBottom: 15,
     paddingHorizontal: 15,
     width: "100%",
-  },
-  textArea: {
-    height: 100, // Increase height for taller input boxes
-    textAlignVertical: "top", // Align text to the top
   },
   switchContainer: {
     flexDirection: "row",
