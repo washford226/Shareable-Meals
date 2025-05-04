@@ -2,13 +2,11 @@ import React, { useState, useEffect } from "react";
 import { View, Text, TextInput, StyleSheet, Alert, TouchableOpacity, Image, Platform } from "react-native";
 import axios from "axios";
 import * as ImagePicker from "expo-image-picker";
+import { useRouter } from "expo-router";
 
-interface SignUpScreenProps {
-  onSignUp: () => void;
-  onNavigateToLogin: () => void;
-}
-
-const SignUpScreen: React.FC<SignUpScreenProps> = ({ onSignUp, onNavigateToLogin }) => {
+const SignUpScreen: React.FC = () => {
+  const router = useRouter();
+  
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -71,8 +69,12 @@ const SignUpScreen: React.FC<SignUpScreenProps> = ({ onSignUp, onNavigateToLogin
         },
       });
       if (response.status === 200) {
-        Alert.alert("Success", "User signed up successfully");
-        onSignUp();
+        Alert.alert("Success", "User signed up successfully", [
+          {
+            text: "OK",
+            onPress: () => router.replace("../login"), // Navigate to login after signup
+          },
+        ]);
       }
     } catch (error) {
       if ((error as any).response && (error as any).response.data) {
@@ -169,8 +171,8 @@ const SignUpScreen: React.FC<SignUpScreenProps> = ({ onSignUp, onNavigateToLogin
       <TouchableOpacity style={styles.button} onPress={handleSignUp}>
         <Text style={styles.buttonText}>Sign Up</Text>
       </TouchableOpacity>
-      <TouchableOpacity style={styles.button} onPress={onNavigateToLogin}>
-        <Text style={styles.buttonText}>Back</Text>
+      <TouchableOpacity style={styles.button} onPress={() => router.replace("/login")}>
+        <Text style={styles.buttonText}>Back to Login</Text>
       </TouchableOpacity>
     </View>
   );

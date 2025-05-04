@@ -3,16 +3,13 @@ import { View, Text, TouchableOpacity, Alert, TextInput, StyleSheet, Platform, I
 import * as ImagePicker from 'expo-image-picker';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useTheme } from '@/context/ThemeContext'; // Import the ThemeContext
+import { useTheme } from '../../../context/ThemeContext'; // Import the ThemeContext
+import { Link, useRouter } from 'expo-router'; // Import Link and useRouter from Expo Router
+import BottomNav from 'components/bottomNav';
 
-interface AccountScreenProps {
-  onLogout: () => void;
-}
-
-// Dynamically set the base URL based on the platform
 const BASE_URL = Platform.OS === 'android' ? 'http://10.0.2.2:5000' : 'http://localhost:5000';
 
-const AccountScreen: React.FC<AccountScreenProps> = ({ onLogout }) => {
+const AccountScreen: React.FC = () => {
   const [username, setUsername] = useState<string>('');
   const [caloriesGoal, setCaloriesGoal] = useState<number | null>(null);
   const [isEditingCaloriesGoal, setIsEditingCaloriesGoal] = useState<boolean>(false);
@@ -29,7 +26,8 @@ const AccountScreen: React.FC<AccountScreenProps> = ({ onLogout }) => {
 
   const { theme, toggleTheme } = useTheme(); // Access theme and toggleTheme from ThemeContext
 
-  // Fetch user data when the component mounts
+  const router = useRouter();
+
   useEffect(() => {
     const fetchUserData = async () => {
       try {
@@ -48,7 +46,6 @@ const AccountScreen: React.FC<AccountScreenProps> = ({ onLogout }) => {
         setCaloriesGoal(response.data.calories_goal);
         setDietaryRestrictions(response.data.dietary_restrictions);
 
-        // Directly set the profile picture from the response
         if (response.data.profile_picture) {
           setProfilePicture(response.data.profile_picture);
         } else {
@@ -62,17 +59,16 @@ const AccountScreen: React.FC<AccountScreenProps> = ({ onLogout }) => {
     fetchUserData();
   }, []);
 
-  // Handle user logout
+
   const handleLogout = async () => {
     try {
       await AsyncStorage.removeItem('token');
-      onLogout();
+      router.replace('/login'); // or whatever your login route is
     } catch (error) {
       console.error('Error during logout:', error);
     }
   };
 
-  // Handle account deletion
   const handleDeleteAccount = async () => {
     try {
       const token = await AsyncStorage.getItem('token');
@@ -96,7 +92,6 @@ const AccountScreen: React.FC<AccountScreenProps> = ({ onLogout }) => {
     }
   };
 
-  // Handle editing calories goal
   const handleEditCaloriesGoal = async () => {
     try {
       const token = await AsyncStorage.getItem('token');
@@ -125,7 +120,6 @@ const AccountScreen: React.FC<AccountScreenProps> = ({ onLogout }) => {
     }
   };
 
-  // Handle editing dietary restrictions
   const handleEditDietaryRestrictions = async () => {
     try {
       const token = await AsyncStorage.getItem('token');
@@ -151,64 +145,6 @@ const AccountScreen: React.FC<AccountScreenProps> = ({ onLogout }) => {
     } catch (error) {
       console.error('Error updating dietary restrictions:', error);
       Alert.alert('Error', 'Failed to update dietary restrictions');
-    }
-  };
-
-  const handleEditEmail = async () => {
-    try {
-      const token = await AsyncStorage.getItem('token');
-      if (!token) {
-        throw new Error('No token found');
-      }
-  
-      const response = await axios.put(
-        `${BASE_URL}/user/${username}/email`,
-        { email: newEmail, currentPassword },
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
-  
-      if (response.status === 200) {
-        Alert.alert('Success', 'Email updated successfully');
-        setIsEditingEmail(false);
-        setCurrentPassword('');
-        setNewEmail('');
-      }
-    } catch (error) {
-      console.error('Error updating email:', error);
-      Alert.alert('Error', 'Failed to update email. Please check your current password.');
-    }
-  };
-  
-  const handleEditPassword = async () => {
-    try {
-      const token = await AsyncStorage.getItem('token');
-      if (!token) {
-        throw new Error('No token found');
-      }
-  
-      const response = await axios.put(
-        `${BASE_URL}/user/${username}/password`,
-        { password: newPassword, currentPassword },
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
-  
-      if (response.status === 200) {
-        Alert.alert('Success', 'Password updated successfully');
-        setIsEditingPassword(false);
-        setCurrentPassword('');
-        setNewPassword('');
-      }
-    } catch (error) {
-      console.error('Error updating password:', error);
-      Alert.alert('Error', 'Failed to update password. Please check your current password.');
     }
   };
 
@@ -252,9 +188,9 @@ const AccountScreen: React.FC<AccountScreenProps> = ({ onLogout }) => {
     }
   };
 
-
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
+      <BottomNav /> 
       {/* Profile Picture */}
       {profilePicture ? (
         <Image source={{ uri: profilePicture }} style={styles.profilePicture} />
@@ -320,96 +256,21 @@ const AccountScreen: React.FC<AccountScreenProps> = ({ onLogout }) => {
         </View>
       )}
 
-      {/* Change Email Button */}
-      <View style={[styles.centeredRow]}>
-        <TouchableOpacity
-          style={[styles.centeredButton, { backgroundColor: theme.button }]}
-          onPress={() => setIsEditingEmail(true)}
-        >
-          <Text style={[styles.buttonText, { color: theme.buttonText }]}>Change Email</Text>
-        </TouchableOpacity>
-      </View>
-      {isEditingEmail && (
-        <View>
-          <TextInput
-            style={[styles.input, { borderColor: theme.border, color: theme.text }]}
-            placeholder="Enter current password"
-            placeholderTextColor={theme.placeholder}
-            value={currentPassword}
-            onChangeText={setCurrentPassword}
-            secureTextEntry={true}
-          />
-          <TextInput
-            style={[styles.input, { borderColor: theme.border, color: theme.text }]}
-            placeholder="Enter new email"
-            placeholderTextColor={theme.placeholder}
-            value={newEmail}
-            onChangeText={setNewEmail}
-            keyboardType="email-address"
-          />
-          <TouchableOpacity onPress={handleEditEmail}>
-            <Text style={{ color: theme.button, marginTop: 10 }}>Save</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => setIsEditingEmail(false)}>
-            <Text style={{ color: theme.danger, marginTop: 10 }}>Cancel</Text>
-          </TouchableOpacity>
-        </View>
-      )}
+      {/* Link to other screens */}
+      <Link href="/(app)/account/edit-email">
+        <Text style={{ color: theme.primary }}>Change Email</Text>
+      </Link>
 
-      {/* Change Password Button */}
-      <View style={[styles.centeredRow]}>
-        <TouchableOpacity
-          style={[styles.centeredButton, { backgroundColor: theme.button }]}
-          onPress={() => setIsEditingPassword(true)}
-        >
-          <Text style={[styles.buttonText, { color: theme.buttonText }]}>Change Password</Text>
-        </TouchableOpacity>
-      </View>
-      {isEditingPassword && (
-        <View>
-          <TextInput
-            style={[styles.input, { borderColor: theme.border, color: theme.text }]}
-            placeholder="Enter current password"
-            placeholderTextColor={theme.placeholder}
-            value={currentPassword}
-            onChangeText={setCurrentPassword}
-            secureTextEntry={true}
-          />
-          <TextInput
-            style={[styles.input, { borderColor: theme.border, color: theme.text }]}
-            placeholder="Enter new password"
-            placeholderTextColor={theme.placeholder}
-            value={newPassword}
-            onChangeText={setNewPassword}
-            secureTextEntry={true}
-          />
-          <TouchableOpacity onPress={handleEditPassword}>
-            <Text style={{ color: theme.button, marginTop: 10 }}>Save</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => setIsEditingPassword(false)}>
-            <Text style={{ color: theme.danger, marginTop: 10 }}>Cancel</Text>
-          </TouchableOpacity>
-        </View>
-      )}
+      <Link href="/(app)/account/edit-password">
+        <Text style={{ color: theme.primary }}>Change Password</Text>
+      </Link>
 
-      {/* Logout and Delete Account */}
       <TouchableOpacity onPress={handleLogout}>
         <Text style={{ color: theme.danger, marginTop: 20 }}>Logout</Text>
       </TouchableOpacity>
       <TouchableOpacity onPress={handleDeleteAccount}>
         <Text style={{ color: theme.warning, marginTop: 20 }}>Delete Account</Text>
       </TouchableOpacity>
-
-      {/* Dark Mode Slider */}
-      <View style={styles.row}>
-        <Text style={[styles.leftAlignText, { color: theme.text }]}>Dark Mode</Text>
-        <Switch
-          value={theme.background === '#000000'} // Check if the current theme is dark
-          onValueChange={toggleTheme} // Call toggleTheme to switch themes
-          trackColor={{ false: theme.border, true: theme.primary }}
-          thumbColor={theme.background === '#000000' ? theme.primary : theme.border}
-       />
-    </View>
     </View>
   );
 };
@@ -418,93 +279,91 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 20,
-    alignItems: 'center', // Center content horizontally
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  title: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 10,
   },
   profilePicture: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    marginTop: 40,
+    width: 100,
+    height: 100,
+    borderRadius: 50,
     marginBottom: 10,
   },
   profilePicturePlaceholder: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
+    width: 100,
+    height: 100,
+    borderRadius: 50,
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 40,
-    marginBottom: 10,
   },
   profilePicturePlaceholderText: {
-    fontSize: 16,
+    color: 'white',
   },
   updatePictureButton: {
-    backgroundColor: '#007bff',
+    marginTop: 10,
     padding: 10,
-    borderRadius: 8,
-    marginBottom: 20,
-    alignItems: 'center',
+    backgroundColor: '#ccc',
+    borderRadius: 5,
   },
   updatePictureButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    textAlign: 'center',
-    marginBottom: 20,
+    color: '#333',
   },
   row: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
     width: '100%',
-    marginBottom: 10,
+    marginBottom: 15,
   },
   leftAlignText: {
-    textAlign: 'left',
     fontSize: 16,
-    fontWeight: 'bold',
   },
   editButton: {
     padding: 5,
     borderRadius: 5,
   },
   editButtonText: {
-    fontWeight: 'bold',
+    color: 'white',
   },
   input: {
-    borderWidth: 1,
-    padding: 5,
-    marginVertical: 10,
-  },
-  themeButton: {
-    marginTop: 20,
+    width: '100%',
     padding: 10,
+    marginBottom: 10,
+    borderWidth: 1,
     borderRadius: 5,
-    alignItems: 'center',
-  },
-  themeButtonText: {
-    fontSize: 16,
-    fontWeight: 'bold',
   },
   centeredRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    marginVertical: 10,
+    alignItems: 'center',
+    marginBottom: 20,
   },
   centeredButton: {
-    padding: 10,
-    borderRadius: 8,
-    alignItems: 'center',
-    width: '80%',
+    padding: 15,
+    borderRadius: 5,
+    marginTop: 20,
   },
   buttonText: {
     fontSize: 16,
-    fontWeight: 'bold',
+  },
+  deleteButton: {
+    padding: 15,
+    borderRadius: 5,
+    marginTop: 30,
+  },
+  deleteButtonText: {
+    color: 'white',
+    fontSize: 16,
+  },
+  logoutButton: {
+    padding: 15,
+    borderRadius: 5,
+    marginTop: 20,
+  },
+  logoutButtonText: {
+    color: 'white',
+    fontSize: 16,
   },
 });
 

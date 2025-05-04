@@ -11,9 +11,9 @@ import {
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
-import { Meal } from "@/types/types";
-import StarRating from "react-native-star-rating-widget"; // Import the star rating widget
-import { useTheme } from "@/context/ThemeContext"; // Import ThemeContext
+import StarRating from "react-native-star-rating-widget";
+import { useTheme } from "../../../../context/ThemeContext";
+import { useRouter, useLocalSearchParams } from "expo-router";
 
 interface Review {
   id: string;
@@ -23,45 +23,48 @@ interface Review {
   created_at: string;
 }
 
-interface ViewReviewsProps {
-  meal: Meal; // The meal for which reviews are being displayed
-  onBack: () => void; // Callback to navigate back
-}
-
 const BASE_URL = Platform.OS === "android" ? "http://10.0.2.2:5000" : "http://localhost:5000";
 
-const ViewReviews: React.FC<ViewReviewsProps> = ({ meal, onBack }) => {
+const ViewReviews = () => {
   const [reviews, setReviews] = useState<Review[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const { theme } = useTheme(); // Access the theme from ThemeContext
+  const { theme } = useTheme();
+  const router = useRouter();
+  const { id: mealId, mealName } = useLocalSearchParams<{ id: string; mealName: string }>();
+
+  const fetchReviews = async () => {
+    if (!mealId) {
+      Alert.alert("Error", "Meal ID is missing. Please try again.");
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const token = await AsyncStorage.getItem("token");
+      if (!token) {
+        Alert.alert("Error", "You are not logged in.");
+        setLoading(false);
+        return;
+      }
+
+      const response = await axios.get(`${BASE_URL}/reviews?meal_id=${mealId}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      setReviews(response.data);
+    } catch (error) {
+      console.error("Error fetching reviews:", error);
+      Alert.alert("Error", "Failed to fetch reviews. Please try again later.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchReviews = async () => {
-      try {
-        const token = await AsyncStorage.getItem("token");
-        if (!token) {
-          Alert.alert("Error", "You are not logged in.");
-          setLoading(false);
-          return;
-        }
-
-        const response = await axios.get(`${BASE_URL}/reviews?meal_id=${meal.id}`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
-        setReviews(response.data);
-      } catch (error) {
-        console.error("Error fetching reviews:", error);
-        Alert.alert("Error", "Failed to fetch reviews. Please try again later.");
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchReviews();
-  }, [meal.id]);
+  }, [mealId]);
 
   if (loading) {
     return (
@@ -76,11 +79,11 @@ const ViewReviews: React.FC<ViewReviewsProps> = ({ meal, onBack }) => {
     return (
       <View style={[styles.container, { backgroundColor: theme.background }]}>
         <Text style={[styles.noReviewsText, { color: theme.text }]}>
-          No reviews available for this meal.
+          No reviews available for {mealName || "this meal"}.
         </Text>
         <TouchableOpacity
           style={[styles.backButton, { backgroundColor: theme.button }]}
-          onPress={onBack}
+          onPress={() => router.back()}
         >
           <Text style={[styles.backButtonText, { color: theme.buttonText }]}>Back</Text>
         </TouchableOpacity>
@@ -90,7 +93,7 @@ const ViewReviews: React.FC<ViewReviewsProps> = ({ meal, onBack }) => {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
-      <Text style={[styles.title, { color: theme.text }]}>Reviews for {meal.name}</Text>
+      <Text style={[styles.title, { color: theme.text }]}>Reviews for {mealName || "Meal"}</Text>
       <FlatList
         data={reviews}
         keyExtractor={(item) => item.id}
@@ -101,9 +104,9 @@ const ViewReviews: React.FC<ViewReviewsProps> = ({ meal, onBack }) => {
               rating={item.rating}
               maxStars={5}
               starSize={20}
-              color={theme.starColor} // Use theme's starColor
-              enableSwiping={false} // Disable swiping for static display
-              onChange={() => {}} // No-op since this is read-only
+              color={theme.starColor}
+              enableSwiping={false}
+              onChange={() => {}}
             />
             <Text style={[styles.comment, { color: theme.subtext }]}>{item.comment}</Text>
             <Text style={[styles.date, { color: theme.subtext }]}>
@@ -115,7 +118,7 @@ const ViewReviews: React.FC<ViewReviewsProps> = ({ meal, onBack }) => {
       />
       <TouchableOpacity
         style={[styles.backButton, { backgroundColor: theme.button }]}
-        onPress={onBack}
+        onPress={() => router.back()}
       >
         <Text style={[styles.backButtonText, { color: theme.buttonText }]}>Back</Text>
       </TouchableOpacity>
