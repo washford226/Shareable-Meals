@@ -10,19 +10,18 @@ import {
   TouchableOpacity,
   ActivityIndicator,
 } from "react-native";
-import { searchFoods, getFoodDetails } from "../backend/usdaApi"; // Import API functions
+import { searchFoods, getFoodDetails } from "../backend/usdaApi";
 
-interface FoodSearchProps {
-  onBack: () => void; // Callback to handle navigation back
-  onFoodSelect: (food: { fdcId: number; description: string }) => void; // Callback to handle food selection
-}
-
-const FoodSearch: React.FC<FoodSearchProps> = ({ onBack, onFoodSelect }) => {
+const FoodSearch: React.FC = () => {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<
-    { fdcId: number; description: string; nutrients?: any[] }[]
+    { fdcId: number; description: string }[]
   >([]);
   const [loading, setLoading] = useState(false);
+  const [selectedFood, setSelectedFood] = useState<{
+    description: string;
+    nutrients: { name: string; amount: number; unit: string }[];
+  } | null>(null);
 
   const handleSearch = async () => {
     if (!query.trim()) {
@@ -32,28 +31,9 @@ const FoodSearch: React.FC<FoodSearchProps> = ({ onBack, onFoodSelect }) => {
 
     setLoading(true);
     try {
-      console.log("Searching for foods with query:", query);
-      const foods = await searchFoods(query); // Fetch search results from USDA API
-      console.log("Search results:", foods);
-
-      const foodsWithNutrients = await Promise.all(
-        foods.map(async (food: { fdcId: number; description: string }) => {
-          try {
-            console.log("Fetching details for food ID:", food.fdcId);
-            const foodDetails = await getFoodDetails(food.fdcId.toString()); // Fetch detailed nutritional info
-            console.log("Food details:", foodDetails);
-            return {
-              ...food,
-              nutrients: foodDetails.foodNutrients, // Add nutrients to the food object
-            };
-          } catch (error) {
-            console.error("Error fetching food details for ID:", food.fdcId, error);
-            return { ...food, nutrients: [] }; // Return food without nutrients if details fail
-          }
-        })
-      );
-
-      setResults(foodsWithNutrients); // Update results with nutritional values
+      const foods = await searchFoods(query);
+      setResults(foods);
+      setSelectedFood(null); // Clear previously selected food
     } catch (error) {
       console.error("Error searching for foods:", error);
       Alert.alert("Error", "Failed to fetch food data. Please try again.");
@@ -62,9 +42,22 @@ const FoodSearch: React.FC<FoodSearchProps> = ({ onBack, onFoodSelect }) => {
     }
   };
 
+  const handleFoodSelect = async (fdcId: number, description: string) => {
+    setLoading(true);
+    try {
+      const nutrients = await getFoodDetails(fdcId);
+      console.log("Nutritional Values:", nutrients); // Debugging
+      setSelectedFood({ description, nutrients });
+    } catch (error) {
+      console.error("Error fetching food details:", error);
+      Alert.alert("Error", "Failed to fetch food details. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <View style={styles.container}>
-      <Button title="Back" onPress={onBack} /> {/* Back button */}
       <TextInput
         style={styles.input}
         placeholder="Search for a food"
@@ -79,21 +72,34 @@ const FoodSearch: React.FC<FoodSearchProps> = ({ onBack, onFoodSelect }) => {
         renderItem={({ item }) => (
           <TouchableOpacity
             style={styles.resultItem}
-            onPress={() => onFoodSelect(item)} // Pass the selected food back to the parent
+            onPress={() => handleFoodSelect(item.fdcId, item.description)}
           >
             <Text style={styles.resultText}>{item.description}</Text>
-            {item.nutrients && item.nutrients.length > 0 && (
-              <View style={styles.nutrientContainer}>
-                {item.nutrients.slice(0, 5).map((nutrient: any) => (
-                  <Text key={nutrient.nutrientName} style={styles.nutrientText}>
-                    {nutrient.nutrientName}: {nutrient.value} {nutrient.unitName}
-                  </Text>
-                ))}
-              </View>
-            )}
           </TouchableOpacity>
         )}
       />
+      {selectedFood && (
+        <View style={styles.detailsContainer}>
+          <Text style={styles.detailsTitle}>{selectedFood.description}</Text>
+          <Text style={styles.detailsSubtitle}>Nutritional Values:</Text>
+          <FlatList
+            data={selectedFood.nutrients || []}
+            keyExtractor={(_item, index) => index.toString()}
+            renderItem={({ item }) => {
+              console.log("Nutrient Item:", item); // Debugging
+              return (
+                <View style={styles.nutrientItem}>
+                  <Text style={styles.nutrientName}>{item.name}</Text>
+                  <Text style={styles.nutrientValue}>
+                    {item.amount} {item.unit}
+                  </Text>
+                </View>
+              );
+            }}
+            ListEmptyComponent={<Text>No nutritional values available.</Text>}
+          />
+        </View>
+      )}
     </View>
   );
 };
@@ -119,13 +125,37 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "bold",
   },
-  nutrientContainer: {
-    marginTop: 8,
-    paddingLeft: 8,
+  detailsContainer: {
+    marginTop: 16,
+    padding: 16,
+    backgroundColor: "#f9f9f9",
+    borderRadius: 8,
   },
-  nutrientText: {
+  detailsTitle: {
+    fontSize: 20,
+    fontWeight: "bold",
+    marginBottom: 8,
+  },
+  detailsSubtitle: {
+    fontSize: 16,
+    fontWeight: "bold",
+    marginBottom: 8,
+  },
+  nutrientItem: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingVertical: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: "#ccc",
+  },
+  nutrientName: {
     fontSize: 14,
-    color: "#555",
+    color: "#000",
+  },
+  nutrientValue: {
+    fontSize: 14,
+    fontWeight: "bold",
+    color: "#000",
   },
 });
 

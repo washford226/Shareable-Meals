@@ -22,23 +22,24 @@ export const searchFoods = async (query: string) => {
 };
 
 export const getFoodDetails = async (fdcId: string | number) => {
-    try {
-      console.log("Fetching details for food ID:", fdcId);
-      const response = await axios.get(
-        `${BASE_URL}/food/${fdcId}?api_key=${USDA_API_KEY}`
-      );
-      console.log("Food details response:", response.data);
-  
-      // Extract and return only the nutritional values
-      const nutrients = response.data.foodNutrients.map((nutrient: any) => ({
-        name: nutrient.nutrientName,
-        amount: nutrient.value,
-        unit: nutrient.unitName,
-      }));
-  
-      return nutrients; // Returns an array of nutrient objects
-    } catch (error) {
-      console.error("Error fetching food details:", error);
-      throw error;
-    }
-  };
+  try {
+    const response = await axios.get(
+      `${BASE_URL}/food/${fdcId}?api_key=${USDA_API_KEY}`
+    );
+
+    console.log("API Response for Food Details:", response.data); // Debugging
+
+    const nutrients = response.data.foodNutrients
+      ? response.data.foodNutrients.map((nutrient: any) => ({
+          name: nutrient.nutrient?.name || "Unknown Nutrient", // Extract name from nutrient object
+          amount: nutrient.amount || 0, // Extract amount
+          unit: nutrient.nutrient?.unitName || "", // Extract unitName from nutrient object
+        }))
+      : []; // Fallback to an empty array if foodNutrients is missing
+
+    return nutrients;
+  } catch (error) {
+    console.error("Error fetching food details:", error);
+    throw error;
+  }
+};
