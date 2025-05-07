@@ -1,6 +1,18 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 
+// Extend the Request interface to include the user property
+declare global {
+  namespace Express {
+    interface Request {
+      user?: {
+        id: number;
+        username: string;
+      };
+    }
+  }
+}
+
 interface DecodedToken {
   id: number;
   username: string;
@@ -11,7 +23,7 @@ interface DecodedToken {
 const authMiddleware = (req: Request, res: Response, next: NextFunction): void => {
   const authHeader = req.header('Authorization');
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    res.status(401).send('Access denied. Invalid token format.');
+    res.status(401).json({ message: 'Access denied. Invalid token format.' });
     return;
   }
 
@@ -24,7 +36,7 @@ const authMiddleware = (req: Request, res: Response, next: NextFunction): void =
     }
 
     const decoded = jwt.verify(token, secret) as DecodedToken;
-    (req as any).user = decoded; // Attach the decoded token to the request object
+    req.user = { id: decoded.id, username: decoded.username }; // Attach the decoded token to the request object
     next();
   } catch (err) {
     if (err instanceof Error) {
@@ -32,7 +44,7 @@ const authMiddleware = (req: Request, res: Response, next: NextFunction): void =
     } else {
       console.error('Error verifying token:', err);
     }
-    res.status(401).send('Invalid token.');
+    res.status(401).json({ message: 'Invalid token.' });
   }
 };
 

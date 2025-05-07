@@ -39,7 +39,7 @@ const CreateMealScreen = () => {
   const pickMealImage = async () => {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: ['images'],
         allowsEditing: true,
         aspect: [3, 3],
         quality: 1,
@@ -101,7 +101,7 @@ const CreateMealScreen = () => {
         return;
       }
 
-      const response = await fetch(`${BASE_URL}/meals`, {
+      const response = await fetch(`${BASE_URL}/meal/meals`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,

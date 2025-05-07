@@ -48,7 +48,7 @@ const ViewReviews = () => {
         return;
       }
 
-      const response = await axios.get(`${BASE_URL}/reviews?meal_id=${mealId}`, {
+      const response = await axios.get(`${BASE_URL}/reviews/reviews?meal_id=${mealId}`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },

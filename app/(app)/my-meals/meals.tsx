@@ -76,7 +76,7 @@ const MyMeals: React.FC<MyMealsProps> = ({ onCreateMeal}) => {
           setSearchQuery(savedSearchQuery); 
         }
     
-        const response = await axios.get(`${BASE_URL}/my-meals`, {
+        const response = await axios.get(`${BASE_URL}/meal/my-meals`, {
           headers: { Authorization: `Bearer ${token}` },
         });
     
@@ -227,29 +227,35 @@ const MyMeals: React.FC<MyMealsProps> = ({ onCreateMeal}) => {
         </TouchableOpacity>
       </View>
 
+      <TouchableOpacity
+        style={[styles.createMealButton, { backgroundColor: theme.button }]}
+        onPress={() => router.push("/my-meals/create")} // Use Expo Router to navigate
+      >
+        <Text style={[styles.createMealButtonText, { color: theme.buttonText }]}>Create Meal</Text>
+      </TouchableOpacity>
+
       <FlatList
-        data={filteredMeals}
-        keyExtractor={(item) => item.id.toString()}
-        renderItem={({ item }) => (
-          <TouchableOpacity
-            style={[styles.mealItem, { backgroundColor: theme.card, borderColor: theme.border }]}
-            onPress={() => onMealSelect(item)}
-          >
-            {item.picture && typeof item.picture === "string" ? (
-              <Image source={{ uri: item.picture }} style={styles.mealPicture} />
-            ) : (
-              <View style={styles.mealPicturePlaceholder}>
-                <Text style={styles.mealPicturePlaceholderText}>No Image</Text>
-              </View>
-            )}
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.mealName, { color: theme.text }]}>{item.name}</Text>
-              <Text style={[styles.mealDescription, { color: theme.subtext }]}>{item.description}</Text>
-            </View>
-          </TouchableOpacity>
-        )}
-        contentContainerStyle={{ paddingBottom: 60 }}
-      />
+  data={filteredMeals}
+  keyExtractor={(item) => item.id.toString()}
+  numColumns={2} // Display two items per row
+  renderItem={({ item }) => (
+    <TouchableOpacity
+      style={[styles.mealItem, { backgroundColor: theme.card, borderColor: theme.border }]}
+      onPress={() => onMealSelect(item)}
+    >
+      {item.picture && typeof item.picture === "string" ? (
+        <Image source={{ uri: item.picture }} style={styles.mealPicture} />
+      ) : (
+        <View style={styles.mealPicturePlaceholder}>
+          <Text style={styles.mealPicturePlaceholderText}>No Image</Text>
+        </View>
+      )}
+      <Text style={[styles.mealName, { color: theme.text }]}>{item.name}</Text>
+      <Text style={[styles.mealDescription, { color: theme.subtext }]}>{item.description}</Text>
+    </TouchableOpacity>
+  )}
+  contentContainerStyle={styles.mealsGrid}
+/>
 
       <Modal visible={isFilterModalVisible} transparent animationType="slide">
         <View style={styles.modalContainer}>
@@ -301,13 +307,6 @@ const MyMeals: React.FC<MyMealsProps> = ({ onCreateMeal}) => {
           </View>
         </View>
       </Modal>
-
-      <TouchableOpacity
-        style={[styles.createMealButton, { backgroundColor: theme.button }]}
-        onPress={() => router.push("/my-meals/create")} // Use Expo Router to navigate
-      >
-        <Text style={[styles.createMealButtonText, { color: theme.buttonText }]}>Create Meal</Text>
-      </TouchableOpacity>
       <BottomNav /> 
     </View>
   );
@@ -321,17 +320,47 @@ const styles = StyleSheet.create({
     width: "100%",
     height: "100%",
   },
+  mealItem: {
+    flex: 1, // Ensure items take up equal space
+    margin: 8, // Add spacing between items
+    padding: 16,
+    borderWidth: 1,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "flex-start", // Align content to the top
+  },
+  mealPicture: {
+    width: "100%", // Make the picture take up the full width of the item
+    height: 100, // Set a fixed height for the picture
+    borderRadius: 8,
+    marginBottom: 8,
+  },
   mealPicturePlaceholder: {
-    width: 60,
-    height: 60,
+    width: "100%",
+    height: 100,
     borderRadius: 8,
     backgroundColor: "#e0e0e0",
     alignItems: "center",
     justifyContent: "center",
+    marginBottom: 8,
   },
   mealPicturePlaceholderText: {
     fontSize: 12,
     color: "#888",
+  },
+  mealName: {
+    fontSize: 16,
+    fontWeight: "bold",
+    textAlign: "center",
+    marginBottom: 4,
+  },
+  mealDescription: {
+    fontSize: 14,
+    textAlign: "center",
+    color: "#666",
+  },
+  mealsGrid: {
+    paddingBottom: 60,
   },
   searchBarContainer: {
     flexDirection: "row",
@@ -357,27 +386,6 @@ const styles = StyleSheet.create({
   filterButtonText: {
     fontSize: 16,
     fontWeight: "bold",
-  },
-  mealItem: {
-    flexDirection: "row", 
-    alignItems: "center", 
-    padding: 16,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderRadius: 8,
-  },
-  mealPicture: {
-    width: 60,
-    height: 60,
-    borderRadius: 8,
-    marginRight: 16,
-  },
-  mealName: {
-    fontSize: 18,
-    fontWeight: "bold",
-  },
-  mealDescription: {
-    fontSize: 14,
   },
   loadingText: {
     marginTop: 10,
@@ -443,14 +451,12 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
   },
   createMealButton: {
-    position: "absolute",
-    bottom: 20,
-    left: "50%",
-    transform: [{ translateX: -60 }],
     paddingVertical: 12,
     paddingHorizontal: 24,
     borderRadius: 8,
     alignItems: "center",
+    alignSelf: "center", // Center the button horizontally
+    width: "100%", // Set a width for the button
   },
   createMealButtonText: {
     fontSize: 18,

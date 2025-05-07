@@ -45,7 +45,7 @@ export default function EditMealScreen() {
         return;
       }
 
-      const response = await axios.get(`${BASE_URL}/meals/${mealId}`, {
+      const response = await axios.get(`${BASE_URL}/meal/meals/${mealId}`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -92,7 +92,7 @@ export default function EditMealScreen() {
       }
 
       const response = await axios.put(
-        `${BASE_URL}/meals/${mealId}`,
+        `${BASE_URL}/meal/meals/${mealId}`,
         {
           name: name.trim(),
           description: description.trim(),
@@ -114,7 +114,7 @@ export default function EditMealScreen() {
 
       if (response.status === 200) {
         Alert.alert("Success", "Meal updated successfully!");
-        router.back();
+        router.push(`/my-meals/${mealId}/info`);
       } else {
         Alert.alert("Error", "Failed to update meal. Please try again.");
       }
