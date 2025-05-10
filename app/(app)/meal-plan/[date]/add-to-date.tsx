@@ -35,7 +35,7 @@ const AddMealToDate = () => {
         return;
       }
 
-      const response = await axios.get(`${BASE_URL}/meals`, {
+      const response = await axios.get(`${BASE_URL}/meal/meals`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
@@ -59,7 +59,7 @@ const AddMealToDate = () => {
       }
 
       await axios.post(
-        `${BASE_URL}/meal-plan`,
+        `${BASE_URL}/mealplan/meal-plan`,
         { date, meal_id: mealId, meal_type: mealType },
         { headers: { Authorization: `Bearer ${token}` } }
       );

@@ -3,7 +3,7 @@ import mysql from "mysql2/promise";
 import cors from "cors";
 import dotenv from "dotenv";
 import bodyParser from "body-parser";
-import routes from './routes';
+import routes from './routes/index';
 
 dotenv.config();
 

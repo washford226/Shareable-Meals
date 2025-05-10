@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -18,14 +18,59 @@ const BASE_URL = Platform.OS === "android" ? "http://10.0.2.2:5000" : "http://lo
 
 const EditEmail = () => {
   const [email, setEmail] = useState<string>("");
+  const [password, setPassword] = useState<string>("");
+  const [username, setUsername] = useState<string>(""); // State for username
   const [loading, setLoading] = useState(false);
+  const [fetchingUsername, setFetchingUsername] = useState(true); // State for fetching username
 
   const { theme } = useTheme();
   const router = useRouter();
 
+  // Fetch the username when the screen loads
+  useEffect(() => {
+    const fetchUsername = async () => {
+      try {
+        const token = await AsyncStorage.getItem("token");
+        if (!token) {
+          Alert.alert("Error", "User not authenticated. Please log in.");
+          router.replace("/login"); // Redirect to login if not authenticated
+          return;
+        }
+
+        const response = await axios.get(`${BASE_URL}/users/user`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        if (response.status === 200) {
+          setUsername(response.data.username); // Set the username from the response
+        } else {
+          Alert.alert("Error", "Failed to fetch user information.");
+        }
+      } catch (error) {
+        if (axios.isAxiosError(error)) {
+          console.error("Error fetching username:", error.response?.data || error.message);
+        } else {
+          console.error("Error fetching username:", error);
+        }
+        Alert.alert("Error", "An error occurred while fetching user information.");
+      } finally {
+        setFetchingUsername(false); // Stop the loading indicator
+      }
+    };
+
+    fetchUsername();
+  }, []);
+
   const handleUpdateEmail = async () => {
     if (!email || !email.includes("@")) {
       Alert.alert("Invalid Email", "Please enter a valid email address.");
+      return;
+    }
+
+    if (!password) {
+      Alert.alert("Invalid Password", "Please enter your password.");
       return;
     }
 
@@ -39,8 +84,8 @@ const EditEmail = () => {
       }
 
       const response = await axios.put(
-        `${BASE_URL}/account/email`,
-        { email },
+        `${BASE_URL}/users/user/${username}/email`, // Use the fetched username
+        { email, currentPassword: password }, // Use currentPassword as per backend
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -55,12 +100,28 @@ const EditEmail = () => {
         Alert.alert("Error", "Failed to update email. Please try again.");
       }
     } catch (error) {
-      console.error("Error updating email:", error);
-      Alert.alert("Error", "An error occurred while updating your email.");
+      if (axios.isAxiosError(error)) {
+        console.error("Error updating email:", error.response?.data || error.message);
+      } else {
+        console.error("Error updating email:", error);
+      }
+      const errorMessage = axios.isAxiosError(error) && error.response?.data?.error 
+        ? error.response.data.error 
+        : "An error occurred while updating your email.";
+      Alert.alert("Error", errorMessage);
     } finally {
       setLoading(false);
     }
   };
+
+  if (fetchingUsername) {
+    return (
+      <View style={[styles.container, { backgroundColor: theme.background }]}>
+        <ActivityIndicator size="large" color={theme.primary} />
+        <Text style={[styles.loadingText, { color: theme.text }]}>Fetching user information...</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
@@ -73,6 +134,16 @@ const EditEmail = () => {
         value={email}
         onChangeText={setEmail}
         keyboardType="email-address"
+        autoCapitalize="none"
+      />
+
+      <TextInput
+        style={[styles.input, { borderColor: theme.border, color: theme.text }]}
+        placeholder="Enter your password"
+        placeholderTextColor={theme.placeholder}
+        value={password}
+        onChangeText={setPassword}
+        secureTextEntry={true} // Hide password input
         autoCapitalize="none"
       />
 
@@ -135,6 +206,11 @@ const styles = StyleSheet.create({
   },
   cancelButtonText: {
     fontSize: 16,
+  },
+  loadingText: {
+    fontSize: 16,
+    marginTop: 10,
+    textAlign: "center",
   },
 });
 

@@ -1,0 +1,25 @@
+import { Router } from 'express';
+import meal from './meals'; // Import the meal route
+import reviews from './reviews'; // Import the reviews route
+import users from './users'; // Import the users route
+import mealplan from './mealplan'; // Import the meal plan route
+import report from './report'; // Import the report route
+
+const router = Router();
+
+// Routes for meal-related operations
+router.use('/meal', meal);
+
+// Routes for review-related operations
+router.use('/reviews', reviews);
+
+// Routes for user-related operations
+router.use('/users', users);
+
+// Routes for meal plan-related operations
+router.use('/mealplan', mealplan);
+
+// Routes for reporting issues
+router.use('/report', report);
+
+export default router;
