@@ -4,6 +4,8 @@ import reviews from './reviews'; // Import the reviews route
 import users from './users'; // Import the users route
 import mealplan from './mealplan'; // Import the meal plan route
 import report from './report'; // Import the report route
+import AI from './AI'; // Import the AI route
+import urlmeals from './urlmeals'; // Import the URL meals route
 
 const router = Router();
 
@@ -21,5 +23,10 @@ router.use('/mealplan', mealplan);
 
 // Routes for reporting issues
 router.use('/report', report);
+
+// Routes for AI-related operations
+router.use('/AI', AI);
+
+router.use('/urlmeals', urlmeals); // Routes for URL meals
 
 export default router;

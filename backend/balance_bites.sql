@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS users (
     profile_picture BLOB,
     calories_goal INT, -- Changed to INT for numeric validation
     dietary_restrictions VARCHAR(255),
+    alergies VARCHAR(255),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -47,6 +48,8 @@ CREATE TABLE IF NOT EXISTS meals (
     fat INT DEFAULT NULL,
     instructions TEXT DEFAULT NULL,
     recipeLink VARCHAR(255) DEFAULT NULL,
+    created_by_ai BOOLEAN DEFAULT FALSE, -- Indicates if the meal was created by AI
+    created_by VARCHAR(255) DEFAULT NULL, -- Indicates who created the meal
     picture BLOB,
     visibility BOOLEAN DEFAULT TRUE, -- True for public, false for private
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

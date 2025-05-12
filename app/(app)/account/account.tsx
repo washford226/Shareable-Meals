@@ -12,6 +12,7 @@ const AccountScreen: React.FC = () => {
   const [username, setUsername] = useState<string>('');
   const [caloriesGoal, setCaloriesGoal] = useState<number | null>(null);
   const [dietaryRestrictions, setDietaryRestrictions] = useState<string>('');
+  const [allergies, setAllergies] = useState<string>(''); // State for allergies
   const [profilePicture, setProfilePicture] = useState<string | null>(null);
   const [email, setEmail] = useState<string>(''); // State for email
 
@@ -36,6 +37,7 @@ const AccountScreen: React.FC = () => {
         setCaloriesGoal(response.data.calories_goal);
         setDietaryRestrictions(response.data.dietary_restrictions);
         setEmail(response.data.email); // Set the email from the response
+        setAllergies(response.data.allergies); // Set the allergies from the response
 
         if (response.data.profile_picture) {
           setProfilePicture(response.data.profile_picture);
@@ -129,6 +131,11 @@ const AccountScreen: React.FC = () => {
       <View style={[styles.borderRow, { backgroundColor: theme.button, borderColor: theme.border, borderWidth: 1, borderRadius: 8, padding: 15 }]}>
         <Text style={[styles.leftAlignText, { color: theme.text, fontSize: 18 }]}>Dietary Restrictions: {dietaryRestrictions}</Text>
       </View>
+
+      <View style={[styles.borderRow, { backgroundColor: theme.button, borderColor: theme.border, borderWidth: 1, borderRadius: 8, padding: 15 }]}>
+        <Text style={[styles.leftAlignText, { color: theme.text, fontSize: 18 }]}>Allergies: {allergies}</Text>
+      </View>
+
 
       <View style={styles.row}>
         <Text style={[styles.title, { color: theme.text }]}>Themes</Text>

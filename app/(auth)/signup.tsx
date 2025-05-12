@@ -7,7 +7,7 @@ import RNPickerSelect from "react-native-picker-select";
 
 const SignUpScreen: React.FC = () => {
   const router = useRouter();
-  
+
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -15,7 +15,9 @@ const SignUpScreen: React.FC = () => {
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const [caloriesGoal, setCaloriesGoal] = useState("");
   const [dietaryRestrictions, setDietaryRestrictions] = useState("");
+  const [allergies, setAllergies] = useState(""); // New state for allergies
   const [profilePicture, setProfilePicture] = useState<string | null>(null);
+
   const dietaryOptions = [
     { label: "None", value: "None" },
     { label: "Vegetarian", value: "Vegetarian" },
@@ -23,7 +25,7 @@ const SignUpScreen: React.FC = () => {
     { label: "Gluten-Free", value: "Gluten-Free" },
     { label: "Keto", value: "Keto" },
     { label: "Paleo", value: "Paleo" },
-  ];//just add more options here
+  ];
 
   const requestPermission = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -48,7 +50,7 @@ const SignUpScreen: React.FC = () => {
   const pickImage = async () => {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
+        mediaTypes: ["images"],
         allowsEditing: true,
         aspect: [3, 3],
         quality: 1,
@@ -75,7 +77,7 @@ const SignUpScreen: React.FC = () => {
       Alert.alert("Error", "Failed to pick an image.");
     }
   };
-  
+
   const handleSignUp = async () => {
     if (!username || !email || !password || !confirmPassword) {
       Alert.alert("Error", "All fields are required");
@@ -87,7 +89,6 @@ const SignUpScreen: React.FC = () => {
       return;
     }
 
-    // Existing validation and signup logic
     if (!validateEmail(email)) {
       Alert.alert("Error", "Invalid email format");
       return;
@@ -99,6 +100,7 @@ const SignUpScreen: React.FC = () => {
     formData.append("password", password);
     if (caloriesGoal) formData.append("calories_goal", caloriesGoal);
     if (dietaryRestrictions) formData.append("dietary_restrictions", dietaryRestrictions);
+    if (allergies) formData.append("allergies", allergies); // Add allergies to the form data
     if (profilePicture) {
       const uriParts = profilePicture.split(".");
       const fileType = uriParts[uriParts.length - 1];
@@ -170,7 +172,7 @@ const SignUpScreen: React.FC = () => {
         placeholder="Confirm Password"
         value={confirmPassword}
         onChangeText={setConfirmPassword}
-        secureTextEntry={!isPasswordVisible} // Reuse the same visibility toggle
+        secureTextEntry={!isPasswordVisible}
       />
       <TextInput
         style={styles.input}
@@ -191,6 +193,12 @@ const SignUpScreen: React.FC = () => {
           inputAndroid: styles.pickerInput,
         }}
         value={dietaryRestrictions}
+      />
+      <TextInput
+        style={styles.input}
+        placeholder="Allergies (optional)" // New input for allergies
+        value={allergies}
+        onChangeText={setAllergies}
       />
       <TouchableOpacity style={styles.uploadButton} onPress={pickImage}>
         <Text style={styles.uploadButtonText}>Upload Profile Picture (optional)</Text>

@@ -19,7 +19,8 @@ router.post('/meals', authMiddleware, upload.single('picture'), async (req: Requ
       fat, 
       visibility, // Include visibility from the request body
       instructions, 
-      recipeLink 
+      recipeLink,
+      created_by // Include created_by from the request body
     } = req.body; // Extract additional fields from the request body
     const user_id = req.user?.id; // Get the authenticated user's ID
     const picture = req.file ? req.file.buffer : null; // Get the uploaded image as a buffer
@@ -49,9 +50,10 @@ router.post('/meals', authMiddleware, upload.single('picture'), async (req: Requ
           user_id, 
           picture, 
           instructions, 
-          recipeLink
+          recipeLink,
+          created_by -- Include created_by in the query
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `;
       const values = [
         name,
@@ -66,6 +68,7 @@ router.post('/meals', authMiddleware, upload.single('picture'), async (req: Requ
         picture,
         instructions,
         recipeLink,
+        created_by || 'User' // Default to 'User' if created_by is not provided
       ];
   
       await db.query(query, values);
@@ -74,7 +77,7 @@ router.post('/meals', authMiddleware, upload.single('picture'), async (req: Requ
       console.error('Error adding meal:', err);
       res.status(500).send('Error adding meal');
     }
-  });
+});
   
   router.put('/meals/:meal_id/image', authMiddleware, upload.single('picture'), async (req: Request, res: Response): Promise<void> => {
     const { meal_id } = req.params; // Extract the meal ID from the URL
@@ -136,6 +139,8 @@ router.post('/meals', authMiddleware, upload.single('picture'), async (req: Requ
         meals.visibility, 
         meals.created_at, 
         meals.picture, -- Include the picture column
+        meals.created_by_ai, -- Include created_by_ai column
+        meals.created_by,
         users.username AS userName,
         COALESCE(AVG(reviews.rating), 0) AS averageRating, -- Calculate the average rating
         COUNT(reviews.review_id) AS reviewCount -- Count the number of reviews
@@ -219,6 +224,8 @@ router.post('/meals', authMiddleware, upload.single('picture'), async (req: Requ
         meals.visibility, 
         meals.created_at, 
         meals.picture, -- Include the picture column
+        meals.created_by_ai, -- Include created_by_ai column
+        meals.created_by,
         users.username AS userName,
         COALESCE(AVG(reviews.rating), 0) AS averageRating, -- Calculate the average rating
         COUNT(reviews.review_id) AS reviewCount -- Count the number of reviews
@@ -368,7 +375,9 @@ router.post('/meals', authMiddleware, upload.single('picture'), async (req: Requ
         meals.recipeLink, -- Include recipe link
         meals.visibility,
         meals.created_at,
-        meals.picture -- Include the picture column
+        meals.picture, -- Include the picture column
+        meals.created_by_ai, -- Include created_by_ai column
+        meals.created_by
       FROM meals
       WHERE meals.user_id = ? -- Filter by the current user's ID
     `;
@@ -522,6 +531,8 @@ router.post('/meals', authMiddleware, upload.single('picture'), async (req: Requ
           meals.visibility, 
           meals.created_at, 
           meals.picture, -- Include the picture column
+          meals.created_by_ai, -- Include created_by_ai column
+          meals.created_by,
           users.username AS userName
         FROM meals
         INNER JOIN users ON meals.user_id = users.id
@@ -580,5 +591,52 @@ router.post('/meals', authMiddleware, upload.single('picture'), async (req: Requ
       res.status(500).send('Error deleting meal');
     }
   });
+
+// Create an AI-generated meal
+router.post('/meal-ai', authMiddleware, upload.none(), async (req: Request, res: Response): Promise<void> => {
+  const { name, description, ingredients, instructions } = req.body;
+  const user_id = req.user?.id;
+  const db = (req as any).db;
+
+  if (!user_id) {
+    res.status(401).json({ error: 'User is not authenticated' });
+    return;
+  }
+
+  if (!name || !description || !ingredients || !instructions) {
+    res.status(400).json({ error: 'Missing required fields: name, description, ingredients, or instructions' });
+    return;
+  }
+
+  try {
+    const query = `
+      INSERT INTO meals (
+        name, 
+        description, 
+        ingredients, 
+        visibility, 
+        user_id, 
+        instructions, 
+        created_by_ai
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `;
+    const values = [
+      name,
+      description,
+      typeof ingredients === 'string' ? ingredients : JSON.stringify(ingredients),
+      false, // Default visibility to false
+      user_id,
+      instructions,
+      true, // Mark as AI-generated
+    ];
+
+    await db.query(query, values);
+    res.status(201).json({ message: 'AI-generated meal added successfully' });
+  } catch (err) {
+    console.error('Error adding AI-generated meal:', err);
+    res.status(500).json({ error: 'Error adding AI-generated meal' });
+  }
+});
 
   export default router;

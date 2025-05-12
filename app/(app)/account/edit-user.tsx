@@ -14,6 +14,7 @@ const EditUserScreen: React.FC = () => {
   const [username, setUsername] = useState<string>(''); // Add username state
   const [caloriesGoal, setCaloriesGoal] = useState<string>('');
   const [dietaryRestrictions, setDietaryRestrictions] = useState<string>('');
+  const [allergies, setAllergies] = useState<string>(''); // State for allergies
   const [profilePicture, setProfilePicture] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -49,6 +50,7 @@ const EditUserScreen: React.FC = () => {
           setUsername(username); // Set the username
           setCaloriesGoal(calories_goal || '');
           setDietaryRestrictions(dietary_restrictions || '');
+          setAllergies(allergies || ''); 
           setProfilePicture(profile_picture || null);
         }
       } catch (error) {
@@ -102,6 +104,43 @@ const EditUserScreen: React.FC = () => {
       setLoading(false);
     }
   };
+
+  const handleUpdateAllergies = async () => {
+  if (!allergies) {
+    Alert.alert('Error', 'Please enter your allergies.');
+    return;
+  }
+
+  try {
+    setLoading(true);
+    const token = await AsyncStorage.getItem('token');
+    if (!token) {
+      Alert.alert('Error', 'User not authenticated.');
+      return;
+    }
+
+    const response = await axios.put(
+      `${BASE_URL}/users/user/${username}`, // Include username in the URL
+      { allergies }, // Update allergies
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+
+    if (response.status === 200) {
+      Alert.alert('Success', 'Allergies updated successfully!');
+    } else {
+      Alert.alert('Error', 'Failed to update allergies.');
+    }
+  } catch (error) {
+    if (axios.isAxiosError(error)) {
+      console.error('Error updating allergies:', error.response?.data || error.message);
+    } else {
+      console.error('Error updating allergies:', error);
+    }
+    Alert.alert('Error', 'Failed to update allergies.');
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleUpdateDietaryRestrictions = async () => {
     if (!dietaryRestrictions) {
@@ -241,6 +280,22 @@ const EditUserScreen: React.FC = () => {
         onPress={handleUpdateDietaryRestrictions}
       >
         <Text style={[styles.saveButtonText, { color: theme.buttonText }]}>Save Dietary Restrictions</Text>
+      </TouchableOpacity>
+
+      {/* Allergies */}
+      <Text style={[styles.label, { color: theme.text }]}>Allergies</Text>
+      <TextInput
+        style={[styles.input, { borderColor: theme.border, color: theme.text }]}
+        placeholder="Enter your allergies (comma-separated)"
+        placeholderTextColor={theme.placeholder}
+        value={allergies}
+        onChangeText={setAllergies}
+      />
+      <TouchableOpacity
+        style={[styles.saveButton, { backgroundColor: theme.primary }]}
+        onPress={handleUpdateAllergies}
+      >
+        <Text style={[styles.saveButtonText, { color: theme.buttonText }]}>Save Allergies</Text>
       </TouchableOpacity>
 
       {/* Navigation Buttons */}

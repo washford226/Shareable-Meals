@@ -38,6 +38,7 @@ const MyMeals: React.FC<MyMealsProps> = ({ onCreateMeal}) => {
   ]);
   const [loading, setLoading] = useState<boolean>(true);
   const [isFilterModalVisible, setIsFilterModalVisible] = useState(false);
+  const [isCreateMealModalVisible, setIsCreateMealModalVisible] = useState(false);
   const [tempFilters, setTempFilters] = useState<{ type: string; greaterThan: string; lessThan: string }[]>([
     { type: "calories", greaterThan: "", lessThan: "" },
     { type: "fat", greaterThan: "", lessThan: "" },
@@ -229,7 +230,7 @@ const MyMeals: React.FC<MyMealsProps> = ({ onCreateMeal}) => {
 
       <TouchableOpacity
         style={[styles.createMealButton, { backgroundColor: theme.button }]}
-        onPress={() => router.push("/my-meals/create")} // Use Expo Router to navigate
+        onPress={() => setIsCreateMealModalVisible(true)} // Open the modal
       >
         <Text style={[styles.createMealButtonText, { color: theme.buttonText }]}>Create Meal</Text>
       </TouchableOpacity>
@@ -252,10 +253,56 @@ const MyMeals: React.FC<MyMealsProps> = ({ onCreateMeal}) => {
       )}
       <Text style={[styles.mealName, { color: theme.text }]}>{item.name}</Text>
       <Text style={[styles.mealDescription, { color: theme.subtext }]}>{item.description}</Text>
+
+      {item.created_by_ai == true && (
+        <View style={styles.aiTag}>
+          <Text style={styles.aiTagText}>AI Generated</Text>
+        </View>
+      )}
     </TouchableOpacity>
   )}
   contentContainerStyle={styles.mealsGrid}
 />
+    <Modal visible={isCreateMealModalVisible} transparent animationType="slide">
+      <View style={styles.modalContainer}>
+        <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
+          <Text style={[styles.modalTitle, { color: theme.text }]}>Select Meal Creation Type</Text>
+          <TouchableOpacity
+            style={[styles.modalButton, { backgroundColor: theme.primary }]}
+            onPress={() => {
+              setIsCreateMealModalVisible(false); // Close the modal
+              router.push("/my-meals/create"); // Navigate to manual meal creation
+            }}
+          >
+            <Text style={[styles.modalButtonText, { color: theme.buttonText }]}>Manual</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.modalButton, { backgroundColor: theme.primary }]}
+            onPress={() => {
+              setIsCreateMealModalVisible(false); // Close the modal
+              router.push("../AI/AICreateMeal"); // Navigate to AI meal creation
+            }}
+          >
+            <Text style={[styles.modalButtonText, { color: theme.buttonText }]}>AI</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.modalButton, { backgroundColor: theme.primary }]}
+            onPress={() => {
+              setIsCreateMealModalVisible(false); // Close the modal
+              router.push("./url-create"); // Navigate to AI meal creation
+            }}
+          >
+            <Text style={[styles.modalButtonText, { color: theme.buttonText }]}>URL</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.cancelButton, { backgroundColor: theme.danger }]}
+            onPress={() => setIsCreateMealModalVisible(false)} // Close the modal
+          >
+            <Text style={[styles.cancelButtonText, { color: theme.buttonText }]}>Cancel</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
 
       <Modal visible={isFilterModalVisible} transparent animationType="slide">
         <View style={styles.modalContainer}>
@@ -462,6 +509,33 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "bold",
   },
+  aiTag: {
+  position: "absolute",
+  top: 8,
+  right: 8,
+  backgroundColor: "#FFD700", // Gold color for the tag
+  paddingHorizontal: 8,
+  paddingVertical: 4,
+  borderRadius: 8,
+  zIndex: 1, // Ensure the tag appears above other elements
+},
+aiTagText: {
+  fontSize: 12,
+  fontWeight: "bold",
+  color: "#000", // Black text for contrast
+},
+modalButton: {
+  width: "100%",
+  padding: 12,
+  borderRadius: 8,
+  alignItems: "center",
+  marginBottom: 8,
+},
+modalButtonText: {
+  fontSize: 16,
+  fontWeight: "bold",
+},
+
 });
 
 export default MyMeals;
