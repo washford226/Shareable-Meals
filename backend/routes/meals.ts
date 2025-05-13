@@ -377,6 +377,7 @@ router.post('/meals', authMiddleware, upload.single('picture'), async (req: Requ
         meals.created_at,
         meals.picture, -- Include the picture column
         meals.created_by_ai, -- Include created_by_ai column
+        meals.favorite, -- Include favorite column
         meals.created_by
       FROM meals
       WHERE meals.user_id = ? -- Filter by the current user's ID
@@ -414,7 +415,7 @@ router.post('/meals', authMiddleware, upload.single('picture'), async (req: Requ
     }
   
     query += `
-      ORDER BY meals.created_at DESC
+      ORDER BY meals.favorite DESC, meals.created_at DESC -- Order by favorite status and creation date
     `;
   
     try {
@@ -636,6 +637,44 @@ router.post('/meal-ai', authMiddleware, upload.none(), async (req: Request, res:
   } catch (err) {
     console.error('Error adding AI-generated meal:', err);
     res.status(500).json({ error: 'Error adding AI-generated meal' });
+  }
+});
+
+router.put('/meals/:meal_id/favorite', authMiddleware, async (req: Request, res: Response): Promise<void> => {
+  const { meal_id } = req.params; // Extract the meal ID from the URL
+  const user = (req as any).user; // Get the authenticated user
+  const db = (req as any).db; // Get the database instance
+
+  if (!user) {
+    res.status(401).send('User not authenticated');
+    return;
+  }
+
+  try {
+    // Check if the meal exists and belongs to the authenticated user
+    const [rows]: [any[], any] = await db.query('SELECT favorite FROM meals WHERE id = ? AND user_id = ?', [meal_id, user.id]);
+    if (rows.length === 0) {
+      res.status(404).send('Meal not found or you are not authorized to update this meal');
+      return;
+    }
+
+    const currentFavoriteStatus = rows[0].favorite;
+
+    // Toggle the favorite status
+    const newFavoriteStatus = !currentFavoriteStatus;
+
+    // Update the favorite column in the database
+    const query = `
+      UPDATE meals
+      SET favorite = ?
+      WHERE id = ? AND user_id = ?
+    `;
+    await db.query(query, [newFavoriteStatus, meal_id, user.id]);
+
+    res.status(200).json({ message: 'Favorite status updated successfully', favorite: newFavoriteStatus });
+  } catch (err) {
+    console.error('Error toggling favorite status:', err);
+    res.status(500).send('Error toggling favorite status');
   }
 });
 

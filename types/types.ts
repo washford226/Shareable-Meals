@@ -18,4 +18,5 @@ export interface Meal {
   recipeLink?: string; // Optional field for an external recipe link
   created_at?: string; // Optional field for the creation timestamp
   created_by_ai: boolean; // Indicates if the meal was created by AI
+  favorite: boolean; // Indicates if the meal is a favorite
 }

@@ -1,5 +1,6 @@
 import React, { createContext, useState, useEffect, useContext } from 'react';
 import { Appearance } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const lightTheme = {
   background: '#f5f5f5', // Light gray background for the screen
@@ -20,7 +21,6 @@ const lightTheme = {
     dinner: '#ffffff',
     other: '#ffffff',
   },
-  
   mealText: '#000000', // Black text for meal blocks
   link: '#007bff', // Blue for clickable links
 };
@@ -54,21 +54,28 @@ const ThemeContext = createContext({
 });
 
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [theme, setTheme] = useState(
-    Appearance.getColorScheme() === 'dark' ? darkTheme : lightTheme
-  );
+  const [theme, setTheme] = useState(lightTheme);
 
-  const toggleTheme = () => {
-    setTheme((prevTheme) => (prevTheme === lightTheme ? darkTheme : lightTheme));
-  };
-
+  // Load the theme from AsyncStorage when the app starts
   useEffect(() => {
-    const listener = Appearance.addChangeListener(({ colorScheme }) => {
-      setTheme(colorScheme === 'dark' ? darkTheme : lightTheme);
-    });
-
-    return () => listener.remove();
+    const loadTheme = async () => {
+      const storedMode = await AsyncStorage.getItem('themeMode');
+      if (storedMode === 'dark') {
+        setTheme(darkTheme);
+      } else {
+        setTheme(lightTheme);
+      }
+    };
+    loadTheme();
   }, []);
+
+  // Toggle the theme and save the mode in AsyncStorage
+  const toggleTheme = async () => {
+    const newTheme = theme === lightTheme ? darkTheme : lightTheme;
+    const newMode = newTheme === darkTheme ? 'dark' : 'light';
+    await AsyncStorage.setItem('themeMode', newMode);
+    setTheme(newTheme);
+  };
 
   return (
     <ThemeContext.Provider value={{ theme, toggleTheme }}>

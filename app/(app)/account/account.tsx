@@ -51,6 +51,7 @@ const AccountScreen: React.FC = () => {
 
     fetchUserData();
   }, []);
+  
 
   const handleLogout = async () => {
     try {
