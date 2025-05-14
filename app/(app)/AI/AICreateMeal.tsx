@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, use } from "react";
 import {
   View,
   Text,
@@ -35,6 +35,7 @@ const AICreateMeal = () => {
     instructions: "",
   });
   const [loading, setLoading] = useState(false);
+  const [usePantry, setUsePantry] = useState(false); // State for pantry checkbox
   const [fetchingRestrictions, setFetchingRestrictions] = useState(true);
 
   // Fetch dietary restrictions and user ID from the backend
@@ -108,7 +109,7 @@ const AICreateMeal = () => {
       }
 
       Alert.alert("Success", "Meal added successfully!");
-      router.back();
+      router.push("/(app)/my-meals/meals"); // Navigate to the meals screen
     } catch (error) {
       console.error("Error adding meal:", error);
       Alert.alert("Error", "Failed to add the meal to the database.");
@@ -141,6 +142,7 @@ const AICreateMeal = () => {
         {
           prompt,
           dietaryRestrictions: dietaryRestrictions.trim(),
+          usePantry,
         },
         {
           headers: {
@@ -205,6 +207,17 @@ const AICreateMeal = () => {
           <Text style={styles.buttonText}>Generate Meal</Text>
         )}
       </TouchableOpacity>
+
+      <View style={styles.checkboxContainer}>
+  <TouchableOpacity
+    style={[
+      styles.checkbox,
+      { backgroundColor: usePantry ? "#007BFF" : "transparent" },
+    ]}
+    onPress={() => setUsePantry(!usePantry)} // Toggle the checkbox state
+  />
+  <Text style={styles.checkboxLabel}>Use ingredients from my pantry</Text>
+</View>
 
       <ScrollView style={styles.resultContainer}>
         {generatedMeal.name ? (
@@ -353,6 +366,23 @@ const styles = StyleSheet.create({
     marginTop: 16,
     textAlign: "center",
   },
+  checkboxContainer: {
+  flexDirection: "row",
+  alignItems: "center",
+  marginBottom: 16,
+},
+checkbox: {
+  width: 20,
+  height: 20,
+  borderWidth: 1,
+  borderColor: "#007BFF",
+  marginRight: 8,
+  borderRadius: 4, // Optional: Add rounded corners
+},
+checkboxLabel: {
+  fontSize: 16,
+  color: "#555",
+},
 });
 
 export default AICreateMeal;

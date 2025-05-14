@@ -125,6 +125,13 @@ const PantryScreen = () => {
       >
         <Text style={[styles.addButtonText, { color: theme.buttonText }]}>Add Item</Text>
       </TouchableOpacity>
+
+      <TouchableOpacity
+        style={styles.backButton}
+        onPress={() => router.push("/meal-plan/calendar")} // Navigate back to the previous screen
+        >
+        <Text style={styles.backButtonText}>Back</Text>
+        </TouchableOpacity>
     </View>
   );
 };
@@ -133,6 +140,18 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 16,
+  },
+  backButton: {
+    marginTop: 16,
+    padding: 12,
+    borderRadius: 8,
+    alignItems: "center",
+    backgroundColor: "#ccc", // Default background color
+  },
+  backButtonText: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#000", // Default text color
   },
   title: {
     fontSize: 24,

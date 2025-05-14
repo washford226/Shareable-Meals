@@ -201,6 +201,16 @@ const OtherMeals: React.FC = () => {
         </TouchableOpacity>
       </View>
 
+      {/* Weekly Meals Button */}
+      <TouchableOpacity
+        style={[styles.weeklyMealsButton, { backgroundColor: theme.primary }]}
+        onPress={() => router.push("/competition/current-meals")} // Navigate to the Weekly Meals screen
+      >
+        <Text style={[styles.weeklyMealsButtonText, { color: theme.buttonText }]}>
+          Weekly Meals
+        </Text>
+      </TouchableOpacity>
+
       <FlatList
   data={filteredMeals}
   keyExtractor={(item) => item.id.toString()}
@@ -305,6 +315,16 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: "center",
     justifyContent: "flex-start", // Align content to the top
+  },
+  weeklyMealsButton: {
+    margin: 16,
+    padding: 12,
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  weeklyMealsButtonText: {
+    fontSize: 16,
+    fontWeight: "bold",
   },
   mealPicture: {
     width: "100%", // Make the picture take up the full width of the item

@@ -4,6 +4,8 @@ CREATE DATABASE IF NOT EXISTS balance_bytes;
 -- Use the database
 USE balance_bytes;
 
+SET GLOBAL event_scheduler = ON;
+
 -- Create the users table
 CREATE TABLE IF NOT EXISTS users (
     id INT AUTO_INCREMENT PRIMARY KEY UNIQUE,
@@ -13,7 +15,7 @@ CREATE TABLE IF NOT EXISTS users (
     profile_picture BLOB,
     calories_goal INT, -- Changed to INT for numeric validation
     dietary_restrictions VARCHAR(255),
-    alergies VARCHAR(255),
+    allergies VARCHAR(255),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -139,3 +141,118 @@ CREATE TABLE password_resets (
   expires_at DATETIME NOT NULL,
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
+
+CREATE TABLE IF NOT EXISTS weekly_competitions (
+    competition_id INT AUTO_INCREMENT PRIMARY KEY,
+    theme VARCHAR(50) NOT NULL DEFAULT 'open',
+    start_date DATE NOT NULL,
+    end_date DATE NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS competition_themes (
+    theme_id INT AUTO_INCREMENT PRIMARY KEY,
+    theme_name VARCHAR(50) NOT NULL UNIQUE,
+    description TEXT
+);
+
+
+CREATE TABLE IF NOT EXISTS meal_votes (
+    vote_id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    meal_id INT NOT NULL,
+    competition_id INT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(user_id, competition_id, meal_id),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (meal_id) REFERENCES meals(id) ON DELETE CASCADE,
+    FOREIGN KEY (competition_id) REFERENCES weekly_competitions(competition_id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS weekly_winners (
+    winner_id INT AUTO_INCREMENT PRIMARY KEY,
+    competition_id INT NOT NULL UNIQUE,
+    meal_id INT NOT NULL,
+    total_votes INT NOT NULL,
+    declared_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (competition_id) REFERENCES weekly_competitions(competition_id) ON DELETE CASCADE,
+    FOREIGN KEY (meal_id) REFERENCES meals(id) ON DELETE CASCADE
+);
+
+DELIMITER $$
+
+CREATE PROCEDURE process_weekly_competition()
+BEGIN
+    DECLARE current_competition_id INT;
+    DECLARE winning_meal_id INT DEFAULT NULL;
+    DECLARE total_votes INT DEFAULT 0;
+    DECLARE current_theme VARCHAR(50);
+    DECLARE next_theme VARCHAR(50);
+
+    -- 1. Get the current competition that ends today
+    SELECT competition_id, theme INTO current_competition_id, current_theme
+    FROM weekly_competitions
+    WHERE end_date = CURRENT_DATE
+    LIMIT 1;
+
+    -- 2. Only proceed if a competition ends today
+    IF current_competition_id IS NOT NULL THEN
+
+        -- 3. Determine the winning meal
+        SELECT meal_id, COUNT(*) INTO winning_meal_id, total_votes
+        FROM meal_votes
+        WHERE competition_id = current_competition_id
+        GROUP BY meal_id
+        ORDER BY COUNT(*) DESC
+        LIMIT 1;
+
+        -- 4. Insert winner
+        IF winning_meal_id IS NOT NULL THEN
+            INSERT INTO weekly_winners (competition_id, meal_id, total_votes)
+            VALUES (current_competition_id, winning_meal_id, total_votes);
+        END IF;
+
+        -- 5. Get next theme in rotation
+        SELECT theme_name INTO next_theme
+        FROM competition_themes
+        WHERE theme_name > current_theme
+        ORDER BY theme_name
+        LIMIT 1;
+
+        -- If no next theme, restart rotation
+        IF next_theme IS NULL THEN
+            SELECT theme_name INTO next_theme
+            FROM competition_themes
+            ORDER BY theme_name
+            LIMIT 1;
+        END IF;
+
+        -- 6. Create new competition with next theme
+        INSERT INTO weekly_competitions (start_date, end_date, theme)
+        VALUES (
+            DATE_ADD(CURRENT_DATE, INTERVAL 1 DAY),
+            DATE_ADD(CURRENT_DATE, INTERVAL 7 DAY),
+            next_theme
+        );
+
+        -- 7. Clean up old votes
+        DELETE FROM meal_votes
+        WHERE competition_id = current_competition_id;
+
+    END IF;
+END$$
+
+DELIMITER ;
+
+
+DELIMITER $$
+
+CREATE EVENT IF NOT EXISTS end_weekly_competition
+ON SCHEDULE EVERY 1 WEEK
+STARTS '2025-05-18 23:59:00'
+DO
+BEGIN
+    CALL process_weekly_competition();
+END$$
+
+DELIMITER ;

@@ -7,6 +7,7 @@ import report from './report'; // Import the report route
 import AI from './AI'; // Import the AI route
 import urlmeals from './urlmeals'; // Import the URL meals route
 import pantry from './pantry'; // Import the pantry route
+import comp from './competition'; // Import the competition route
 
 
 const router = Router();
@@ -32,5 +33,7 @@ router.use('/AI', AI);
 router.use('/urlmeals', urlmeals); // Routes for URL meals
 
 router.use('/pantry', pantry); // Routes for pantry items
+
+router.use('/comp', comp); // Routes for competitions
 
 export default router;
