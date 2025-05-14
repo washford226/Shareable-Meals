@@ -17,6 +17,7 @@ const SignUpScreen: React.FC = () => {
   const [dietaryRestrictions, setDietaryRestrictions] = useState("");
   const [allergies, setAllergies] = useState(""); // New state for allergies
   const [profilePicture, setProfilePicture] = useState<string | null>(null);
+  const [isSigningUp, setIsSigningUp] = useState(false);
 
   const dietaryOptions = [
     { label: "None", value: "None" },
@@ -78,63 +79,71 @@ const SignUpScreen: React.FC = () => {
     }
   };
 
-  const handleSignUp = async () => {
-    if (!username || !email || !password || !confirmPassword) {
-      Alert.alert("Error", "All fields are required");
-      return;
-    }
+const handleSignUp = async () => {
+  if (isSigningUp) return; // Prevent multiple submissions
+  setIsSigningUp(true); // Disable the button
 
-    if (password !== confirmPassword) {
-      Alert.alert("Error", "Passwords do not match");
-      return;
-    }
+  if (!username || !email || !password || !confirmPassword) {
+    Alert.alert("Error", "All fields are required");
+    setIsSigningUp(false); // Re-enable the button
+    return;
+  }
 
-    if (!validateEmail(email)) {
-      Alert.alert("Error", "Invalid email format");
-      return;
-    }
+  if (password !== confirmPassword) {
+    Alert.alert("Error", "Passwords do not match");
+    setIsSigningUp(false); // Re-enable the button
+    return;
+  }
 
-    const formData = new FormData();
-    formData.append("username", username);
-    formData.append("email", email);
-    formData.append("password", password);
-    if (caloriesGoal) formData.append("calories_goal", caloriesGoal);
-    if (dietaryRestrictions) formData.append("dietary_restrictions", dietaryRestrictions);
-    if (allergies) formData.append("allergies", allergies); // Add allergies to the form data
-    if (profilePicture) {
-      const uriParts = profilePicture.split(".");
-      const fileType = uriParts[uriParts.length - 1];
-      formData.append("profile_picture", {
-        uri: profilePicture,
-        name: `profile_picture.${fileType}`,
-        type: `image/${fileType}`,
-      } as any);
-    }
+  if (!validateEmail(email)) {
+    Alert.alert("Error", "Invalid email format");
+    setIsSigningUp(false); // Re-enable the button
+    return;
+  }
 
-    try {
-      const response = await axios.post(`${getBaseUrl()}/users/signup`, formData, {
-        headers: {
-          "Content-Type": "multipart/form-data",
+  const formData = new FormData();
+  formData.append("username", username);
+  formData.append("email", email);
+  formData.append("password", password);
+  if (caloriesGoal) formData.append("calories_goal", caloriesGoal);
+  if (dietaryRestrictions) formData.append("dietary_restrictions", dietaryRestrictions);
+  if (allergies) formData.append("allergies", allergies); // Add allergies to the form data
+  if (profilePicture) {
+    const uriParts = profilePicture.split(".");
+    const fileType = uriParts[uriParts.length - 1];
+    formData.append("profile_picture", {
+      uri: profilePicture,
+      name: `profile_picture.${fileType}`,
+      type: `image/${fileType}`,
+    } as any);
+  }
+
+  try {
+    const response = await axios.post(`${getBaseUrl()}/users/signup`, formData, {
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
+    });
+    if (response.status === 200) {
+      Alert.alert("Success", "User signed up successfully", [
+        {
+          text: "OK",
+          onPress: () => router.replace("../login"), // Navigate to login after signup
         },
-      });
-      if (response.status === 200) {
-        Alert.alert("Success", "User signed up successfully", [
-          {
-            text: "OK",
-            onPress: () => router.replace("../login"), // Navigate to login after signup
-          },
-        ]);
-      }
-    } catch (error) {
-      if ((error as any).response && (error as any).response.data) {
-        const errorMessage = (error as any).response?.data?.message || "Failed to sign up";
-        Alert.alert("Error", errorMessage);
-      } else {
-        Alert.alert("Error", "Failed to sign up");
-      }
-      console.error("Error signing up:", error);
+      ]);
     }
-  };
+  } catch (error) {
+    if ((error as any).response && (error as any).response.data) {
+      const errorMessage = (error as any).response?.data?.message || "Failed to sign up";
+      Alert.alert("Error", errorMessage);
+    } else {
+      Alert.alert("Error", "Failed to sign up");
+    }
+    console.error("Error signing up:", error);
+  } finally {
+    setIsSigningUp(false); // Re-enable the button after the process is complete
+  }
+};
 
   return (
     <View style={styles.container}>
