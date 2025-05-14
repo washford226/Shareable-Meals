@@ -152,6 +152,13 @@ const MealPlanCalendar: React.FC = () => {
 
   return (
     <View style={[styles.outerContainer, { backgroundColor: theme.background }]}>
+      {/* Pantry Button */}
+      <TouchableOpacity
+        style={[styles.pantryButton, { backgroundColor: theme.primary }]}
+        onPress={() => router.push("/pantry/pantry")} // Navigate to the Pantry screen
+      >
+        <Text style={[styles.pantryButtonText, { color: theme.buttonText }]}>Pantry</Text>
+      </TouchableOpacity>
       <ScrollView horizontal style={styles.scrollView} ref={scrollViewRef}>
         <View style={styles.container}>
           {Array.from({ length: daysToShow }).map((_, i) => {
@@ -480,6 +487,18 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginVertical: 4,
   },
+  pantryButton: {
+  position: "absolute",
+  top: 16,
+  right: 16,
+  padding: 12,
+  borderRadius: 8,
+  zIndex: 10, // Ensure it appears above other components
+},
+pantryButtonText: {
+  fontSize: 16,
+  fontWeight: "bold",
+},
 });
 
 export default MealPlanCalendar;

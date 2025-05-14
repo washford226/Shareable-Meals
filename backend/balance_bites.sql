@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS users (
     profile_picture BLOB,
     calories_goal INT, -- Changed to INT for numeric validation
     dietary_restrictions VARCHAR(255),
+    alergies VARCHAR(255),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -47,10 +48,26 @@ CREATE TABLE IF NOT EXISTS meals (
     fat INT DEFAULT NULL,
     instructions TEXT DEFAULT NULL,
     recipeLink VARCHAR(255) DEFAULT NULL,
+    created_by_ai BOOLEAN DEFAULT FALSE, -- Indicates if the meal was created by AI
+    created_by VARCHAR(255) DEFAULT NULL, -- Indicates who created the meal
+    favorite BOOLEAN DEFAULT FALSE, -- Indicates if the meal is a favorite
     picture BLOB,
     visibility BOOLEAN DEFAULT TRUE, -- True for public, false for private
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- Create the pantry table
+CREATE TABLE Pantry (
+    pantry_id INT AUTO_INCREMENT PRIMARY KEY, -- Unique identifier for each pantry item
+    user_id INT NOT NULL, -- Foreign key to the users table
+    food TEXT NOT NULL, -- Food item name
+    quantity FLOAT Default Null, -- Quantity of the food item
+    unit VARCHAR(50) DEFAULT NULL, -- Unit of measurement (e.g., grams, cups)
+    expiration_date DATE DEFAULT NULL, -- Optional expiration date for the item
+    added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, -- Timestamp for when the item was added
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, -- Timestamp for updates
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE -- Cascade delete if the user is deleted
 );
 
 -- Create the nutrients table

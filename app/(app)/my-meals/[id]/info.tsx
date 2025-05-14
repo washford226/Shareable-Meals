@@ -10,7 +10,6 @@ import {
   Modal,
   Image,
   Linking } from "react-native";
-import DateTimePicker from "@react-native-community/datetimepicker";
 import { useTheme } from "../../../../context/ThemeContext";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import axios from "axios";
@@ -18,6 +17,8 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Picker } from "@react-native-picker/picker";
 import { format } from "date-fns";
 import { Meal } from "../../../../types/types";
+import QRCode from "react-native-qrcode-svg";
+import DateTimePicker from "@react-native-community/datetimepicker";
 
 const BASE_URL = Platform.OS === "android" ? "http://10.0.2.2:5000" : "http://localhost:5000";
 
@@ -31,6 +32,7 @@ const MyMealInfo = () => {
   const [mealType, setMealType] = useState("Breakfast");
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [isQRModalVisible, setIsQRModalVisible] = useState(false);
 
   const fetchMeal = async () => {
     try {
@@ -199,6 +201,13 @@ const MyMealInfo = () => {
         </TouchableOpacity>
 
         <TouchableOpacity
+          style={[styles.button, { backgroundColor: theme.primary }]}
+          onPress={() => setIsQRModalVisible(true)}
+        >
+          <Text style={[styles.buttonText, { color: theme.buttonText }]}>Share via QR Code</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
           style={[styles.button, { backgroundColor: theme.danger }]}
           onPress={handleDeleteMeal}
         >
@@ -212,6 +221,27 @@ const MyMealInfo = () => {
           <Text style={[styles.buttonText, { color: theme.buttonText }]}>Back</Text>
         </TouchableOpacity>
       </View>
+
+      {/* QR Code Modal */}
+      <Modal visible={isQRModalVisible} transparent animationType="slide">
+        <View style={styles.modalContainer}>
+          <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
+            <Text style={[styles.modalTitle, { color: theme.text }]}>Scan to Save Meal</Text>
+            <QRCode
+              value={`${BASE_URL}/meal/meals/${id}`} // Shareable URL or meal ID
+              size={200}
+              color={theme.text}
+              backgroundColor={theme.card}
+            />
+            <TouchableOpacity
+              style={[styles.button, { backgroundColor: theme.danger }]}
+              onPress={() => setIsQRModalVisible(false)}
+            >
+              <Text style={[styles.buttonText, { color: theme.buttonText }]}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       {/* Modal for Adding to Meal Plan */}
       <Modal visible={isModalVisible} transparent animationType="slide">

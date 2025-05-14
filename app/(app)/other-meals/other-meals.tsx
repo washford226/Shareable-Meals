@@ -218,7 +218,11 @@ const OtherMeals: React.FC = () => {
         </View>
       )}
       <Text style={[styles.mealName, { color: theme.text }]}>{item.name}</Text>
-      <Text style={[styles.mealDescription, { color: theme.subtext }]}>{item.description}</Text>
+      <Text style={[styles.mealDescription, { color: theme.subtext }]}>
+        {item.description.length > 100
+          ? `${item.description.slice(0, 100)}...` // Limit to 100 characters
+          : item.description}
+      </Text>
       <View style={styles.ratingContainer}>
         {[...Array(5)].map((_, index) => (
           <Icon

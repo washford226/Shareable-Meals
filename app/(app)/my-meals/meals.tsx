@@ -19,6 +19,7 @@ import { useTheme } from "../../../context/ThemeContext";
 import { jwtDecode } from "jwt-decode"; 
 import { useRouter } from "expo-router";  // Import Expo Router hook
 import BottomNav from "components/bottomNav";
+import Icon from "react-native-vector-icons/FontAwesome"
 
 interface MyMealsProps {
   onCreateMeal: () => void;
@@ -38,6 +39,7 @@ const MyMeals: React.FC<MyMealsProps> = ({ onCreateMeal}) => {
   ]);
   const [loading, setLoading] = useState<boolean>(true);
   const [isFilterModalVisible, setIsFilterModalVisible] = useState(false);
+  const [isCreateMealModalVisible, setIsCreateMealModalVisible] = useState(false);
   const [tempFilters, setTempFilters] = useState<{ type: string; greaterThan: string; lessThan: string }[]>([
     { type: "calories", greaterThan: "", lessThan: "" },
     { type: "fat", greaterThan: "", lessThan: "" },
@@ -47,6 +49,33 @@ const MyMeals: React.FC<MyMealsProps> = ({ onCreateMeal}) => {
 
   const { theme } = useTheme();
   const router = useRouter(); // Initialize router
+
+  const toggleFavorite = async (mealId: number) => {
+    try {
+      const token = await AsyncStorage.getItem("token");
+      if (!token) {
+        Alert.alert("Error", "User not authenticated. Please log in.");
+        return;
+      }
+
+      // Call the favorite route
+      const response = await axios.put(`${BASE_URL}/meal/meals/${mealId}/favorite`, null, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (response.status === 200) {
+        // Update the local state to reflect the new favorite status
+        setMeals((prevMeals) =>
+          prevMeals.map((meal) =>
+            meal.id === mealId ? { ...meal, favorite: response.data.favorite } : meal
+          )
+        );
+      }
+    } catch (error) {
+      console.error("Error toggling favorite status:", error);
+      Alert.alert("Error", "Failed to update favorite status. Please try again.");
+    }
+  };
 
   useEffect(() => {
     const fetchMyMeals = async () => {
@@ -229,7 +258,7 @@ const MyMeals: React.FC<MyMealsProps> = ({ onCreateMeal}) => {
 
       <TouchableOpacity
         style={[styles.createMealButton, { backgroundColor: theme.button }]}
-        onPress={() => router.push("/my-meals/create")} // Use Expo Router to navigate
+        onPress={() => setIsCreateMealModalVisible(true)} // Open the modal
       >
         <Text style={[styles.createMealButtonText, { color: theme.buttonText }]}>Create Meal</Text>
       </TouchableOpacity>
@@ -243,6 +272,17 @@ const MyMeals: React.FC<MyMealsProps> = ({ onCreateMeal}) => {
       style={[styles.mealItem, { backgroundColor: theme.card, borderColor: theme.border }]}
       onPress={() => onMealSelect(item)}
     >
+      {/* Favorite Star */}
+          <TouchableOpacity
+            style={styles.favoriteIcon}
+            onPress={() => toggleFavorite(item.id)} // Call the toggleFavorite function
+          >
+            <Icon
+              name="star"
+              size={24}
+              color={item.favorite ? "#FFD700" : "#ccc"} // Gold if favorite, gray otherwise
+            />
+          </TouchableOpacity>
       {item.picture && typeof item.picture === "string" ? (
         <Image source={{ uri: item.picture }} style={styles.mealPicture} />
       ) : (
@@ -250,12 +290,60 @@ const MyMeals: React.FC<MyMealsProps> = ({ onCreateMeal}) => {
           <Text style={styles.mealPicturePlaceholderText}>No Image</Text>
         </View>
       )}
-      <Text style={[styles.mealName, { color: theme.text }]}>{item.name}</Text>
-      <Text style={[styles.mealDescription, { color: theme.subtext }]}>{item.description}</Text>
+      <Text style={[styles.mealDescription, { color: theme.subtext }]}>
+        {item.description.length > 100
+          ? `${item.description.slice(0, 100)}...` // Limit to 100 characters
+          : item.description}
+      </Text>
+      {item.created_by_ai == true && (
+        <View style={styles.aiTag}>
+          <Text style={styles.aiTagText}>AI Generated</Text>
+        </View>
+      )}
     </TouchableOpacity>
   )}
   contentContainerStyle={styles.mealsGrid}
 />
+    <Modal visible={isCreateMealModalVisible} transparent animationType="slide">
+      <View style={styles.modalContainer}>
+        <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
+          <Text style={[styles.modalTitle, { color: theme.text }]}>Select Meal Creation Type</Text>
+          <TouchableOpacity
+            style={[styles.modalButton, { backgroundColor: theme.primary }]}
+            onPress={() => {
+              setIsCreateMealModalVisible(false); // Close the modal
+              router.push("/my-meals/create"); // Navigate to manual meal creation
+            }}
+          >
+            <Text style={[styles.modalButtonText, { color: theme.buttonText }]}>Manual</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.modalButton, { backgroundColor: theme.primary }]}
+            onPress={() => {
+              setIsCreateMealModalVisible(false); // Close the modal
+              router.push("../AI/AICreateMeal"); // Navigate to AI meal creation
+            }}
+          >
+            <Text style={[styles.modalButtonText, { color: theme.buttonText }]}>AI</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.modalButton, { backgroundColor: theme.primary }]}
+            onPress={() => {
+              setIsCreateMealModalVisible(false); // Close the modal
+              router.push("./url-create"); // Navigate to AI meal creation
+            }}
+          >
+            <Text style={[styles.modalButtonText, { color: theme.buttonText }]}>URL</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.cancelButton, { backgroundColor: theme.danger }]}
+            onPress={() => setIsCreateMealModalVisible(false)} // Close the modal
+          >
+            <Text style={[styles.cancelButtonText, { color: theme.buttonText }]}>Cancel</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
 
       <Modal visible={isFilterModalVisible} transparent animationType="slide">
         <View style={styles.modalContainer}>
@@ -319,6 +407,12 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
     width: "100%",
     height: "100%",
+  },
+  favoriteIcon: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    zIndex: 1,
   },
   mealItem: {
     flex: 1, // Ensure items take up equal space
@@ -462,6 +556,33 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "bold",
   },
+  aiTag: {
+  position: "absolute",
+  top: 8,
+  left: 8,
+  backgroundColor: "#FFD700", // Gold color for the tag
+  paddingHorizontal: 8,
+  paddingVertical: 4,
+  borderRadius: 8,
+  zIndex: 1, // Ensure the tag appears above other elements
+},
+aiTagText: {
+  fontSize: 12,
+  fontWeight: "bold",
+  color: "#000", // Black text for contrast
+},
+modalButton: {
+  width: "100%",
+  padding: 12,
+  borderRadius: 8,
+  alignItems: "center",
+  marginBottom: 8,
+},
+modalButtonText: {
+  fontSize: 16,
+  fontWeight: "bold",
+},
+
 });
 
 export default MyMeals;
