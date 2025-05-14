@@ -7,6 +7,7 @@ import nodemailer from 'nodemailer';
 import authMiddleware from '../authMiddleware';
 import crypto from 'crypto';
 import { Request, Response } from 'express';
+import axios from 'axios';
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage() });
@@ -25,37 +26,141 @@ router.get('/', (req, res) => {
     res.send('Meal endpoint');
 });
 
-// Signup user
+// Function to generate AI meals
+const generateAIMeals = async (dietary_restrictions?: string, allergies?: string): Promise<any[]> => {
+  try {
+    // Construct the AI prompt
+    const prompt = `
+      Generate 5 meal ideas based on the following criteria:
+      - Dietary restrictions: ${dietary_restrictions || 'None'}
+      - Allergies: ${allergies || 'None'}
+      Each meal should include:
+      - Name: [Meal Name]
+      - Description: [Meal Description]
+      - Ingredients: [List of Ingredients]
+      - Instructions: [Cooking Instructions]
+    `;
+
+    // Send the request to the AI API
+    const response = await axios.post(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
+      {
+        contents: [
+          {
+            parts: [{ text: prompt }],
+          },
+        ],
+      },
+      {
+        headers: { "Content-Type": "application/json" },
+      }
+    );
+
+    // Extract the raw text response
+    const rawText = response.data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+
+    if (!rawText) {
+      console.error("Gemini response did not include meal text:", response.data);
+      throw new Error("Failed to generate meal text from Gemini API.");
+    }
+
+    // Parse the AI response into structured meals
+    const meals = parseMultipleMealResponses(rawText);
+
+    if (!meals || meals.length === 0) {
+      console.error("Failed to parse meal response:", rawText);
+      throw new Error("Failed to parse meal response from Gemini API.");
+    }
+
+    return meals;
+  } catch (error) {
+    if (axios.isAxiosError(error) && error.response) {
+      console.error("Error from Gemini API:", error.response.data);
+      throw new Error(error.response.data.error?.message || "Error from Gemini API");
+    } else {
+      console.error("Unexpected error generating meals:", error);
+      throw new Error("An internal server error occurred.");
+    }
+  }
+};
+
+// Helper function to parse multiple meals from the AI response
+function parseMultipleMealResponses(rawText: string): any[] {
+  const meals: any[] = [];
+
+  // Normalize the raw text to match the parser's expected format
+  const normalizedText = rawText.replace(/\*\*\d+\.\s*Name:/g, '**Name:**'); // Replace "**[number]. Name:" with "**Name:**"
+
+  // Split the normalized text by each meal section starting with "**Name:**"
+  const mealSections = normalizedText.split(/\*\*Name:\*\*/g);
+
+  for (const section of mealSections) {
+    if (section.trim()) {
+      const meal = parseMealResponse(`**Name:**${section.trim()}`); // Add back the "**Name:**" prefix for parsing
+      if (meal.name && meal.description && meal.ingredients && meal.instructions) {
+        meals.push(meal);
+      }
+    }
+  }
+
+  return meals;
+}
+
+// Helper function to parse a single meal response
+function parseMealResponse(rawText: string) {
+  const meal: {
+    name?: string;
+    description?: string;
+    ingredients?: string[];
+    instructions?: string[];
+  } = {};
+
+  const nameMatch = rawText.match(/\*\*Name:\*\*\s*(.+)/i);
+  const descriptionMatch = rawText.match(/\*\*Description:\*\*\s*(.+)/i);
+  const ingredientsMatch = rawText.match(/\*\*Ingredients:\*\*\s*([\s\S]*?)(?=\*\*Instructions:|$)/i);
+  const instructionsMatch = rawText.match(/\*\*Instructions:\*\*\s*([\s\S]*)/i);
+
+  meal.name = nameMatch ? nameMatch[1].trim() : undefined;
+  meal.description = descriptionMatch ? descriptionMatch[1].trim() : undefined;
+
+  // Process ingredients to ensure they are in an array format
+  if (ingredientsMatch) {
+    const ingredients = ingredientsMatch[1]
+      .split(/\n|-/g) // Split by newlines or dashes
+      .map((item) => item.trim()) // Trim whitespace
+      .filter((item) => item); // Remove empty items
+    meal.ingredients = ingredients;
+  }
+
+  // Process instructions to ensure they are in an array format
+  if (instructionsMatch) {
+    const instructions = instructionsMatch[1]
+      .split(/\n|^\d+\.\s+/gm) // Split by newlines or numbered steps
+      .map((step) => step.trim()) // Trim whitespace
+      .filter((step) => step); // Remove empty steps
+    meal.instructions = instructions;
+  }
+
+  return meal;
+}
+
+// Updated signup route
 router.post('/signup', upload.single('profile_picture'), async (req: Request, res: Response): Promise<void> => {
   const { 
     username, 
     email, 
     password, 
-    calories_goal, 
     dietary_restrictions, 
-    allergies // Include allergies in the request body
+    allergies 
   } = req.body as { 
     username: string; 
     email: string; 
     password: string; 
-    calories_goal?: number; 
     dietary_restrictions?: string; 
-    allergies?: string; // Optional field for allergies
+    allergies?: string; 
   };
   const profilePicture = req.file?.buffer;
   const db = (req as any).db;
-
-  // Validate file type
-  if (req.file && !['image/jpeg', 'image/png'].includes(req.file.mimetype)) {
-    res.status(400).send({ message: 'Invalid file type. Only JPEG and PNG are allowed.' });
-    return;
-  }
-
-  // Validate file size
-  if (req.file && req.file.size > 5 * 1024 * 1024) { // 5 MB limit
-    res.status(400).send({ message: 'File size exceeds the limit of 5 MB.' });
-    return;
-  }
 
   try {
     // Check if the username or email already exists
@@ -70,108 +175,52 @@ router.post('/signup', upload.single('profile_picture'), async (req: Request, re
 
     // Insert the new user into the database
     const query = `
-      INSERT INTO users (username, email, password, calories_goal, dietary_restrictions, allergies, profile_picture)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO users (username, email, password, dietary_restrictions, allergies, profile_picture)
+      VALUES (?, ?, ?, ?, ?, ?)
     `;
     const [result]: any = await db.query(query, [
       username, 
       email, 
       hashedPassword, 
-      calories_goal, 
       dietary_restrictions, 
-      allergies, // Add allergies to the query
+      allergies, 
       profilePicture
     ]);
 
     // Get the newly created user's ID
     const userId = result.insertId;
 
-    // Define default meals
-    const defaultMeals = [
-      {
-        name: 'Grilled Chicken Salad',
-        description: 'A healthy grilled chicken salad with fresh vegetables.',
-        ingredients: JSON.stringify(['Chicken', 'Lettuce', 'Tomatoes', 'Cucumber']),
-        calories: 350,
-        protein: 30,
-        carbohydrates: 10,
-        fat: 15,
-        visibility: 0,
-        instructions: 'Grill the chicken and mix with vegetables.',
-        recipeLink: 'https://example.com/grilled-chicken-salad',
-      },
-      {
-        name: 'Oatmeal with Fruits',
-        description: 'A bowl of oatmeal topped with fresh fruits.',
-        ingredients: JSON.stringify(['Oats', 'Milk', 'Banana', 'Strawberries']),
-        calories: 300,
-        protein: 10,
-        carbohydrates: 50,
-        fat: 5,
-        visibility: 0,
-        instructions: 'Cook oats with milk and top with fruits.',
-        recipeLink: 'https://example.com/oatmeal-fruits',
-      },
-      {
-        name: 'Spaghetti Bolognese',
-        description: 'Classic spaghetti with a rich bolognese sauce.',
-        ingredients: JSON.stringify(['Spaghetti', 'Ground Beef', 'Tomato Sauce', 'Onions', 'Garlic']),
-        calories: 600,
-        protein: 25,
-        carbohydrates: 75,
-        fat: 20,
-        visibility: 0,
-        instructions: 'Cook spaghetti and prepare the bolognese sauce.',
-        recipeLink: 'https://example.com/spaghetti-bolognese',
-      },
-      {
-        name: 'Vegetable Stir Fry',
-        description: 'A quick and easy vegetable stir fry.',
-        ingredients: JSON.stringify(['Broccoli', 'Carrots', 'Bell Peppers', 'Soy Sauce']),
-        calories: 200,
-        protein: 5,
-        carbohydrates: 30,
-        fat: 5,
-        visibility: 0,
-        instructions: 'Stir fry vegetables with soy sauce.',
-        recipeLink: 'https://example.com/vegetable-stir-fry',
-      },
-      {
-        name: 'Grilled Salmon',
-        description: 'A simple grilled salmon with lemon.',
-        ingredients: JSON.stringify(['Salmon', 'Lemon', 'Olive Oil', 'Garlic']),
-        calories: 400,
-        protein: 35,
-        carbohydrates: 0,
-        fat: 25,
-        visibility: 0,
-        instructions: 'Grill the salmon and serve with lemon.',
-        recipeLink: 'https://example.com/grilled-salmon',
-      },
-    ];
+    // Use AI to generate meals
+    const aiMeals = await generateAIMeals(dietary_restrictions, allergies);
 
-    // Insert default meals into the database
-    const mealQuery = `
-      INSERT INTO meals (name, description, ingredients, calories, protein, carbohydrates, fat, visibility, user_id, instructions, recipeLink)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `;
-    for (const meal of defaultMeals) {
-      await db.query(mealQuery, [
-        meal.name,
-        meal.description,
-        meal.ingredients,
-        meal.calories,
-        meal.protein,
-        meal.carbohydrates,
-        meal.fat,
-        meal.visibility,
-        userId,
-        meal.instructions,
-        meal.recipeLink,
-      ]);
-    }
+    // Insert AI-generated meals into the database
+const mealQuery = `
+  INSERT INTO meals (name, description, ingredients, visibility, user_id, instructions)
+  VALUES (?, ?, ?, ?, ?, ?)
+`;
 
-    res.status(200).send('User signed up successfully with default meals added');
+for (const meal of aiMeals) {
+  // Ensure instructions are joined into a single string
+  const formattedInstructions = Array.isArray(meal.instructions)
+    ? meal.instructions.join("\n") // Join instructions with newlines
+    : meal.instructions;
+
+  // Ensure ingredients are joined into a single string
+  const formattedIngredients = Array.isArray(meal.ingredients)
+    ? meal.ingredients.join(", ") // Join ingredients with commas
+    : meal.ingredients;
+
+  await db.query(mealQuery, [
+    meal.name,
+    meal.description,
+    formattedIngredients,
+    0, // Visibility set to private by default
+    userId,
+    formattedInstructions,
+  ]);
+}
+
+    res.status(200).send('User signed up successfully with AI-generated meals added');
   } catch (err) {
     console.error('Error during signup:', err);
     res.status(500).send('Error during signup');
