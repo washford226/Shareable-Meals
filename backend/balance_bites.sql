@@ -13,28 +13,10 @@ CREATE TABLE IF NOT EXISTS users (
     password VARCHAR(255) NOT NULL,
     email VARCHAR(100) NOT NULL UNIQUE,
     profile_picture BLOB,
-    calories_goal INT, -- Changed to INT for numeric validation
+    calories_goal INT,
     dietary_restrictions VARCHAR(255),
     allergies VARCHAR(255),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
--- Create the categories table (moved before Foods table)
-CREATE TABLE Categories (
-    category_id INT PRIMARY KEY AUTO_INCREMENT,
-    name VARCHAR(255) NOT NULL UNIQUE, -- Added UNIQUE constraint
-    description TEXT DEFAULT NULL
-);
-
--- Create the foods table
-CREATE TABLE Foods (
-    food_id INT PRIMARY KEY AUTO_INCREMENT,
-    name VARCHAR(255) NOT NULL UNIQUE, -- Added UNIQUE constraint
-    description TEXT DEFAULT NULL,
-    category_id INT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (category_id) REFERENCES Categories(category_id) ON DELETE SET NULL
 );
 
 -- Create the meals table
@@ -50,91 +32,158 @@ CREATE TABLE IF NOT EXISTS meals (
     fat INT DEFAULT NULL,
     instructions TEXT DEFAULT NULL,
     recipeLink VARCHAR(255) DEFAULT NULL,
-    created_by_ai BOOLEAN DEFAULT FALSE, -- Indicates if the meal was created by AI
-    created_by VARCHAR(255) DEFAULT NULL, -- Indicates who created the meal
-    favorite BOOLEAN DEFAULT FALSE, -- Indicates if the meal is a favorite
+    created_by_ai BOOLEAN DEFAULT FALSE,
+    created_by VARCHAR(255) DEFAULT NULL,
+    favorite BOOLEAN DEFAULT FALSE,
     picture BLOB,
-    visibility BOOLEAN DEFAULT TRUE, -- True for public, false for private
+    visibility BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
--- Create the pantry table
-CREATE TABLE Pantry (
-    pantry_id INT AUTO_INCREMENT PRIMARY KEY, -- Unique identifier for each pantry item
-    user_id INT NOT NULL, -- Foreign key to the users table
-    food TEXT NOT NULL, -- Food item name
-    quantity FLOAT Default Null, -- Quantity of the food item
-    unit VARCHAR(50) DEFAULT NULL, -- Unit of measurement (e.g., grams, cups)
-    expiration_date DATE DEFAULT NULL, -- Optional expiration date for the item
-    added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, -- Timestamp for when the item was added
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, -- Timestamp for updates
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE -- Cascade delete if the user is deleted
+-- Pantry table
+CREATE TABLE IF NOT EXISTS Pantry (
+    pantry_id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    food TEXT NOT NULL,
+    quantity FLOAT DEFAULT NULL,
+    unit VARCHAR(50) DEFAULT NULL,
+    expiration_date DATE DEFAULT NULL,
+    added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
--- Create the nutrients table
-CREATE TABLE Nutrients (
-    nutrient_id INT PRIMARY KEY AUTO_INCREMENT,
-    name VARCHAR(255) NOT NULL UNIQUE, -- Added UNIQUE constraint
-    unit VARCHAR(50) NOT NULL,  -- (e.g., grams, milligrams, IU)
+-- Foods
+CREATE TABLE IF NOT EXISTS Foods (
+    food_id INT PRIMARY KEY AUTO_INCREMENT,
+    fdc_id INT UNIQUE,
+    data_type VARCHAR(50),
+    name VARCHAR(255) NOT NULL,
+    description TEXT,
+    publication_date DATE
+);
+
+-- Nutrients
+CREATE TABLE IF NOT EXISTS Nutrients (
+    nutrient_id INT PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    unit VARCHAR(50) NOT NULL,
+    nutrient_nbr VARCHAR(20),
     description TEXT DEFAULT NULL
 );
 
--- Create the food nutrient table
-CREATE TABLE Food_Nutrient (
+-- Food_Nutrient
+CREATE TABLE IF NOT EXISTS Food_Nutrient (
+    id INT PRIMARY KEY,
     food_id INT,
+    fdc_id INT,
     nutrient_id INT,
-    amount FLOAT NOT NULL,  -- Changed to FLOAT for flexibility
-    PRIMARY KEY (food_id, nutrient_id),
+    amount FLOAT NOT NULL,
+    data_points INT DEFAULT NULL,
+    derivation_id VARCHAR(20) DEFAULT NULL,
+    min FLOAT DEFAULT NULL,
+    max FLOAT DEFAULT NULL,
+    median FLOAT DEFAULT NULL,
+    footnote TEXT DEFAULT NULL,
+    min_year_acquired VARCHAR(10) DEFAULT NULL,
     FOREIGN KEY (food_id) REFERENCES Foods(food_id) ON DELETE CASCADE,
     FOREIGN KEY (nutrient_id) REFERENCES Nutrients(nutrient_id) ON DELETE CASCADE
 );
 
--- Create the portions table
-CREATE TABLE Portions (
-    portion_id INT PRIMARY KEY AUTO_INCREMENT,
+-- Portions
+CREATE TABLE IF NOT EXISTS Portions (
+    portion_id INT PRIMARY KEY,
     food_id INT,
-    weight_in_grams FLOAT,  -- Changed to FLOAT for flexibility
-    serving_size VARCHAR(255),  -- E.g., 1 cup, 1 slice
+    fdc_id INT,
+    seq_num VARCHAR(10),
+    amount FLOAT,
+    measure_unit_id INT,
+    portion_description VARCHAR(255),
+    modifier VARCHAR(255),
+    weight_in_grams FLOAT,
+    data_points INT DEFAULT NULL,
+    footnote TEXT DEFAULT NULL,
+    min_year_acquired VARCHAR(10) DEFAULT NULL,
     FOREIGN KEY (food_id) REFERENCES Foods(food_id) ON DELETE CASCADE
 );
 
--- Create the reviews table
-CREATE TABLE Reviews (
-    review_id INT PRIMARY KEY AUTO_INCREMENT, -- Unique identifier for each review
-    meal_id INT NOT NULL, -- Foreign key to the meals table
-    user_id INT NOT NULL, -- Foreign key to the users table
-    rating INT NOT NULL CHECK (rating BETWEEN 1 AND 5), -- Rating between 1 and 5
-    comment TEXT DEFAULT NULL, -- Optional comment for the review
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, -- Timestamp for when the review was created
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, -- Timestamp for updates
-    FOREIGN KEY (meal_id) REFERENCES meals(id) ON DELETE CASCADE, -- Cascade delete if the meal is deleted
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE -- Cascade delete if the user is deleted
+-- Measure Unit
+CREATE TABLE IF NOT EXISTS Measure_Unit (
+    id INT PRIMARY KEY,
+    name VARCHAR(100)
 );
 
--- Create the meal_plan table
-CREATE TABLE Meal_Plan (
-    meal_plan_id INT AUTO_INCREMENT PRIMARY KEY, -- Unique identifier for each entry
-    meal_id INT NOT NULL, -- Foreign key to the meals table
-    user_id INT NOT NULL, -- Foreign key to the users table
-    date DATE NOT NULL, -- The specific date the meal is planned for
-    meal_type ENUM('Breakfast', 'Lunch', 'Dinner', 'Other') NOT NULL, -- Type of meal
-    FOREIGN KEY (meal_id) REFERENCES meals(id) ON DELETE CASCADE, -- Cascade delete if the meal is deleted
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE -- Cascade delete if the user is deleted
+-- Food Calorie Conversion Factor
+CREATE TABLE IF NOT EXISTS Food_Calorie_Conversion_Factor (
+    food_nutrient_conversion_factor_id INT PRIMARY KEY,
+    protein_value FLOAT,
+    fat_value FLOAT,
+    carbohydrate_value FLOAT
 );
 
+-- Food Protein Conversion Factor
+CREATE TABLE IF NOT EXISTS Food_Protein_Conversion_Factor (
+    food_nutrient_conversion_factor_id INT PRIMARY KEY,
+    value FLOAT
+);
+
+-- Food Nutrient Conversion Factor
+CREATE TABLE IF NOT EXISTS Food_Nutrient_Conversion_Factor (
+    id INT PRIMARY KEY,
+    fdc_id INT
+);
+
+-- meal_ingredients
+CREATE TABLE IF NOT EXISTS meal_ingredients (
+    meal_ingredient_id INT AUTO_INCREMENT PRIMARY KEY,
+    meal_id INT NOT NULL,
+    raw_name VARCHAR(255),
+    food_id INT NOT NULL,
+    quantity FLOAT DEFAULT 1.0,
+    unit VARCHAR(50) DEFAULT NULL,
+    FOREIGN KEY (meal_id) REFERENCES meals(id) ON DELETE CASCADE,
+    FOREIGN KEY (food_id) REFERENCES Foods(food_id) ON DELETE CASCADE
+);
+
+-- Reviews
+CREATE TABLE IF NOT EXISTS Reviews (
+    review_id INT PRIMARY KEY AUTO_INCREMENT,
+    meal_id INT NOT NULL,
+    user_id INT NOT NULL,
+    rating INT NOT NULL CHECK (rating BETWEEN 1 AND 5),
+    comment TEXT DEFAULT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (meal_id) REFERENCES meals(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- Meal Plan
+CREATE TABLE IF NOT EXISTS Meal_Plan (
+    meal_plan_id INT AUTO_INCREMENT PRIMARY KEY,
+    meal_id INT NOT NULL,
+    user_id INT NOT NULL,
+    date DATE NOT NULL,
+    meal_type ENUM('Breakfast', 'Lunch', 'Dinner', 'Other') NOT NULL,
+    FOREIGN KEY (meal_id) REFERENCES meals(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- Reports
 CREATE TABLE IF NOT EXISTS REPORTS (
     report_id INT AUTO_INCREMENT PRIMARY KEY UNIQUE,
     user_id INT NOT NULL,
     meal_id INT NOT NULL,
     reason VARCHAR(255) NOT NULL,
-    status ENUM('Pending', 'Reviewed', 'Resolved') DEFAULT 'Pending', -- Track report status
+    status ENUM('Pending', 'Reviewed', 'Resolved') DEFAULT 'Pending',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY (meal_id) REFERENCES meals(id) ON DELETE CASCADE
 );
 
-CREATE TABLE password_resets (
+-- Password resets
+CREATE TABLE IF NOT EXISTS password_resets (
   id INT AUTO_INCREMENT PRIMARY KEY,
   user_id INT NOT NULL,
   token VARCHAR(64) NOT NULL,
@@ -142,6 +191,7 @@ CREATE TABLE password_resets (
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
+-- Weekly Competitions
 CREATE TABLE IF NOT EXISTS weekly_competitions (
     competition_id INT AUTO_INCREMENT PRIMARY KEY,
     theme VARCHAR(50) NOT NULL DEFAULT 'open',
@@ -150,25 +200,27 @@ CREATE TABLE IF NOT EXISTS weekly_competitions (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Competition Themes
 CREATE TABLE IF NOT EXISTS competition_themes (
     theme_id INT AUTO_INCREMENT PRIMARY KEY,
     theme_name VARCHAR(50) NOT NULL UNIQUE,
     description TEXT
 );
 
-
+-- Meal Votes
 CREATE TABLE IF NOT EXISTS meal_votes (
     vote_id INT AUTO_INCREMENT PRIMARY KEY,
     user_id INT NOT NULL,
     meal_id INT NOT NULL,
     competition_id INT NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(user_id, competition_id, meal_id),
+    UNIQUE KEY unique_vote (user_id, competition_id, meal_id),
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY (meal_id) REFERENCES meals(id) ON DELETE CASCADE,
     FOREIGN KEY (competition_id) REFERENCES weekly_competitions(competition_id) ON DELETE CASCADE
 );
 
+-- Weekly Winners
 CREATE TABLE IF NOT EXISTS weekly_winners (
     winner_id INT AUTO_INCREMENT PRIMARY KEY,
     competition_id INT NOT NULL UNIQUE,
@@ -183,51 +235,55 @@ DELIMITER $$
 
 CREATE PROCEDURE process_weekly_competition()
 BEGIN
-    DECLARE current_competition_id INT;
+    DECLARE current_competition_id INT DEFAULT NULL;
     DECLARE winning_meal_id INT DEFAULT NULL;
     DECLARE total_votes INT DEFAULT 0;
     DECLARE current_theme VARCHAR(50);
     DECLARE next_theme VARCHAR(50);
 
-    -- 1. Get the current competition that ends today
-    SELECT competition_id, theme INTO current_competition_id, current_theme
+    -- Get the current competition that ends today
+    SELECT competition_id, theme 
+    INTO current_competition_id, current_theme
     FROM weekly_competitions
     WHERE end_date = CURRENT_DATE
     LIMIT 1;
 
-    -- 2. Only proceed if a competition ends today
+    -- Proceed only if competition exists
     IF current_competition_id IS NOT NULL THEN
 
-        -- 3. Determine the winning meal
-        SELECT meal_id, COUNT(*) INTO winning_meal_id, total_votes
+        -- Determine the winning meal and total votes
+        SELECT meal_id, COUNT(*) 
+        INTO winning_meal_id, total_votes
         FROM meal_votes
         WHERE competition_id = current_competition_id
         GROUP BY meal_id
         ORDER BY COUNT(*) DESC
         LIMIT 1;
 
-        -- 4. Insert winner
+        -- Insert winner if found
         IF winning_meal_id IS NOT NULL THEN
             INSERT INTO weekly_winners (competition_id, meal_id, total_votes)
             VALUES (current_competition_id, winning_meal_id, total_votes);
         END IF;
 
-        -- 5. Get next theme in rotation
-        SELECT theme_name INTO next_theme
+        -- Get next theme in alphabetical order after current theme
+        SELECT theme_name 
+        INTO next_theme
         FROM competition_themes
         WHERE theme_name > current_theme
         ORDER BY theme_name
         LIMIT 1;
 
-        -- If no next theme, restart rotation
+        -- If no next theme, restart from the first theme
         IF next_theme IS NULL THEN
-            SELECT theme_name INTO next_theme
+            SELECT theme_name
+            INTO next_theme
             FROM competition_themes
             ORDER BY theme_name
             LIMIT 1;
         END IF;
 
-        -- 6. Create new competition with next theme
+        -- Create new weekly competition for next theme
         INSERT INTO weekly_competitions (start_date, end_date, theme)
         VALUES (
             DATE_ADD(CURRENT_DATE, INTERVAL 1 DAY),
@@ -235,7 +291,7 @@ BEGIN
             next_theme
         );
 
-        -- 7. Clean up old votes
+        -- Delete old votes for the ended competition
         DELETE FROM meal_votes
         WHERE competition_id = current_competition_id;
 
@@ -243,7 +299,6 @@ BEGIN
 END$$
 
 DELIMITER ;
-
 
 DELIMITER $$
 

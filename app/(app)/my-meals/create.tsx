@@ -26,11 +26,7 @@ const CreateMealScreen = () => {
 
   const [mealName, setMealName] = useState("");
   const [mealDescription, setMealDescription] = useState("");
-  const [mealIngredients, setMealIngredients] = useState("");
-  const [mealCalories, setMealCalories] = useState("");
-  const [mealProtein, setMealProtein] = useState("");
-  const [mealCarbohydrates, setMealCarbohydrates] = useState("");
-  const [mealFat, setMealFat] = useState("");
+  const [ingredients, setIngredients] = useState([{ name: "", quantity: "", unit: "" }]);
   const [mealInstructions, setMealInstructions] = useState("");
   const [mealRecipeLink, setMealRecipeLink] = useState("");
   const [mealPicture, setMealPicture] = useState<string | null>(null);
@@ -62,23 +58,34 @@ const CreateMealScreen = () => {
     }
   };
 
+  const addIngredient = () => {
+    setIngredients([...ingredients, { name: "", quantity: "", unit: "" }]);
+  };
+
+  const removeIngredient = (index: number) => {
+    setIngredients(ingredients.filter((_, i) => i !== index));
+  };
+
+  const updateIngredient = (index: number, field: "name" | "quantity" | "unit", value: string) => {
+    const newIngredients = [...ingredients];
+    newIngredients[index][field] = value;
+    setIngredients(newIngredients);
+  };
+
   const handleAddMeal = async () => {
-    if (!mealName || !mealDescription || !mealIngredients) {
-      Alert.alert("Error", "Please fill in all required fields.");
+    if (
+      !mealName ||
+      !mealDescription ||
+      ingredients.some(i => !i.name || !i.quantity || !i.unit)
+    ) {
+      Alert.alert("Error", "Please fill in all required fields and ingredients.");
       return;
     }
 
     const formData = new FormData();
     formData.append("name", mealName);
     formData.append("description", mealDescription);
-    formData.append(
-      "ingredients",
-      JSON.stringify(mealIngredients.split(",").map((ingredient) => ingredient.trim()))
-    );
-    formData.append("calories", mealCalories);
-    formData.append("protein", mealProtein);
-    formData.append("carbohydrates", mealCarbohydrates);
-    formData.append("fat", mealFat);
+    formData.append("ingredients", JSON.stringify(ingredients));
     formData.append("instructions", mealInstructions);
     formData.append("recipeLink", mealRecipeLink);
     formData.append("visibility", mealVisibility ? "1" : "0");
@@ -143,54 +150,39 @@ const CreateMealScreen = () => {
         multiline
       />
 
-      <TextInput
-        style={[styles.input, { backgroundColor: theme.card, borderColor: theme.border, color: theme.text }]}
-        placeholder="Ingredients (comma-separated)"
-        placeholderTextColor={theme.placeholder}
-        value={mealIngredients}
-        onChangeText={setMealIngredients}
-        multiline
-      />
-
-      <TextInput
-        style={[styles.input, { backgroundColor: theme.card, borderColor: theme.border, color: theme.text }]}
-        placeholder="Calories"
-        placeholderTextColor={theme.placeholder}
-        value={mealCalories}
-        onChangeText={setMealCalories}
-        keyboardType="numeric"
-        multiline
-      />
-
-      <TextInput
-        style={[styles.input, { backgroundColor: theme.card, borderColor: theme.border, color: theme.text }]}
-        placeholder="Protein (g)"
-        placeholderTextColor={theme.placeholder}
-        value={mealProtein}
-        onChangeText={setMealProtein}
-        keyboardType="numeric"
-        multiline
-      />
-
-      <TextInput
-        style={[styles.input, { backgroundColor: theme.card, borderColor: theme.border, color: theme.text }]}
-        placeholder="Carbs (g)"
-        placeholderTextColor={theme.placeholder}
-        value={mealCarbohydrates}
-        onChangeText={setMealCarbohydrates}
-        keyboardType="numeric"
-        multiline
-      />
-
-      <TextInput
-        style={[styles.input, { backgroundColor: theme.card, borderColor: theme.border, color: theme.text }]}
-        placeholder="Fat (g)"
-        placeholderTextColor={theme.placeholder}
-        value={mealFat}
-        onChangeText={setMealFat}
-        keyboardType="numeric"
-        multiline
-      />
+      <Text style={[styles.label, { color: theme.text }]}>Ingredients</Text>
+      {ingredients.map((ingredient, idx) => (
+        <View key={idx} style={{ flexDirection: "row", marginBottom: 10, alignItems: "center" }}>
+          <TextInput
+            style={[styles.input, { flex: 2, marginRight: 5, backgroundColor: theme.card, borderColor: theme.border, color: theme.text }]}
+            placeholder="Name"
+            placeholderTextColor={theme.placeholder}
+            value={ingredient.name}
+            onChangeText={text => updateIngredient(idx, "name", text)}
+          />
+          <TextInput
+            style={[styles.input, { flex: 1, marginRight: 5, backgroundColor: theme.card, borderColor: theme.border, color: theme.text }]}
+            placeholder="Qty"
+            placeholderTextColor={theme.placeholder}
+            value={ingredient.quantity}
+            onChangeText={text => updateIngredient(idx, "quantity", text)}
+            keyboardType="numeric"
+          />
+          <TextInput
+            style={[styles.input, { flex: 1, marginRight: 5, backgroundColor: theme.card, borderColor: theme.border, color: theme.text }]}
+            placeholder="Unit"
+            placeholderTextColor={theme.placeholder}
+            value={ingredient.unit}
+            onChangeText={text => updateIngredient(idx, "unit", text)}
+          />
+          <TouchableOpacity onPress={() => removeIngredient(idx)}>
+            <Text style={{ color: theme.danger, fontWeight: "bold", fontSize: 18 }}>✕</Text>
+          </TouchableOpacity>
+        </View>
+      ))}
+      <TouchableOpacity onPress={addIngredient} style={{ marginBottom: 15 }}>
+        <Text style={{ color: theme.primary, fontWeight: "bold" }}>+ Add Ingredient</Text>
+      </TouchableOpacity>
 
       <TextInput
         style={[styles.input, { backgroundColor: theme.card, borderColor: theme.border, color: theme.text }]}
