@@ -74,47 +74,73 @@ const AICreateMeal = () => {
 
   
 
-  const handleSaveMeal = async () => {
-  if (!generatedMeal.name || !generatedMeal.description || !generatedMeal.ingredients || !generatedMeal.instructions) {
+ const handleSaveMeal = async () => {
+  if (
+    !generatedMeal.name ||
+    !generatedMeal.description ||
+    !generatedMeal.ingredients ||
+    !generatedMeal.instructions
+  ) {
     Alert.alert("Error", "Please ensure all fields are filled before saving.");
     return;
   }
 
   try {
-    const token = await AsyncStorage.getItem("token"); // Retrieve the token
+    const token = await AsyncStorage.getItem("token");
     if (!token) {
       Alert.alert("Error", "User not authenticated. Please log in.");
       return;
     }
 
-    const formData = new FormData();
-    formData.append("name", generatedMeal.name);
-    formData.append("description", generatedMeal.description);
-    formData.append(
-      "ingredients",
-      JSON.stringify(generatedMeal.ingredients.split(",").map((ingredient) => ingredient.trim()))
-    );
-    formData.append("instructions", generatedMeal.instructions);
-    
-    const response = await fetch(`${BASE_URL}/meal/meal-ai`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-        body: formData,
+    // Parse ingredients into objects: [{quantity, unit, name, raw_name}]
+    const ingredientObjects = generatedMeal.ingredients
+      .split(",")
+      .map((ingredient) => {
+        const parts = ingredient.trim().split(" ");
+        let quantity = parts[0];
+        let unit = parts[1];
+        let name = parts.slice(2).join(" ");
+
+        if (!name) {
+          name = unit || "";
+          unit = "";
+        }
+        if (isNaN(Number(quantity))) {
+          name = [quantity, unit, ...parts.slice(2)].filter(Boolean).join(" ");
+          quantity = "1";
+          unit = "";
+        }
+        return { quantity, unit, name, raw_name: name };
       });
 
-      if (!response.ok) {
-        throw new Error("Failed to add meal to the database.");
-      }
+    const payload = {
+      name: generatedMeal.name,
+      description: generatedMeal.description,
+      ingredients: ingredientObjects,
+      instructions: generatedMeal.instructions,
+    };
 
-      Alert.alert("Success", "Meal added successfully!");
-      router.push("/(app)/my-meals/meals"); // Navigate to the meals screen
-    } catch (error) {
-      console.error("Error adding meal:", error);
-      Alert.alert("Error", "Failed to add the meal to the database.");
+    const response = await fetch(`${BASE_URL}/meal/meal-ai`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      throw new Error("Failed to add meal to the database.");
     }
-  };
+
+    Alert.alert("Success", "Meal added successfully!");
+    router.push("/(app)/my-meals/meals");
+  } catch (error) {
+    console.error("Error adding meal:", error);
+    Alert.alert("Error", "Failed to add the meal to the database.");
+  }
+};
+
 
   const handleGenerateMeal = async () => {
     if (!prompt.trim()) {

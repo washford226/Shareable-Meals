@@ -8,9 +8,51 @@ import authMiddleware from '../authMiddleware';
 import crypto from 'crypto';
 import { Request, Response } from 'express';
 import axios from 'axios';
+import { calculateAndStoreMealNutrition } from './usda_linking';
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage() });
+
+async function findBestFoodMatch(db: any, rawName: string) {
+  const rawWords = rawName.toLowerCase().trim().split(/\s+/).filter(Boolean);
+  if (rawWords.length === 0) return null;
+
+  const likeClauses = rawWords.map(() => `f.name LIKE ?`).join(' AND ');
+  const likeParams = rawWords.map(word => `%${word}%`);
+
+  const sql = `
+    SELECT 
+      f.food_id,
+      COUNT(CASE 
+          WHEN fn.amount IS NOT NULL AND fn.nutrient_id IN (?, ?, ?, ?) 
+          THEN 1 END) AS macro_count
+    FROM Foods f
+    JOIN Food_Nutrient fn ON f.food_id = fn.food_id
+    WHERE ${likeClauses}
+    GROUP BY f.food_id
+    ORDER BY macro_count DESC
+    LIMIT 1
+  `;
+
+  const [rows]: any[] = await db.query(sql, [
+    NUTRIENT_IDS.calories,
+    NUTRIENT_IDS.protein,
+    NUTRIENT_IDS.fat,
+    NUTRIENT_IDS.carbs,
+    ...likeParams
+  ]);
+
+  return rows.length > 0 ? rows[0] : null;
+}
+
+
+// Nutrient IDs for calories, protein, fat, and carbs (update these IDs as per your database schema)
+const NUTRIENT_IDS = {
+  calories: 1008, 
+  protein: 1003,  
+  fat: 1004,   
+  carbs: 1005  
+};
 
 interface User {
   id: number;
@@ -194,31 +236,71 @@ router.post('/signup', upload.single('profile_picture'), async (req: Request, re
     const aiMeals = await generateAIMeals(dietary_restrictions, allergies);
 
     // Insert AI-generated meals into the database
-const mealQuery = `
-  INSERT INTO meals (name, description, ingredients, visibility, user_id, instructions)
-  VALUES (?, ?, ?, ?, ?, ?)
-`;
+    for (const meal of aiMeals) {
+      // Parse ingredients from string array to object array with quantity/unit placeholders
+      const parsedIngredients = meal.ingredients.map((ingText: string) => {
+        const parts = ingText.split(' ');
+        let quantity = parts[0];
+        let unit = parts[1];
+        let name = parts.slice(2).join(' ');
 
-for (const meal of aiMeals) {
-  // Ensure instructions are joined into a single string
-  const formattedInstructions = Array.isArray(meal.instructions)
-    ? meal.instructions.join("\n") // Join instructions with newlines
-    : meal.instructions;
+        if (!name) {
+          name = unit || '';
+          unit = '';
+        }
+        if (isNaN(Number(quantity))) {
+          name = ingText;
+          quantity = '1';
+          unit = '';
+        }
 
-  // Ensure ingredients are joined into a single string
-  const formattedIngredients = Array.isArray(meal.ingredients)
-    ? meal.ingredients.join(", ") // Join ingredients with commas
-    : meal.ingredients;
+        return { name, quantity, unit, raw_name: name };
+      });
 
-  await db.query(mealQuery, [
-    meal.name,
-    meal.description,
-    formattedIngredients,
-    0, // Visibility set to private by default
-    userId,
-    formattedInstructions,
-  ]);
-}
+      const ingredientsJson = JSON.stringify(parsedIngredients);
+
+      const mealInsertQuery = `
+        INSERT INTO meals (name, description, ingredients, visibility, user_id, instructions)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `;
+
+      const [mealResult]: any = await db.query(mealInsertQuery, [
+        meal.name,
+        meal.description,
+        ingredientsJson,
+        0, // private by default
+        userId,
+        Array.isArray(meal.instructions) ? meal.instructions.join('\n') : meal.instructions
+      ]);
+      const mealId = mealResult.insertId;
+
+      // Insert each ingredient into meal_ingredients with best matching food_id
+      for (const ing of parsedIngredients) {
+        if (!ing.name || !ing.quantity || !ing.unit) continue;
+
+        try {
+          const bestMatch = await findBestFoodMatch(db, ing.raw_name ?? ing.name ?? '');
+          if (!bestMatch) {
+            console.warn(`No matching food found for ingredient: ${ing.raw_name}`);
+            continue;
+          }
+
+          const foodId = bestMatch.food_id;
+
+          await db.query(
+            `INSERT INTO meal_ingredients (meal_id, food_id, quantity, unit, raw_name) 
+             VALUES (?, ?, ?, ?, ?)`,
+            [mealId, foodId, Number(ing.quantity), ing.unit, ing.raw_name]
+          );
+        } catch (err) {
+          console.error(`Error inserting meal ingredient "${ing.raw_name}":`, err);
+          continue;
+        }
+      }
+
+      // Calculate nutrition for this meal after ingredients inserted
+      await calculateAndStoreMealNutrition(mealId, db);
+    }
 
     res.status(200).send('User signed up successfully with AI-generated meals added');
   } catch (err) {
@@ -226,6 +308,7 @@ for (const meal of aiMeals) {
     res.status(500).send('Error during signup');
   }
 });
+
   
 // Login user
 router.post('/login', (req: Request, res: Response) => {
