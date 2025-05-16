@@ -1,123 +1,188 @@
 import { Router, Request, Response } from 'express';
-import authMiddleware from '../authMiddleware'; // Adjust the path as needed
+import authMiddleware from '../authMiddleware';
 import multer from 'multer';
+import { calculateAndStoreMealNutrition } from './usda_linking';
 
-// Configure multer for file uploads
 const upload = multer();
+
+const NUTRIENT_IDS = {
+  calories: 1008,
+  protein: 1003,
+  fat: 1004,
+  carbs: 1005,
+};
 
 const router = Router();
 
-// Create a new meal
 router.post('/meals', authMiddleware, upload.single('picture'), async (req: Request, res: Response): Promise<void> => {
-    const { 
+  const { 
+    name, 
+    description, 
+    ingredients, 
+    visibility, 
+    instructions, 
+    recipeLink,
+    created_by
+  } = req.body;
+  const user_id = req.user?.id;
+  const picture = req.file ? req.file.buffer : null;
+  const db = (req as any).db;
+
+  if (!user_id) {
+    res.status(401).send('User is not authenticated');
+    return;
+  }
+
+  if (!name || !description || !ingredients) {
+    res.status(400).send('Missing required fields');
+    return;
+  }
+
+  let parsedIngredients: { name: string; quantity: string; unit: string; raw_name?: string }[];
+  try {
+    parsedIngredients = typeof ingredients === "string" ? JSON.parse(ingredients) : ingredients;
+    if (!Array.isArray(parsedIngredients) || parsedIngredients.length === 0) {
+      throw new Error();
+    }
+
+    parsedIngredients = parsedIngredients.map(ing => ({
+      ...ing,
+      raw_name: ing.raw_name ?? ing.name
+    }));
+  } catch {
+    res.status(400).send('Ingredients must be a valid JSON array');
+    return;
+  }
+
+  const mealInsertQuery = `
+    INSERT INTO meals (
       name, 
       description, 
       ingredients, 
-      calories, 
-      protein, 
-      carbohydrates, 
-      fat, 
-      visibility, // Include visibility from the request body
+      visibility, 
+      user_id, 
+      picture, 
       instructions, 
       recipeLink,
-      created_by // Include created_by from the request body
-    } = req.body; // Extract additional fields from the request body
-    const user_id = req.user?.id; // Get the authenticated user's ID
-    const picture = req.file ? req.file.buffer : null; // Get the uploaded image as a buffer
-    const db = (req as any).db; // Get the database instance
-  
-    if (!user_id) {
-      res.status(401).send('User is not authenticated');
-      return;
-    }
-  
-    if (!name || !description || !ingredients) {
-      res.status(400).send('Missing required fields');
-      return;
-    }
-  
+      created_by
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `;
+  const mealValues = [
+    name,
+    description,
+    JSON.stringify(parsedIngredients),
+    visibility ?? true,
+    user_id,
+    picture,
+    instructions,
+    recipeLink,
+    created_by || 'User'
+  ];
+
+  let mealId: number;
+  try {
+    const [result]: any = await db.query(mealInsertQuery, mealValues);
+    mealId = result.insertId;
+  } catch (err) {
+    console.error('Error adding meal:', err);
+    res.status(500).send('Error adding meal');
+    return;
+  }
+
+  // Insert each ingredient into meal_ingredients with best matching food_id
+  for (const ing of parsedIngredients) {
+    if (!ing.name || !ing.quantity || !ing.unit) continue;
+
     try {
-      const query = `
-        INSERT INTO meals (
-          name, 
-          description, 
-          ingredients, 
-          calories, 
-          protein, 
-          carbohydrates, 
-          fat, 
-          visibility, 
-          user_id, 
-          picture, 
-          instructions, 
-          recipeLink,
-          created_by -- Include created_by in the query
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      const rawWords = (ing.raw_name ?? ing.name ?? '').toLowerCase().trim().split(/\s+/);
+      const likeClauses = rawWords.map(() => `f.name LIKE ?`).join(' AND ');
+      const likeParams = rawWords.map(word => `%${word}%`);
+
+      const sql = `
+        SELECT 
+          f.food_id,
+          COUNT(CASE 
+              WHEN fn.amount IS NOT NULL AND fn.nutrient_id IN (?, ?, ?, ?) 
+              THEN 1 END) AS macro_count
+        FROM Foods f
+        JOIN Food_Nutrient fn ON f.food_id = fn.food_id
+        WHERE ${likeClauses}
+        GROUP BY f.food_id
+        ORDER BY macro_count DESC
+        LIMIT 1
       `;
-      const values = [
-        name,
-        description,
-        ingredients, // Ensure ingredients are passed as a valid JSON string or array
-        calories,
-        protein,
-        carbohydrates,
-        fat,
-        visibility ?? true, // Default to true if visibility is not provided
-        user_id,
-        picture,
-        instructions,
-        recipeLink,
-        created_by || 'User' // Default to 'User' if created_by is not provided
-      ];
-  
-      await db.query(query, values);
-      res.status(201).send('Meal added successfully');
-    } catch (err) {
-      console.error('Error adding meal:', err);
-      res.status(500).send('Error adding meal');
-    }
-});
-  
-  router.put('/meals/:meal_id/image', authMiddleware, upload.single('picture'), async (req: Request, res: Response): Promise<void> => {
-    const { meal_id } = req.params; // Extract the meal ID from the URL
-    const user = (req as any).user; // Get the authenticated user
-    const db = (req as any).db; // Get the database instance
-    const picture = req.file?.buffer; // Get the uploaded image as a buffer
-  
-    if (!user) {
-      res.status(401).send('User not authenticated');
-      return;
-    }
-  
-    if (!picture) {
-      res.status(400).send('No image file uploaded');
-      return;
-    }
-  
-    try {
-      // Check if the meal exists and belongs to the authenticated user
-      const [rows]: [any[], any] = await db.query('SELECT * FROM meals WHERE id = ? AND user_id = ?', [meal_id, user.id]);
-      if (rows.length === 0) {
-        res.status(404).send('Meal not found or you are not authorized to update this meal');
-        return;
+
+      const [foodRows]: any[] = await db.query(sql, [
+        NUTRIENT_IDS.calories,
+        NUTRIENT_IDS.protein,
+        NUTRIENT_IDS.fat,
+        NUTRIENT_IDS.carbs,
+        ...likeParams
+      ]);
+
+      if (foodRows.length === 0) {
+        console.warn(`No matching food found for ingredient: ${ing.raw_name}`);
+        continue;
       }
-  
-      // Update the meal's picture
-      const query = `
-        UPDATE meals
-        SET picture = ?
-        WHERE id = ? AND user_id = ?
-      `;
-      await db.query(query, [picture, meal_id, user.id]);
-  
-      res.status(200).send('Meal image updated successfully');
+
+      const foodId = foodRows[0].food_id;
+
+      await db.query(
+        `INSERT INTO meal_ingredients (meal_id, food_id, quantity, unit, raw_name) 
+         VALUES (?, ?, ?, ?, ?)`,
+        [mealId, foodId, Number(ing.quantity), ing.unit, ing.raw_name]
+      );
     } catch (err) {
-      console.error('Error updating meal image:', err);
-      res.status(500).send('Error updating meal image');
+      console.error(`Error inserting meal ingredient "${ing.raw_name}":`, err);
+      continue;
     }
-  });
-  
+  }
+
+  try {
+    await calculateAndStoreMealNutrition(mealId, db);
+  } catch (err) {
+    console.error('Error calculating nutrition:', err);
+  }
+
+  res.status(201).send('Meal added successfully');
+});
+
+// Upload/update a meal image
+router.put('/meals/:meal_id/image', authMiddleware, upload.single('picture'), async (req: Request, res: Response): Promise<void> => {
+  const { meal_id } = req.params;
+  const user = (req as any).user;
+  const db = (req as any).db;
+  const picture = req.file?.buffer;
+
+  if (!user) {
+    res.status(401).send('User not authenticated');
+    return;
+  }
+
+  if (!picture) {
+    res.status(400).send('No image file uploaded');
+    return;
+  }
+
+  try {
+    const [rows]: [any[], any] = await db.query('SELECT * FROM meals WHERE id = ? AND user_id = ?', [meal_id, user.id]);
+    if (rows.length === 0) {
+      res.status(404).send('Meal not found or you are not authorized to update this meal');
+      return;
+    }
+
+    await db.query(
+      `UPDATE meals SET picture = ? WHERE id = ? AND user_id = ?`,
+      [picture, meal_id, user.id]
+    );
+
+    res.status(200).send('Meal image updated successfully');
+  } catch (err) {
+    console.error('Error updating meal image:', err);
+    res.status(500).send('Error updating meal image');
+  }
+});
   
   // Get all meals
   router.get('/meals', authMiddleware, async (req: Request, res: Response): Promise<void> => {
