@@ -68,6 +68,30 @@ router.get('/', (req, res) => {
     res.send('Meal endpoint');
 });
 
+function parseAIIngredientLine(line: string) {
+  let cleaned = line.replace(/^[\*\-\d\.\s]+/, '').trim();
+  if (/ or /i.test(cleaned)) {
+    cleaned = cleaned.split(/ or /i)[0].trim();
+  }
+  cleaned = cleaned.replace(/\(.*?\)/g, '').trim();
+  if (/for the|optional|instructions?/i.test(cleaned)) {
+    return null;
+  }
+  const match = cleaned.match(/^([\d¼½¾⅓⅔⅛⅜⅝⅞\/\.]+)\s+([a-zA-Z]+)\s+(.+)$/);
+  if (match) {
+    // If quantity is missing or not a number, default to 1
+    const quantity = !isNaN(Number(match[1])) ? match[1] : "1";
+    return {
+      quantity,
+      unit: match[2],
+      name: match[3],
+      raw_name: match[3],
+    };
+  }
+  // Fallback: treat whole line as name, quantity 1
+  return { quantity: "1", unit: "", name: cleaned, raw_name: cleaned };
+}
+
 // Function to generate AI meals
 const generateAIMeals = async (dietary_restrictions?: string, allergies?: string): Promise<any[]> => {
   try {
@@ -238,24 +262,18 @@ router.post('/signup', upload.single('profile_picture'), async (req: Request, re
     // Insert AI-generated meals into the database
     for (const meal of aiMeals) {
       // Parse ingredients from string array to object array with quantity/unit placeholders
-      const parsedIngredients = meal.ingredients.map((ingText: string) => {
-        const parts = ingText.split(' ');
-        let quantity = parts[0];
-        let unit = parts[1];
-        let name = parts.slice(2).join(' ');
+      interface ParsedIngredient {
+        quantity: string;
+        unit: string;
+        name: string;
+        raw_name: string;
+      }
 
-        if (!name) {
-          name = unit || '';
-          unit = '';
-        }
-        if (isNaN(Number(quantity))) {
-          name = ingText;
-          quantity = '1';
-          unit = '';
-        }
-
-        return { name, quantity, unit, raw_name: name };
-      });
+      const parsedIngredients: ParsedIngredient[] = meal.ingredients
+      .map((ingText: string) => parseAIIngredientLine(ingText))
+      .filter((ing: ParsedIngredient | null): ing is ParsedIngredient =>
+        !!ing && typeof ing.name === 'string' && ing.name.length > 0 && !isNaN(Number(ing.quantity)) ? true : false
+      );
 
       const ingredientsJson = JSON.stringify(parsedIngredients);
 
@@ -276,6 +294,7 @@ router.post('/signup', upload.single('profile_picture'), async (req: Request, re
 
       // Insert each ingredient into meal_ingredients with best matching food_id
       for (const ing of parsedIngredients) {
+        console.log("name", ing.name, "quantity", ing.quantity, "unit", ing.unit);
         if (!ing.name || !ing.quantity || !ing.unit) continue;
 
         try {

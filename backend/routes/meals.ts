@@ -76,6 +76,7 @@ router.post('/meal-ai', authMiddleware, upload.none(), async (req: any, res: any
     const mealId = result.insertId;
 
     for (const ing of parsedIngredients) {
+      console.log("name: ",ing.name,"quantity: ", ing.quantity,"unit: ", ing.unit);
       if (!ing.name || !ing.quantity || !ing.unit) continue;
 
       try {
@@ -90,17 +91,17 @@ router.post('/meal-ai', authMiddleware, upload.none(), async (req: any, res: any
           console.warn(`Invalid quantity for ingredient: ${ing.raw_name}`);
           continue;
         }
-
+        
         await db.query(
           `INSERT INTO meal_ingredients (meal_id, food_id, quantity, unit, raw_name) 
            VALUES (?, ?, ?, ?, ?)`,
           [mealId, foodMatch.food_id, quantityNum, ing.unit.toLowerCase(), ing.raw_name]
+          
         );
       } catch (err) {
         console.error(`Error inserting ingredient "${ing.raw_name}":`, err);
       }
     }
-
     await calculateAndStoreMealNutrition(mealId, db);
 
     res.status(201).json({ message: 'AI-generated meal added successfully' });
@@ -145,6 +146,7 @@ router.post('/meals', authMiddleware, upload.single('picture'), async (req: any,
     const mealId = result.insertId;
 
     for (const ing of parsedIngredients) {
+      console.log(ing.name, ing.quantity, ing.unit);
       if (!ing.name || !ing.quantity || !ing.unit) continue;
 
       try {
@@ -159,7 +161,7 @@ router.post('/meals', authMiddleware, upload.single('picture'), async (req: any,
           console.warn(`Invalid quantity for ingredient: ${ing.raw_name}`);
           continue;
         }
-
+        console.log(mealId, foodMatch.food_id, quantityNum, ing.unit.toLowerCase(), ing.raw_name);
         await db.query(
           `INSERT INTO meal_ingredients (meal_id, food_id, quantity, unit, raw_name) 
            VALUES (?, ?, ?, ?, ?)`,

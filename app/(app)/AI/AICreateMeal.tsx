@@ -38,6 +38,31 @@ const AICreateMeal = () => {
   const [usePantry, setUsePantry] = useState(false); // State for pantry checkbox
   const [fetchingRestrictions, setFetchingRestrictions] = useState(true);
 
+  // Add this helper function above your component
+function parseAIIngredients(ingredientText: string) {
+  return ingredientText
+    .split(/\r?\n|,/)
+    .map(line => line.replace(/^\*\s*/, '').trim())
+    .filter(line =>
+      // Only keep lines that start with a number or fraction (optionally after a bullet/asterisk)
+      /^(\*?\s*)?([\d¼½¾⅓⅔⅛⅜⅝⅞\/\.]+)\s+[a-zA-Z]+/.test(line)
+    )
+    .map(line => {
+      // Match: [optional bullet] [quantity] [unit] [name]
+      const match = line.match(/^(\*?\s*)?([\d¼½¾⅓⅔⅛⅜⅝⅞\/\.]+)\s+([a-zA-Z]+)\s+(.+)$/);
+      if (match) {
+        return {
+          quantity: match[2],
+          unit: match[3],
+          name: match[4],
+          raw_name: match[4],
+        };
+      }
+      // Fallback: treat whole line as name
+      return { quantity: "1", unit: "", name: line, raw_name: line };
+    });
+}
+
   // Fetch dietary restrictions and user ID from the backend
   useEffect(() => {
     const fetchDietaryRestrictions = async () => {
@@ -92,26 +117,8 @@ const AICreateMeal = () => {
       return;
     }
 
-    // Parse ingredients into objects: [{quantity, unit, name, raw_name}]
-    const ingredientObjects = generatedMeal.ingredients
-      .split(",")
-      .map((ingredient) => {
-        const parts = ingredient.trim().split(" ");
-        let quantity = parts[0];
-        let unit = parts[1];
-        let name = parts.slice(2).join(" ");
-
-        if (!name) {
-          name = unit || "";
-          unit = "";
-        }
-        if (isNaN(Number(quantity))) {
-          name = [quantity, unit, ...parts.slice(2)].filter(Boolean).join(" ");
-          quantity = "1";
-          unit = "";
-        }
-        return { quantity, unit, name, raw_name: name };
-      });
+    // Use the robust parser for AI-generated ingredients
+    const ingredientObjects = parseAIIngredients(generatedMeal.ingredients);
 
     const payload = {
       name: generatedMeal.name,
