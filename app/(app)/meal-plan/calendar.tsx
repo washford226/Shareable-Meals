@@ -220,37 +220,47 @@ const MealPlanCalendar: React.FC = () => {
                   )}
                   </ScrollView>
                 </View>
-                {/* Nutrition Block */}
-                {meals[dateString]?.length > 0 && (
-                  <View style={[styles.nutritionBlock, { backgroundColor: theme.card }]}>
-                    {(() => {
-                      const totals = calculateNutritionTotals(meals[dateString]);
-                      return (
-                        <>
-                          <Text style={[styles.nutritionTitle, { color: theme.text }]}>Nutrition Facts</Text>
-                          <View style={styles.nutritionRow}>
-                            <View style={styles.nutritionColumn}>
-                              <Text style={[styles.nutritionLabel, { color: theme.text }]}>Calories</Text>
-                              <Text style={[styles.nutritionValue, { color: theme.text }]}>{totals.calories} kcal</Text>
-                            </View>
-                            <View style={styles.nutritionColumn}>
-                              <Text style={[styles.nutritionLabel, { color: theme.text }]}>Protein</Text>
-                              <Text style={[styles.nutritionValue, { color: theme.text }]}>{totals.protein} g</Text>
-                            </View>
-                            <View style={styles.nutritionColumn}>
-                              <Text style={[styles.nutritionLabel, { color: theme.text }]}>Carbs</Text>
-                              <Text style={[styles.nutritionValue, { color: theme.text }]}>{totals.carbs} g</Text>
-                            </View>
-                            <View style={styles.nutritionColumn}>
-                              <Text style={[styles.nutritionLabel, { color: theme.text }]}>Fat</Text>
-                              <Text style={[styles.nutritionValue, { color: theme.text }]}>{totals.fat} g</Text>
-                            </View>
+                {/* Nutrition Block - always visible */}
+                <TouchableOpacity
+                  style={[styles.nutritionBlock, { backgroundColor: theme.card }]}
+                  activeOpacity={0.8}
+                  onPress={() => router.push({ pathname: "/(app)/meal-plan/[date]/daynutrition", params: { date: dateString } })}
+                >
+                  {(() => {
+                    const totals = meals[dateString]?.length > 0
+                      ? calculateNutritionTotals(meals[dateString])
+                      : { calories: 0, protein: 0, carbs: 0, fat: 0 };
+                    return (
+                      <>
+                        <Text style={[styles.nutritionTitle, { color: theme.text }]}>Nutrition Facts</Text>
+                        <View style={styles.nutritionRow}>
+                          <View style={styles.nutritionColumn}>
+                            <Text style={[styles.nutritionLabel, { color: theme.text }]}>Calories</Text>
+                            <Text style={[styles.nutritionValue, { color: theme.text }]}>{totals.calories} kcal</Text>
                           </View>
-                        </>
-                      );
-                    })()}
-                  </View>
-                )}
+                          <View style={styles.nutritionColumn}>
+                            <Text style={[styles.nutritionLabel, { color: theme.text }]}>Protein</Text>
+                            <Text style={[styles.nutritionValue, { color: theme.text }]}>{totals.protein} g</Text>
+                          </View>
+                          <View style={styles.nutritionColumn}>
+                            <Text style={[styles.nutritionLabel, { color: theme.text }]}>Carbs</Text>
+                            <Text style={[styles.nutritionValue, { color: theme.text }]}>{totals.carbs} g</Text>
+                          </View>
+                          <View style={styles.nutritionColumn}>
+                            <Text style={[styles.nutritionLabel, { color: theme.text }]}>Fat</Text>
+                            <Text style={[styles.nutritionValue, { color: theme.text }]}>{totals.fat} g</Text>
+                          </View>
+                        </View>
+                        {meals[dateString]?.length === 0 && (
+                          <Text style={[styles.noMealText, { color: theme.subtext, marginTop: 8 }]}>
+                            No meals for this day
+                          </Text>
+                        )}
+                      </>
+                    );
+                  })()}
+                </TouchableOpacity>
+              
               </View>
             );
           })}
@@ -404,7 +414,7 @@ pantryButtonText: {
     padding: 8,
     borderWidth: 1,
     borderRadius: 8,
-    height: SCREEN_HEIGHT * 0.87,
+    height: SCREEN_HEIGHT * 0.8,
   },
   dateLabel: { 
     fontSize: 16, 

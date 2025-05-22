@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, Image, ActivityIndicator } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, Image, ActivityIndicator, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import RNPickerSelect from 'react-native-picker-select';
@@ -13,6 +13,9 @@ const BASE_URL = Platform.OS === 'android' ? 'http://10.0.2.2:5000' : 'http://lo
 const EditUserScreen: React.FC = () => {
   const [username, setUsername] = useState<string>(''); // Add username state
   const [caloriesGoal, setCaloriesGoal] = useState<string>('');
+  const [proteinGoal, setProteinGoal] = useState<string>('');
+  const [carbsGoal, setCarbsGoal] = useState<string>('');
+  const [fatGoal, setFatGoal] = useState<string>('');
   const [dietaryRestrictions, setDietaryRestrictions] = useState<string>('');
   const [allergies, setAllergies] = useState<string>(''); // State for allergies
   const [profilePicture, setProfilePicture] = useState<string | null>(null);
@@ -46,12 +49,15 @@ const EditUserScreen: React.FC = () => {
         });
 
         if (response.status === 200) {
-          const { username, calories_goal, dietary_restrictions, profile_picture } = response.data;
-          setUsername(username); // Set the username
-          setCaloriesGoal(calories_goal || '');
-          setDietaryRestrictions(dietary_restrictions || '');
-          setAllergies(allergies || ''); 
-          setProfilePicture(profile_picture || null);
+          const { username, calories_goal, protein_goal, carbohydrates_goal, fat_goal, dietary_restrictions, profile_picture, allergies } = response.data;
+            setUsername(username);
+            setCaloriesGoal(calories_goal || '');
+            setProteinGoal(protein_goal || '');
+            setCarbsGoal(carbohydrates_goal || '');
+            setFatGoal(fat_goal || '');
+            setDietaryRestrictions(dietary_restrictions || '');
+            setAllergies(allergies || '');
+            setProfilePicture(profile_picture || null);
         }
       } catch (error) {
         console.error('Error fetching user info:', error);
@@ -63,6 +69,93 @@ const EditUserScreen: React.FC = () => {
 
     fetchUserData();
   }, []);
+
+  const handleUpdateProteinGoal = async () => {
+  if (!proteinGoal) {
+    Alert.alert('Error', 'Please enter a valid protein goal.');
+    return;
+  }
+  try {
+    setLoading(true);
+    const token = await AsyncStorage.getItem('token');
+    if (!token) {
+      Alert.alert('Error', 'User not authenticated.');
+      return;
+    }
+    const response = await axios.put(
+      `${BASE_URL}/users/user/${username}`,
+      { protein_goal: proteinGoal },
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    if (response.status === 200) {
+      Alert.alert('Success', 'Protein goal updated successfully!');
+    } else {
+      Alert.alert('Error', 'Failed to update protein goal.');
+    }
+  } catch (error) {
+    Alert.alert('Error', 'Failed to update protein goal.');
+  } finally {
+    setLoading(false);
+  }
+};
+
+const handleUpdateCarbsGoal = async () => {
+  if (!carbsGoal) {
+    Alert.alert('Error', 'Please enter a valid carbs goal.');
+    return;
+  }
+  try {
+    setLoading(true);
+    const token = await AsyncStorage.getItem('token');
+    if (!token) {
+      Alert.alert('Error', 'User not authenticated.');
+      return;
+    }
+    const response = await axios.put(
+      `${BASE_URL}/users/user/${username}`,
+      { carbohydrates_goal: carbsGoal },
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    if (response.status === 200) {
+      Alert.alert('Success', 'Carbs goal updated successfully!');
+    } else {
+      Alert.alert('Error', 'Failed to update carbs goal.');
+    }
+  } catch (error) {
+    Alert.alert('Error', 'Failed to update carbs goal.');
+  } finally {
+    setLoading(false);
+  }
+};
+
+const handleUpdateFatGoal = async () => {
+  if (!fatGoal) {
+    Alert.alert('Error', 'Please enter a valid fat goal.');
+    return;
+  }
+  try {
+    setLoading(true);
+    const token = await AsyncStorage.getItem('token');
+    if (!token) {
+      Alert.alert('Error', 'User not authenticated.');
+      return;
+    }
+    const response = await axios.put(
+      `${BASE_URL}/users/user/${username}`,
+      { fat_goal: fatGoal },
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    if (response.status === 200) {
+      Alert.alert('Success', 'Fat goal updated successfully!');
+    } else {
+      Alert.alert('Error', 'Failed to update fat goal.');
+    }
+  } catch (error) {
+    Alert.alert('Error', 'Failed to update fat goal.');
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleUpdateCaloriesGoal = async () => {
     if (!caloriesGoal) {
@@ -226,7 +319,11 @@ const EditUserScreen: React.FC = () => {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
-
+      <ScrollView
+        contentContainerStyle={{ paddingBottom: 40 }}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
       {/* Profile Picture */}
       <Text style={[styles.label, { color: theme.text }]}>Profile Picture</Text>
       {profilePicture ? (
@@ -258,6 +355,57 @@ const EditUserScreen: React.FC = () => {
         onPress={handleUpdateCaloriesGoal}
       >
         <Text style={[styles.saveButtonText, { color: theme.buttonText }]}>Save Calorie Goal</Text>
+      </TouchableOpacity>
+
+      {/* Protein Goal */}
+      <Text style={[styles.label, { color: theme.text }]}>Protein Goal (g)</Text>
+      <TextInput
+        style={[styles.input, { borderColor: theme.border, color: theme.text }]}
+        placeholder="Enter new protein goal"
+        placeholderTextColor={theme.placeholder}
+        value={proteinGoal}
+        onChangeText={setProteinGoal}
+        keyboardType="numeric"
+      />
+      <TouchableOpacity
+        style={[styles.saveButton, { backgroundColor: theme.primary }]}
+        onPress={handleUpdateProteinGoal}
+      >
+        <Text style={[styles.saveButtonText, { color: theme.buttonText }]}>Save Protein Goal</Text>
+      </TouchableOpacity>
+
+      {/* Carbs Goal */}
+      <Text style={[styles.label, { color: theme.text }]}>Carbs Goal (g)</Text>
+      <TextInput
+        style={[styles.input, { borderColor: theme.border, color: theme.text }]}
+        placeholder="Enter new carbs goal"
+        placeholderTextColor={theme.placeholder}
+        value={carbsGoal}
+        onChangeText={setCarbsGoal}
+        keyboardType="numeric"
+      />
+      <TouchableOpacity
+        style={[styles.saveButton, { backgroundColor: theme.primary }]}
+        onPress={handleUpdateCarbsGoal}
+      >
+        <Text style={[styles.saveButtonText, { color: theme.buttonText }]}>Save Carbs Goal</Text>
+      </TouchableOpacity>
+
+      {/* Fat Goal */}
+      <Text style={[styles.label, { color: theme.text }]}>Fat Goal (g)</Text>
+      <TextInput
+        style={[styles.input, { borderColor: theme.border, color: theme.text }]}
+        placeholder="Enter new fat goal"
+        placeholderTextColor={theme.placeholder}
+        value={fatGoal}
+        onChangeText={setFatGoal}
+        keyboardType="numeric"
+      />
+      <TouchableOpacity
+        style={[styles.saveButton, { backgroundColor: theme.primary }]}
+        onPress={handleUpdateFatGoal}
+      >
+        <Text style={[styles.saveButtonText, { color: theme.buttonText }]}>Save Fat Goal</Text>
       </TouchableOpacity>
 
       {/* Dietary Restrictions */}
@@ -319,9 +467,11 @@ const EditUserScreen: React.FC = () => {
       >
         <Text style={[styles.backButtonText, { color: theme.text }]}>Back</Text>
       </TouchableOpacity>
+      </ScrollView>
     </View>
   );
 };
+
 
 const styles = StyleSheet.create({
   container: {

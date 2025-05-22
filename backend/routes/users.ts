@@ -463,11 +463,20 @@ router.post('/login', (req: Request, res: Response) => {
       res.status(500).json({ error: 'An error occurred while resetting the password' });
     }
   });
-  
-  // Update user information
-  router.put('/user/:username', authMiddleware, async (req: Request, res: Response): Promise<void> => {
+
+
+// Update user information
+router.put('/user/:username', authMiddleware, async (req: Request, res: Response): Promise<void> => {
   const { username } = req.params;
-  const { calories_goal, dietary_restrictions, allergies } = req.body; // Include allergies in the request body
+  // Include all goal fields and other updatable fields from the users table
+  const {
+    calories_goal,
+    protein_goal,
+    carbohydrates_goal,
+    fat_goal,
+    dietary_restrictions,
+    allergies
+  } = req.body;
   const user = (req as any).user;
   const db = (req as any).db;
 
@@ -477,7 +486,15 @@ router.post('/login', (req: Request, res: Response) => {
   }
 
   // Only include fields that are allowed to be updated
-  const fields = { calories_goal, dietary_restrictions, allergies }; // Add allergies to the fields
+  const fields = {
+    calories_goal,
+    protein_goal,
+    carbohydrates_goal,
+    fat_goal,
+    dietary_restrictions,
+    allergies
+  };
+
   const { query, values } = buildUpdateQuery(fields);
 
   if (!query) {
