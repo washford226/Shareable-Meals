@@ -5,6 +5,7 @@ import { calculateAndStoreMealNutrition } from './usda_linking';
 
 const upload = multer();
 
+const router = Router();
 const NUTRIENT_IDS = {
   calories: 1008,
   protein: 1003,
@@ -12,18 +13,106 @@ const NUTRIENT_IDS = {
   carbs: 1005,
 };
 
-const router = Router();
+async function findBestFoodMatch(db: any, rawName: string) {
+  const rawWords = rawName.toLowerCase().trim().split(/\s+/).filter(Boolean);
+  if (rawWords.length === 0) return null;
 
-router.post('/meals', authMiddleware, upload.single('picture'), async (req: Request, res: Response): Promise<void> => {
-  const { 
-    name, 
-    description, 
-    ingredients, 
-    visibility, 
-    instructions, 
-    recipeLink,
-    created_by
-  } = req.body;
+  const likeClauses = rawWords.map(() => `f.name LIKE ?`).join(' AND ');
+  const likeParams = rawWords.map(word => `%${word}%`);
+
+  const sql = `
+    SELECT 
+      f.food_id,
+      COUNT(CASE 
+          WHEN fn.amount IS NOT NULL AND fn.nutrient_id IN (?, ?, ?, ?) 
+          THEN 1 END) AS macro_count
+    FROM Foods f
+    JOIN Food_Nutrient fn ON f.food_id = fn.food_id
+    WHERE ${likeClauses}
+    GROUP BY f.food_id
+    ORDER BY macro_count DESC
+    LIMIT 1
+  `;
+
+  const [foodRows]: any[] = await db.query(sql, [
+    NUTRIENT_IDS.calories,
+    NUTRIENT_IDS.protein,
+    NUTRIENT_IDS.fat,
+    NUTRIENT_IDS.carbs,
+    ...likeParams,
+  ]);
+
+  return foodRows.length > 0 ? foodRows[0] : null;
+}
+
+
+// Create an AI-generated meal
+router.post('/meal-ai', authMiddleware, upload.none(), async (req: any, res: any) => {
+  const { name, description, ingredients, instructions } = req.body;
+  const user_id = req.user?.id;
+  const db = (req as any).db;
+
+  if (!user_id) return res.status(401).json({ error: 'User is not authenticated' });
+  if (!name || !description || !ingredients || !instructions) {
+    return res.status(400).json({ error: 'Missing required fields: name, description, ingredients, or instructions' });
+  }
+
+  let parsedIngredients;
+  try {
+    parsedIngredients = typeof ingredients === "string" ? JSON.parse(ingredients) : ingredients;
+    if (!Array.isArray(parsedIngredients) || parsedIngredients.length === 0) throw new Error();
+    parsedIngredients = parsedIngredients.map(ing => ({ ...ing, raw_name: ing.raw_name ?? ing.name }));
+  } catch {
+    return res.status(400).json({ error: 'Ingredients must be a valid JSON array' });
+  }
+
+  try {
+    const [result]: any = await db.query(
+      `INSERT INTO meals (name, description, ingredients, visibility, user_id, instructions, created_by_ai)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [name, description, JSON.stringify(parsedIngredients), false, user_id, instructions, true]
+    );
+
+    const mealId = result.insertId;
+
+    for (const ing of parsedIngredients) {
+      console.log("name: ",ing.name,"quantity: ", ing.quantity,"unit: ", ing.unit);
+      if (!ing.name || !ing.quantity || !ing.unit) continue;
+
+      try {
+        const foodMatch = await findBestFoodMatch(db, ing.raw_name ?? ing.name);
+        if (!foodMatch) {
+          console.warn(`No matching food found for ingredient: ${ing.raw_name}`);
+          continue;
+        }
+
+        const quantityNum = Number(ing.quantity);
+        if (isNaN(quantityNum)) {
+          console.warn(`Invalid quantity for ingredient: ${ing.raw_name}`);
+          continue;
+        }
+        
+        await db.query(
+          `INSERT INTO meal_ingredients (meal_id, food_id, quantity, unit, raw_name) 
+           VALUES (?, ?, ?, ?, ?)`,
+          [mealId, foodMatch.food_id, quantityNum, ing.unit.toLowerCase(), ing.raw_name]
+          
+        );
+      } catch (err) {
+        console.error(`Error inserting ingredient "${ing.raw_name}":`, err);
+      }
+    }
+    await calculateAndStoreMealNutrition(mealId, db);
+
+    res.status(201).json({ message: 'AI-generated meal added successfully' });
+  } catch (err) {
+    console.error('Error adding AI-generated meal:', err);
+    res.status(500).json({ error: 'Error adding AI-generated meal' });
+  }
+});
+
+router.post('/meals', authMiddleware, upload.single('picture'), async (req: any, res: any): Promise<void> => {
+  const { name, description, ingredients, visibility, instructions, recipeLink, created_by } = req.body;
   const user_id = req.user?.id;
   const picture = req.file ? req.file.buffer : null;
   const db = (req as any).db;
@@ -32,121 +121,66 @@ router.post('/meals', authMiddleware, upload.single('picture'), async (req: Requ
     res.status(401).send('User is not authenticated');
     return;
   }
-
   if (!name || !description || !ingredients) {
     res.status(400).send('Missing required fields');
     return;
   }
 
-  let parsedIngredients: { name: string; quantity: string; unit: string; raw_name?: string }[];
+  let parsedIngredients;
   try {
-    parsedIngredients = typeof ingredients === "string" ? JSON.parse(ingredients) : ingredients;
-    if (!Array.isArray(parsedIngredients) || parsedIngredients.length === 0) {
-      throw new Error();
-    }
-
-    parsedIngredients = parsedIngredients.map(ing => ({
-      ...ing,
-      raw_name: ing.raw_name ?? ing.name
-    }));
+    parsedIngredients = typeof ingredients === 'string' ? JSON.parse(ingredients) : ingredients;
+    if (!Array.isArray(parsedIngredients) || parsedIngredients.length === 0) throw new Error();
+    parsedIngredients = parsedIngredients.map(ing => ({ ...ing, raw_name: ing.raw_name ?? ing.name }));
   } catch {
     res.status(400).send('Ingredients must be a valid JSON array');
     return;
   }
 
-  const mealInsertQuery = `
-    INSERT INTO meals (
-      name, 
-      description, 
-      ingredients, 
-      visibility, 
-      user_id, 
-      picture, 
-      instructions, 
-      recipeLink,
-      created_by
-    )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `;
-  const mealValues = [
-    name,
-    description,
-    JSON.stringify(parsedIngredients),
-    visibility ?? true,
-    user_id,
-    picture,
-    instructions,
-    recipeLink,
-    created_by || 'User'
-  ];
-
-  let mealId: number;
   try {
-    const [result]: any = await db.query(mealInsertQuery, mealValues);
-    mealId = result.insertId;
+    const [result]: any = await db.query(
+      `INSERT INTO meals (name, description, ingredients, visibility, user_id, picture, instructions, recipeLink, created_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [name, description, JSON.stringify(parsedIngredients), visibility ?? true, user_id, picture, instructions, recipeLink, created_by || 'User']
+    );
+
+    const mealId = result.insertId;
+
+    for (const ing of parsedIngredients) {
+      console.log(ing.name, ing.quantity, ing.unit);
+      if (!ing.name || !ing.quantity || !ing.unit) continue;
+
+      try {
+        const foodMatch = await findBestFoodMatch(db, ing.raw_name ?? ing.name);
+        if (!foodMatch) {
+          console.warn(`No matching food found for ingredient: ${ing.raw_name}`);
+          continue;
+        }
+
+        const quantityNum = Number(ing.quantity);
+        if (isNaN(quantityNum)) {
+          console.warn(`Invalid quantity for ingredient: ${ing.raw_name}`);
+          continue;
+        }
+        console.log(mealId, foodMatch.food_id, quantityNum, ing.unit.toLowerCase(), ing.raw_name);
+        await db.query(
+          `INSERT INTO meal_ingredients (meal_id, food_id, quantity, unit, raw_name) 
+           VALUES (?, ?, ?, ?, ?)`,
+          [mealId, foodMatch.food_id, quantityNum, ing.unit.toLowerCase(), ing.raw_name]
+        );
+      } catch (err) {
+        console.error(`Error inserting ingredient "${ing.raw_name}":`, err);
+      }
+    }
+
+    await calculateAndStoreMealNutrition(mealId, db);
+
+    res.status(201).send('Meal added successfully');
   } catch (err) {
     console.error('Error adding meal:', err);
     res.status(500).send('Error adding meal');
-    return;
   }
-
-  // Insert each ingredient into meal_ingredients with best matching food_id
-  for (const ing of parsedIngredients) {
-    if (!ing.name || !ing.quantity || !ing.unit) continue;
-
-    try {
-      const rawWords = (ing.raw_name ?? ing.name ?? '').toLowerCase().trim().split(/\s+/);
-      const likeClauses = rawWords.map(() => `f.name LIKE ?`).join(' AND ');
-      const likeParams = rawWords.map(word => `%${word}%`);
-
-      const sql = `
-        SELECT 
-          f.food_id,
-          COUNT(CASE 
-              WHEN fn.amount IS NOT NULL AND fn.nutrient_id IN (?, ?, ?, ?) 
-              THEN 1 END) AS macro_count
-        FROM Foods f
-        JOIN Food_Nutrient fn ON f.food_id = fn.food_id
-        WHERE ${likeClauses}
-        GROUP BY f.food_id
-        ORDER BY macro_count DESC
-        LIMIT 1
-      `;
-
-      const [foodRows]: any[] = await db.query(sql, [
-        NUTRIENT_IDS.calories,
-        NUTRIENT_IDS.protein,
-        NUTRIENT_IDS.fat,
-        NUTRIENT_IDS.carbs,
-        ...likeParams
-      ]);
-
-      if (foodRows.length === 0) {
-        console.warn(`No matching food found for ingredient: ${ing.raw_name}`);
-        continue;
-      }
-
-      const foodId = foodRows[0].food_id;
-
-      await db.query(
-        `INSERT INTO meal_ingredients (meal_id, food_id, quantity, unit, raw_name) 
-         VALUES (?, ?, ?, ?, ?)`,
-        [mealId, foodId, Number(ing.quantity), ing.unit, ing.raw_name]
-      );
-    } catch (err) {
-      console.error(`Error inserting meal ingredient "${ing.raw_name}":`, err);
-      continue;
-    }
-  }
-
-  try {
-    await calculateAndStoreMealNutrition(mealId, db);
-  } catch (err) {
-    console.error('Error calculating nutrition:', err);
-  }
-
-  res.status(201).send('Meal added successfully');
 });
+
 
 // Upload/update a meal image
 router.put('/meals/:meal_id/image', authMiddleware, upload.single('picture'), async (req: Request, res: Response): Promise<void> => {
@@ -657,53 +691,6 @@ router.put('/meals/:meal_id/image', authMiddleware, upload.single('picture'), as
       res.status(500).send('Error deleting meal');
     }
   });
-
-// Create an AI-generated meal
-router.post('/meal-ai', authMiddleware, upload.none(), async (req: Request, res: Response): Promise<void> => {
-  const { name, description, ingredients, instructions } = req.body;
-  const user_id = req.user?.id;
-  const db = (req as any).db;
-
-  if (!user_id) {
-    res.status(401).json({ error: 'User is not authenticated' });
-    return;
-  }
-
-  if (!name || !description || !ingredients || !instructions) {
-    res.status(400).json({ error: 'Missing required fields: name, description, ingredients, or instructions' });
-    return;
-  }
-
-  try {
-    const query = `
-      INSERT INTO meals (
-        name, 
-        description, 
-        ingredients, 
-        visibility, 
-        user_id, 
-        instructions, 
-        created_by_ai
-      )
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `;
-    const values = [
-      name,
-      description,
-      typeof ingredients === 'string' ? ingredients : JSON.stringify(ingredients),
-      false, // Default visibility to false
-      user_id,
-      instructions,
-      true, // Mark as AI-generated
-    ];
-
-    await db.query(query, values);
-    res.status(201).json({ message: 'AI-generated meal added successfully' });
-  } catch (err) {
-    console.error('Error adding AI-generated meal:', err);
-    res.status(500).json({ error: 'Error adding AI-generated meal' });
-  }
-});
 
 router.put('/meals/:meal_id/favorite', authMiddleware, async (req: Request, res: Response): Promise<void> => {
   const { meal_id } = req.params; // Extract the meal ID from the URL

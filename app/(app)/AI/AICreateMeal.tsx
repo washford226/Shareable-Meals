@@ -38,6 +38,31 @@ const AICreateMeal = () => {
   const [usePantry, setUsePantry] = useState(false); // State for pantry checkbox
   const [fetchingRestrictions, setFetchingRestrictions] = useState(true);
 
+  // Add this helper function above your component
+function parseAIIngredients(ingredientText: string) {
+  return ingredientText
+    .split(/\r?\n|,/)
+    .map(line => line.replace(/^\*\s*/, '').trim())
+    .filter(line =>
+      // Only keep lines that start with a number or fraction (optionally after a bullet/asterisk)
+      /^(\*?\s*)?([\d¼½¾⅓⅔⅛⅜⅝⅞\/\.]+)\s+[a-zA-Z]+/.test(line)
+    )
+    .map(line => {
+      // Match: [optional bullet] [quantity] [unit] [name]
+      const match = line.match(/^(\*?\s*)?([\d¼½¾⅓⅔⅛⅜⅝⅞\/\.]+)\s+([a-zA-Z]+)\s+(.+)$/);
+      if (match) {
+        return {
+          quantity: match[2],
+          unit: match[3],
+          name: match[4],
+          raw_name: match[4],
+        };
+      }
+      // Fallback: treat whole line as name
+      return { quantity: "1", unit: "", name: line, raw_name: line };
+    });
+}
+
   // Fetch dietary restrictions and user ID from the backend
   useEffect(() => {
     const fetchDietaryRestrictions = async () => {
@@ -74,47 +99,55 @@ const AICreateMeal = () => {
 
   
 
-  const handleSaveMeal = async () => {
-  if (!generatedMeal.name || !generatedMeal.description || !generatedMeal.ingredients || !generatedMeal.instructions) {
+ const handleSaveMeal = async () => {
+  if (
+    !generatedMeal.name ||
+    !generatedMeal.description ||
+    !generatedMeal.ingredients ||
+    !generatedMeal.instructions
+  ) {
     Alert.alert("Error", "Please ensure all fields are filled before saving.");
     return;
   }
 
   try {
-    const token = await AsyncStorage.getItem("token"); // Retrieve the token
+    const token = await AsyncStorage.getItem("token");
     if (!token) {
       Alert.alert("Error", "User not authenticated. Please log in.");
       return;
     }
 
-    const formData = new FormData();
-    formData.append("name", generatedMeal.name);
-    formData.append("description", generatedMeal.description);
-    formData.append(
-      "ingredients",
-      JSON.stringify(generatedMeal.ingredients.split(",").map((ingredient) => ingredient.trim()))
-    );
-    formData.append("instructions", generatedMeal.instructions);
-    
+    // Use the robust parser for AI-generated ingredients
+    const ingredientObjects = parseAIIngredients(generatedMeal.ingredients);
+
+    const payload = {
+      name: generatedMeal.name,
+      description: generatedMeal.description,
+      ingredients: ingredientObjects,
+      instructions: generatedMeal.instructions,
+    };
+
     const response = await fetch(`${BASE_URL}/meal/meal-ai`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-        body: formData,
-      });
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
+    });
 
-      if (!response.ok) {
-        throw new Error("Failed to add meal to the database.");
-      }
-
-      Alert.alert("Success", "Meal added successfully!");
-      router.push("/(app)/my-meals/meals"); // Navigate to the meals screen
-    } catch (error) {
-      console.error("Error adding meal:", error);
-      Alert.alert("Error", "Failed to add the meal to the database.");
+    if (!response.ok) {
+      throw new Error("Failed to add meal to the database.");
     }
-  };
+
+    Alert.alert("Success", "Meal added successfully!");
+    router.push("/(app)/my-meals/meals");
+  } catch (error) {
+    console.error("Error adding meal:", error);
+    Alert.alert("Error", "Failed to add the meal to the database.");
+  }
+};
+
 
   const handleGenerateMeal = async () => {
     if (!prompt.trim()) {

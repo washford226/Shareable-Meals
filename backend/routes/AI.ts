@@ -122,28 +122,36 @@ function parseMealResponse(rawText: string) {
 
   const nameMatch = rawText.match(/- Name:\s*(.+)/i);
   const descriptionMatch = rawText.match(/- Description:\s*(.+)/i);
-  const ingredientsMatch = rawText.match(/- Ingredients:\s*([\s\S]*?)(?=- Instructions:|$)/i); // Capture all ingredients until the next section
-  const instructionsMatch = rawText.match(/- Instructions:\s*([\s\S]*)/i); // Capture all instructions, including multiline
+  const ingredientsMatch = rawText.match(/- Ingredients:\s*([\s\S]*?)(?=- Instructions:|$)/i);
+  const instructionsMatch = rawText.match(/- Instructions:\s*([\s\S]*)/i);
 
   meal.name = nameMatch ? nameMatch[1].trim() : undefined;
   meal.description = descriptionMatch ? descriptionMatch[1].trim() : undefined;
 
-  // Process ingredients to ensure they are separated by commas
+  // Process ingredients to ensure they are separated by commas and only use the first name before "or"
   if (ingredientsMatch) {
     const ingredients = ingredientsMatch[1]
-      .split(/\n|,/g) // Split by newlines or commas
-      .map((item) => item.trim()) // Trim whitespace
-      .filter((item) => item); // Remove empty items
-    meal.ingredients = ingredients.join(", "); // Join ingredients with commas
+      .split(/\n|,/g)
+      .map((item) => {
+        let cleaned = item.trim();
+        // If the ingredient contains " or ", only keep the first option
+        if (/ or /i.test(cleaned)) {
+          cleaned = cleaned.split(/ or /i)[0].trim();
+        }
+        // Remove leading bullets or asterisks
+        cleaned = cleaned.replace(/^[\*\-\d\.\s]+/, "");
+        return cleaned;
+      })
+      .filter((item) => item);
+    meal.ingredients = ingredients.join(", ");
   }
 
-  // Process instructions to ensure they are properly formatted
   if (instructionsMatch) {
     const instructions = instructionsMatch[1]
-      .split(/\n/g) // Split by newlines
-      .map((step) => step.trim()) // Trim whitespace
-      .filter((step) => step); // Remove empty steps
-    meal.instructions = instructions.join("\n"); // Join instructions with newlines
+      .split(/\n/g)
+      .map((step) => step.trim())
+      .filter((step) => step);
+    meal.instructions = instructions.join("\n");
   }
 
   return meal;

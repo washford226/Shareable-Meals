@@ -8,9 +8,51 @@ import authMiddleware from '../authMiddleware';
 import crypto from 'crypto';
 import { Request, Response } from 'express';
 import axios from 'axios';
+import { calculateAndStoreMealNutrition } from './usda_linking';
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage() });
+
+async function findBestFoodMatch(db: any, rawName: string) {
+  const rawWords = rawName.toLowerCase().trim().split(/\s+/).filter(Boolean);
+  if (rawWords.length === 0) return null;
+
+  const likeClauses = rawWords.map(() => `f.name LIKE ?`).join(' AND ');
+  const likeParams = rawWords.map(word => `%${word}%`);
+
+  const sql = `
+    SELECT 
+      f.food_id,
+      COUNT(CASE 
+          WHEN fn.amount IS NOT NULL AND fn.nutrient_id IN (?, ?, ?, ?) 
+          THEN 1 END) AS macro_count
+    FROM Foods f
+    JOIN Food_Nutrient fn ON f.food_id = fn.food_id
+    WHERE ${likeClauses}
+    GROUP BY f.food_id
+    ORDER BY macro_count DESC
+    LIMIT 1
+  `;
+
+  const [rows]: any[] = await db.query(sql, [
+    NUTRIENT_IDS.calories,
+    NUTRIENT_IDS.protein,
+    NUTRIENT_IDS.fat,
+    NUTRIENT_IDS.carbs,
+    ...likeParams
+  ]);
+
+  return rows.length > 0 ? rows[0] : null;
+}
+
+
+// Nutrient IDs for calories, protein, fat, and carbs (update these IDs as per your database schema)
+const NUTRIENT_IDS = {
+  calories: 1008, 
+  protein: 1003,  
+  fat: 1004,   
+  carbs: 1005  
+};
 
 interface User {
   id: number;
@@ -25,6 +67,30 @@ interface User {
 router.get('/', (req, res) => {
     res.send('Meal endpoint');
 });
+
+function parseAIIngredientLine(line: string) {
+  let cleaned = line.replace(/^[\*\-\d\.\s]+/, '').trim();
+  if (/ or /i.test(cleaned)) {
+    cleaned = cleaned.split(/ or /i)[0].trim();
+  }
+  cleaned = cleaned.replace(/\(.*?\)/g, '').trim();
+  if (/for the|optional|instructions?/i.test(cleaned)) {
+    return null;
+  }
+  const match = cleaned.match(/^([\d¼½¾⅓⅔⅛⅜⅝⅞\/\.]+)\s+([a-zA-Z]+)\s+(.+)$/);
+  if (match) {
+    // If quantity is missing or not a number, default to 1
+    const quantity = !isNaN(Number(match[1])) ? match[1] : "1";
+    return {
+      quantity,
+      unit: match[2],
+      name: match[3],
+      raw_name: match[3],
+    };
+  }
+  // Fallback: treat whole line as name, quantity 1
+  return { quantity: "1", unit: "", name: cleaned, raw_name: cleaned };
+}
 
 // Function to generate AI meals
 const generateAIMeals = async (dietary_restrictions?: string, allergies?: string): Promise<any[]> => {
@@ -194,31 +260,66 @@ router.post('/signup', upload.single('profile_picture'), async (req: Request, re
     const aiMeals = await generateAIMeals(dietary_restrictions, allergies);
 
     // Insert AI-generated meals into the database
-const mealQuery = `
-  INSERT INTO meals (name, description, ingredients, visibility, user_id, instructions)
-  VALUES (?, ?, ?, ?, ?, ?)
-`;
+    for (const meal of aiMeals) {
+      // Parse ingredients from string array to object array with quantity/unit placeholders
+      interface ParsedIngredient {
+        quantity: string;
+        unit: string;
+        name: string;
+        raw_name: string;
+      }
 
-for (const meal of aiMeals) {
-  // Ensure instructions are joined into a single string
-  const formattedInstructions = Array.isArray(meal.instructions)
-    ? meal.instructions.join("\n") // Join instructions with newlines
-    : meal.instructions;
+      const parsedIngredients: ParsedIngredient[] = meal.ingredients
+      .map((ingText: string) => parseAIIngredientLine(ingText))
+      .filter((ing: ParsedIngredient | null): ing is ParsedIngredient =>
+        !!ing && typeof ing.name === 'string' && ing.name.length > 0 && !isNaN(Number(ing.quantity)) ? true : false
+      );
 
-  // Ensure ingredients are joined into a single string
-  const formattedIngredients = Array.isArray(meal.ingredients)
-    ? meal.ingredients.join(", ") // Join ingredients with commas
-    : meal.ingredients;
+      const ingredientsJson = JSON.stringify(parsedIngredients);
 
-  await db.query(mealQuery, [
-    meal.name,
-    meal.description,
-    formattedIngredients,
-    0, // Visibility set to private by default
-    userId,
-    formattedInstructions,
-  ]);
-}
+      const mealInsertQuery = `
+        INSERT INTO meals (name, description, ingredients, visibility, user_id, instructions)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `;
+
+      const [mealResult]: any = await db.query(mealInsertQuery, [
+        meal.name,
+        meal.description,
+        ingredientsJson,
+        0, // private by default
+        userId,
+        Array.isArray(meal.instructions) ? meal.instructions.join('\n') : meal.instructions
+      ]);
+      const mealId = mealResult.insertId;
+
+      // Insert each ingredient into meal_ingredients with best matching food_id
+      for (const ing of parsedIngredients) {
+        console.log("name", ing.name, "quantity", ing.quantity, "unit", ing.unit);
+        if (!ing.name || !ing.quantity || !ing.unit) continue;
+
+        try {
+          const bestMatch = await findBestFoodMatch(db, ing.raw_name ?? ing.name ?? '');
+          if (!bestMatch) {
+            console.warn(`No matching food found for ingredient: ${ing.raw_name}`);
+            continue;
+          }
+
+          const foodId = bestMatch.food_id;
+
+          await db.query(
+            `INSERT INTO meal_ingredients (meal_id, food_id, quantity, unit, raw_name) 
+             VALUES (?, ?, ?, ?, ?)`,
+            [mealId, foodId, Number(ing.quantity), ing.unit, ing.raw_name]
+          );
+        } catch (err) {
+          console.error(`Error inserting meal ingredient "${ing.raw_name}":`, err);
+          continue;
+        }
+      }
+
+      // Calculate nutrition for this meal after ingredients inserted
+      await calculateAndStoreMealNutrition(mealId, db);
+    }
 
     res.status(200).send('User signed up successfully with AI-generated meals added');
   } catch (err) {
@@ -226,6 +327,7 @@ for (const meal of aiMeals) {
     res.status(500).send('Error during signup');
   }
 });
+
   
 // Login user
 router.post('/login', (req: Request, res: Response) => {
@@ -361,11 +463,20 @@ router.post('/login', (req: Request, res: Response) => {
       res.status(500).json({ error: 'An error occurred while resetting the password' });
     }
   });
-  
-  // Update user information
-  router.put('/user/:username', authMiddleware, async (req: Request, res: Response): Promise<void> => {
+
+
+// Update user information
+router.put('/user/:username', authMiddleware, async (req: Request, res: Response): Promise<void> => {
   const { username } = req.params;
-  const { calories_goal, dietary_restrictions, allergies } = req.body; // Include allergies in the request body
+  // Include all goal fields and other updatable fields from the users table
+  const {
+    calories_goal,
+    protein_goal,
+    carbohydrates_goal,
+    fat_goal,
+    dietary_restrictions,
+    allergies
+  } = req.body;
   const user = (req as any).user;
   const db = (req as any).db;
 
@@ -375,7 +486,15 @@ router.post('/login', (req: Request, res: Response) => {
   }
 
   // Only include fields that are allowed to be updated
-  const fields = { calories_goal, dietary_restrictions, allergies }; // Add allergies to the fields
+  const fields = {
+    calories_goal,
+    protein_goal,
+    carbohydrates_goal,
+    fat_goal,
+    dietary_restrictions,
+    allergies
+  };
+
   const { query, values } = buildUpdateQuery(fields);
 
   if (!query) {

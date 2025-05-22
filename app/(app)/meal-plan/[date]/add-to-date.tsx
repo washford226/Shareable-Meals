@@ -66,7 +66,7 @@ const AddMealToDate = () => {
 
       Alert.alert("Success", "Meal added to your plan.");
       setIsModalVisible(false);
-      router.back();
+      router.push("/(app)/meal-plan/calendar");
     } catch (error) {
       console.error("Add meal error:", error);
       Alert.alert("Error", "Could not add meal.");

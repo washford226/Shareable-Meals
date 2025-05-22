@@ -2,14 +2,77 @@ import React, { useState } from "react";
 import { View, Text, TextInput, TouchableOpacity, Alert, StyleSheet, ScrollView, Platform } from "react-native";
 import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useRouter } from "expo-router"; // Import useRouter
+import { useRouter } from "expo-router";
 
 // Dynamically set the BASE_URL based on the platform
 const BASE_URL =
   Platform.OS === "android" ? "http://10.0.2.2:5000" : "http://localhost:5000";
 
+// Robust ingredient parser
+function normalizeFractions(input: string): string {
+  // Convert "/2" to "1/2", etc.
+  return input.replace(/(^|\s)(\/\d+)/g, (_, prefix, fraction) => `${prefix}1${fraction}`);
+}
+
+function parseIngredientLine(line: string) {
+  if (!line || typeof line !== 'string') return null;
+
+  let cleaned = line.trim();
+
+  // Skip lines like "81 14143 1 onion med"
+  if (/^\d+\s+\d+\s+\d+/.test(cleaned)) return null;
+
+  // Normalize fractions
+  cleaned = normalizeFractions(cleaned);
+
+  // Remove leading asterisks, dashes, or bullet characters
+  cleaned = cleaned.replace(/^[\*\-\d\.\s\/]+/, '').trim();
+
+  // Fix common ordering like "tsp olive 1 oil" → "1 tsp olive oil"
+  const misorderedMatch = cleaned.match(/^([a-zA-Z]+)\s+(.+?)\s+([\d¼½¾⅓⅔⅛⅜⅝⅞\/\.]+)$/);
+  if (misorderedMatch) {
+    const [, unit, name, quantity] = misorderedMatch;
+    return {
+      quantity: quantity,
+      unit: unit,
+      name: name,
+      raw_name: name,
+    };
+  }
+
+  // Match normal pattern: quantity + unit + name
+  const match = cleaned.match(/^([\d¼½¾⅓⅔⅛⅜⅝⅞\/\.]+)\s+([a-zA-Z]+)\s+(.+)$/);
+  if (match) {
+    const [, quantity, unit, name] = match;
+    return {
+      quantity: quantity,
+      unit: unit,
+      name: name,
+      raw_name: name,
+    };
+  }
+
+  // Match simple name-only fallback (e.g., "garlic")
+  const fallbackMatch = cleaned.match(/^(.+)$/);
+  if (fallbackMatch) {
+    const name = fallbackMatch[1].trim();
+    if (name.split(" ").length < 2 || ['tsp', 'tbsp', 'cup', 'large', 'med', 'small'].includes(name.toLowerCase())) {
+      return null; // likely a malformed line
+    }
+    return {
+      quantity: "1",
+      unit: "",
+      name: name,
+      raw_name: name,
+    };
+  }
+
+  return null;
+}
+
+
 const URLCreateMealScreen: React.FC = () => {
-  const router = useRouter(); // Initialize the router
+  const router = useRouter();
   const [recipeUrl, setRecipeUrl] = useState<string>("");
   const [mealName, setMealName] = useState<string>("");
   const [description, setDescription] = useState<string>("");
@@ -32,7 +95,12 @@ const URLCreateMealScreen: React.FC = () => {
         const { name, description, ingredients, instructions } = response.data;
         setMealName(name || "");
         setDescription(description || "");
-        setIngredients(ingredients.join(", ") || "");
+        // Accept both array and string for ingredients
+        if (Array.isArray(ingredients)) {
+          setIngredients(ingredients.join(", "));
+        } else {
+          setIngredients(ingredients || "");
+        }
         setInstructions(instructions || "");
         Alert.alert("Success", "Recipe data fetched successfully!");
       } else {
@@ -54,22 +122,25 @@ const URLCreateMealScreen: React.FC = () => {
 
     try {
       setSaving(true);
-      const token = await AsyncStorage.getItem("token"); // Retrieve the token
+      const token = await AsyncStorage.getItem("token");
       if (!token) {
         Alert.alert("Error", "User not authenticated. Please log in.");
         return;
       }
 
+      // Parse ingredients into objects for backend macro calculation
+      const ingredientObjects = ingredients
+        .split(/\r?\n|,/)
+        .map((ingredient) => parseIngredientLine(ingredient.trim()))
+        .filter((ing) => ing && ing.name && ing.name.length > 0);
+
       const formData = new FormData();
       formData.append("name", mealName);
       formData.append("description", description);
-      formData.append(
-        "ingredients",
-        JSON.stringify(ingredients.split(",").map((ingredient) => ingredient.trim()))
-      );
+      formData.append("ingredients", JSON.stringify(ingredientObjects));
       formData.append("instructions", instructions);
-      formData.append("recipeLink", recipeUrl); // Add the recipe URL as recipeLink
-      formData.append("created_by", recipeUrl); // Use the entered URL as the created_by value
+      formData.append("recipeLink", recipeUrl);
+      formData.append("created_by", recipeUrl);
 
       const response = await fetch(`${BASE_URL}/meal/meals`, {
         method: "POST",
@@ -86,7 +157,7 @@ const URLCreateMealScreen: React.FC = () => {
       Alert.alert("Success", "Meal added successfully!", [
         {
           text: "OK",
-          onPress: () => router.push("./meals"), // Navigate back to the previous screen
+          onPress: () => router.push("./meals"),
         },
       ]);
     } catch (error) {
@@ -138,7 +209,7 @@ const URLCreateMealScreen: React.FC = () => {
       />
 
       {/* Ingredients */}
-      <Text style={styles.label}>Ingredients (comma-separated)</Text>
+      <Text style={styles.label}>Ingredients (comma or newline separated)</Text>
       <TextInput
         style={styles.input}
         placeholder="Ingredients"

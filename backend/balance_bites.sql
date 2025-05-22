@@ -13,7 +13,10 @@ CREATE TABLE IF NOT EXISTS users (
     password VARCHAR(255) NOT NULL,
     email VARCHAR(100) NOT NULL UNIQUE,
     profile_picture BLOB,
-    calories_goal INT,
+    calories_goal INT DEFAULT 2000,
+    protein_goal INT DEFAULT 80,
+    carbohydrates_goal INT DEFAULT 300,
+    fat_goal INT DEFAULT 60,
     dietary_restrictions VARCHAR(255),
     allergies VARCHAR(255),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
