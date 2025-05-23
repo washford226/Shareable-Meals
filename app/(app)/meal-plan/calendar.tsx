@@ -8,7 +8,7 @@ import {
   Platform,
   ScrollView,
   Modal,
-} from "react-native";
+  Image } from "react-native";
 import { format, startOfWeek, addDays } from "date-fns";
 import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -16,8 +16,11 @@ import { useRouter } from "expo-router";
 import { Meal } from "../../../types/types";
 import { useTheme } from "../../../context/ThemeContext";
 import  BottomNav from "../../../components/bottomNav"; //B may be uppercase maybe
+import { Dimensions } from "react-native";
 
 const BASE_URL = Platform.OS === "android" ? "http://10.0.2.2:5000" : "http://localhost:5000";
+const SCREEN_WIDTH = Dimensions.get("window").width;
+const SCREEN_HEIGHT = Dimensions.get("window").height;
 
 const MealPlanCalendar: React.FC = () => {
   const router = useRouter();
@@ -39,7 +42,7 @@ const MealPlanCalendar: React.FC = () => {
         return [];
       }
 
-      const response = await axios.get(`${BASE_URL}/meal-plan`, {
+      const response = await axios.get(`${BASE_URL}/mealplan/meal-plan`, {
         params: { date },
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -70,7 +73,7 @@ const MealPlanCalendar: React.FC = () => {
         return;
       }
 
-      await axios.delete(`${BASE_URL}/meal-plan-clear`, {
+      await axios.delete(`${BASE_URL}/mealplan/meal-plan-clear`, {
         headers: { Authorization: `Bearer ${token}` },
         data: { date },
       });
@@ -96,12 +99,27 @@ const MealPlanCalendar: React.FC = () => {
       (today.getTime() - startOfWeek(today, { weekStartsOn: 0 }).getTime()) /
         (1000 * 60 * 60 * 24)
     );
-    scrollViewRef.current?.scrollTo({ x: todayIndex * 166, animated: true });
+    const dayWidth = SCREEN_WIDTH * 0.95 + 16; // Width of the day container + marginRight
+    scrollViewRef.current?.scrollTo({ x: todayIndex * dayWidth, animated: true });
   }, []);
 
   const handleDatePress = (date: string) => {
     setSelectedDate(date);
     setIsModalVisible(true);
+  };
+
+  const calculateNutritionTotals = (mealsForDay: Meal[]) => {
+    return mealsForDay.reduce(
+      (totals, meal) => {
+        return {
+          calories: totals.calories + (meal.calories || 0),
+          protein: totals.protein + (meal.protein || 0),
+          carbs: totals.carbs + (meal.carbohydrates || 0),
+          fat: totals.fat + (meal.fat || 0),
+        };
+      },
+      { calories: 0, protein: 0, carbs: 0, fat: 0 }
+    );
   };
 
   const handleAddMeal = () => {
@@ -123,7 +141,7 @@ const MealPlanCalendar: React.FC = () => {
   };
 
   const handleMealSelect = (meal: Meal) => {
-    router.push(`/my-meals/${meal.id}/info`);
+    router.push(`/(app)/meal-plan/${meal.meal_plan_id}/details`);
 
   };
 
@@ -134,17 +152,15 @@ const MealPlanCalendar: React.FC = () => {
 
   return (
     <View style={[styles.outerContainer, { backgroundColor: theme.background }]}>
-      <View style={styles.createMealButtonContainer}>
-        <TouchableOpacity
-          style={[styles.createMealButton, { backgroundColor: theme.primary }]}
-          onPress={() => router.push("/my-meals/create")}
-        >
-          <Text style={[styles.createMealButtonText, { color: theme.buttonText }]}>
-            Create Meal
-          </Text>
-        </TouchableOpacity>
-      </View>
-
+      {/* Pantry Button */}
+      <View style={styles.headerContainer}>
+      <TouchableOpacity
+        style={[styles.pantryButton, { backgroundColor: theme.primary }]}
+        onPress={() => router.push("/pantry/pantry")} // Navigate to the Pantry screen
+      >
+        <Text style={[styles.pantryButtonText, { color: theme.buttonText }]}>Pantry</Text>
+      </TouchableOpacity>
+    </View>
       <ScrollView horizontal style={styles.scrollView} ref={scrollViewRef}>
         <View style={styles.container}>
           {Array.from({ length: daysToShow }).map((_, i) => {
@@ -166,6 +182,7 @@ const MealPlanCalendar: React.FC = () => {
                   </Text>
                 </TouchableOpacity>
                 <View style={styles.mealsContainer}>
+                  <ScrollView>
                   {meals[dateString]?.length > 0 ? (
                     meals[dateString].map((meal, index) => (
                       <TouchableOpacity
@@ -176,9 +193,24 @@ const MealPlanCalendar: React.FC = () => {
                         ]}
                         onPress={() => handleMealSelect(meal)}
                       >
-                        <Text style={[styles.mealText, { color: theme.mealText }]}>
-                          {meal.name}
-                        </Text>
+                        <View style={styles.mealContent}>
+                          {/* Display the meal picture */}
+                          {meal.picture && typeof meal.picture === "string" ? (
+                            <Image source={{ uri: meal.picture }} style={styles.mealPicture} />
+                          ) : (
+                            <View style={styles.mealPicturePlaceholder}>
+                              <Text style={styles.mealPicturePlaceholderText}>No Image</Text>
+                            </View>
+                          )}
+
+                          {/* Display the meal name and description */}
+                          <View style={styles.mealTextContainer}>
+                            <Text style={[styles.mealText, { color: theme.mealText }]}>{meal.name}</Text>
+                            <Text style={[styles.mealDescription, { color: theme.subtext }]}>
+                              {meal.description}
+                            </Text>
+                          </View>
+                        </View>
                       </TouchableOpacity>
                     ))
                   ) : (
@@ -186,7 +218,49 @@ const MealPlanCalendar: React.FC = () => {
                       No meals for this day
                     </Text>
                   )}
+                  </ScrollView>
                 </View>
+                {/* Nutrition Block - always visible */}
+                <TouchableOpacity
+                  style={[styles.nutritionBlock, { backgroundColor: theme.card }]}
+                  activeOpacity={0.8}
+                  onPress={() => router.push({ pathname: "/(app)/meal-plan/[date]/daynutrition", params: { date: dateString } })}
+                >
+                  {(() => {
+                    const totals = meals[dateString]?.length > 0
+                      ? calculateNutritionTotals(meals[dateString])
+                      : { calories: 0, protein: 0, carbs: 0, fat: 0 };
+                    return (
+                      <>
+                        <Text style={[styles.nutritionTitle, { color: theme.text }]}>Nutrition Facts</Text>
+                        <View style={styles.nutritionRow}>
+                          <View style={styles.nutritionColumn}>
+                            <Text style={[styles.nutritionLabel, { color: theme.text }]}>Calories</Text>
+                            <Text style={[styles.nutritionValue, { color: theme.text }]}>{totals.calories} kcal</Text>
+                          </View>
+                          <View style={styles.nutritionColumn}>
+                            <Text style={[styles.nutritionLabel, { color: theme.text }]}>Protein</Text>
+                            <Text style={[styles.nutritionValue, { color: theme.text }]}>{totals.protein} g</Text>
+                          </View>
+                          <View style={styles.nutritionColumn}>
+                            <Text style={[styles.nutritionLabel, { color: theme.text }]}>Carbs</Text>
+                            <Text style={[styles.nutritionValue, { color: theme.text }]}>{totals.carbs} g</Text>
+                          </View>
+                          <View style={styles.nutritionColumn}>
+                            <Text style={[styles.nutritionLabel, { color: theme.text }]}>Fat</Text>
+                            <Text style={[styles.nutritionValue, { color: theme.text }]}>{totals.fat} g</Text>
+                          </View>
+                        </View>
+                        {meals[dateString]?.length === 0 && (
+                          <Text style={[styles.noMealText, { color: theme.subtext, marginTop: 8 }]}>
+                            No meals for this day
+                          </Text>
+                        )}
+                      </>
+                    );
+                  })()}
+                </TouchableOpacity>
+              
               </View>
             );
           })}
@@ -239,24 +313,136 @@ const MealPlanCalendar: React.FC = () => {
 };
 
 const styles = StyleSheet.create({
-  outerContainer: { flex: 1 },
-  createMealButtonContainer: { alignItems: "center", marginVertical: 16 },
-  createMealButton: { padding: 12, borderRadius: 8 },
-  createMealButtonText: { fontSize: 16, fontWeight: "bold" },
-  scrollView: { flex: 1 },
-  container: { flexDirection: "row", padding: 16 },
+  outerContainer: { 
+    flex: 1 
+  },
+  headerContainer: {
+  flexDirection: "row",
+  justifyContent: "flex-end", // Align the pantry button to the right
+  padding: 16,
+},
+pantryButton: {
+  padding: 12,
+  borderRadius: 8,
+},
+pantryButtonText: {
+  fontSize: 16,
+  fontWeight: "bold",
+},
+  nutritionBlock: {
+    position: "absolute", // Make the block absolute
+    bottom: 0, // Anchor it to the bottom of the container
+    left: 0, // Align it to the left
+    right: 0, // Align it to the right
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#ccc",
+  },
+  nutritionRow: {
+    flexDirection: "row", // Arrange columns horizontally
+    justifyContent: "space-between", // Space out the columns evenly
+  },
+  nutritionColumn: {
+    alignItems: "center", // Center the text in each column
+    flex: 1, // Ensure equal width for each column
+  },
+  nutritionLabel: {
+    fontSize: 14,
+    fontWeight: "bold",
+    marginBottom: 4, // Add spacing between the label and the value
+  },
+  nutritionValue: {
+    fontSize: 16,
+    fontWeight: "bold",
+  },
+  nutritionTitle: {
+  fontSize: 16,
+  fontWeight: "bold",
+  textAlign: "center",
+  marginBottom: 8, // Add spacing between the title and the nutrition rows
+},
+  createMealButtonContainer: { 
+    alignItems: "center", 
+    marginVertical: 16 
+  },
+  createMealButton: { 
+    padding: 12, 
+    borderRadius: 8 
+  },
+  createMealButtonText: { 
+    fontSize: 16, 
+    fontWeight: "bold" 
+  },
+  mealContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: 8,
+  },
+  scrollView: { 
+    flex: 1 
+  },
+  container: { 
+    flexDirection: "row", 
+    padding: 16 
+  },
+  mealPicture: {
+    width: 150,
+    height: 150,
+    borderRadius: 8,
+    resizeMode: "cover",
+    marginLeft: 3,
+  },
+  mealPicturePlaceholder: {
+    width: 150,
+    height: 150,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#ccc",
+    borderRadius: 8,
+    marginLeft: 3,
+  },
+  mealPicturePlaceholderText: {
+    fontSize: 12,
+    color: "#666",
+    textAlign: "center",
+  },
   dayContainer: {
-    width: 200,
+    width: SCREEN_WIDTH * 0.95,
     marginRight: 16,
     padding: 8,
     borderWidth: 1,
     borderRadius: 8,
+    height: SCREEN_HEIGHT * 0.8,
   },
-  dateLabel: { fontSize: 16, fontWeight: "bold", marginBottom: 8, textAlign: "center" },
-  mealsContainer: { marginTop: 8 },
-  mealButton: { padding: 12, borderRadius: 8, marginBottom: 8 },
-  mealText: { fontSize: 14, textAlign: "center" },
-  noMealText: { fontSize: 12, fontStyle: "italic", textAlign: "center" },
+  dateLabel: { 
+    fontSize: 16, 
+    fontWeight: "bold", 
+    marginBottom: 8, 
+    textAlign: "center" 
+  },
+  mealsContainer: { 
+    marginTop: 8, 
+    flex: 1,
+    paddingBottom: 20,
+  },
+  mealButton: { 
+    padding: 12, 
+    borderRadius: 8, 
+    marginBottom: 8,
+    borderWidth: 2,
+    borderColor: "#ccc",
+  },
+  mealText: { 
+    fontSize: 14, 
+    textAlign: "center" 
+  },
+  noMealText: { 
+    fontSize: 12, 
+    fontStyle: "italic", 
+    textAlign: "center" 
+  },
   nextWeekButton: {
     width: 150,
     marginLeft: 16,
@@ -266,7 +452,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  nextWeekButtonText: { fontSize: 16, fontWeight: "bold", textAlign: "center" },
+  nextWeekButtonText: { 
+    fontSize: 16, 
+    fontWeight: "bold", 
+    textAlign: "center" 
+  },
   modalContainer: {
     flex: 1,
     justifyContent: "center",
@@ -279,7 +469,11 @@ const styles = StyleSheet.create({
     padding: 16,
     alignItems: "center",
   },
-  modalTitle: { fontSize: 18, fontWeight: "bold", marginBottom: 16 },
+  modalTitle: { 
+    fontSize: 18, 
+    fontWeight: "bold", 
+    marginBottom: 16 
+  },
   modalButton: {
     width: "100%",
     padding: 12,
@@ -287,14 +481,37 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     alignItems: "center",
   },
-  modalButtonText: { fontSize: 16, fontWeight: "bold" },
+  modalButtonText: { 
+    fontSize: 16, 
+    fontWeight: "bold" 
+  },
   modalCancelButton: {
     width: "100%",
     padding: 12,
     borderRadius: 8,
     alignItems: "center",
   },
-  modalCancelButtonText: { fontSize: 16, fontWeight: "bold" },
+  modalCancelButtonText: { 
+    fontSize: 16, 
+    fontWeight: "bold" 
+  },
+  mealDescription: { 
+    fontSize: 12, 
+    textAlign: "center", 
+    marginTop: 4 
+  },
+  mealTextContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    marginLeft: 8,
+  },
+  nutritionText: {
+    fontSize: 14,
+    fontWeight: "bold",
+    textAlign: "center",
+    marginVertical: 4,
+  },
 });
 
 export default MealPlanCalendar;

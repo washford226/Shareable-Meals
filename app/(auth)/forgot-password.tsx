@@ -13,7 +13,7 @@ const ForgotPasswordScreen = () => {
 
   const handleForgotPassword = async () => {
     try {
-      const response = await axios.post(`${getBaseUrl()}/forgot-password`, { email });
+      const response = await axios.post(`${getBaseUrl()}/users/forgot-password`, { email });
 
       if (response.status === 200) {
         const { username } = response.data;

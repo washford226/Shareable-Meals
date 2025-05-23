@@ -1,0 +1,105 @@
+import { Router, Request, Response } from "express";
+import axios from "axios";
+import * as cheerio from "cheerio";
+
+const router = Router();
+
+router.post("/fetch-recipe", async (req: Request, res: Response) => {
+  const { url } = req.body;
+
+  if (!url) {
+    res.status(400).json({ error: "URL is required." });
+    return;
+  }
+
+  if (!url.startsWith("http://") && !url.startsWith("https://")) {
+    res.status(400).json({ error: "Invalid URL format. URL must start with http:// or https://." });
+    return;
+  }
+
+  try {
+    const { data: html, headers } = await axios.get(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; MealPlannerBot/1.0; +https://yourapp.com)",
+      },
+    });
+
+    if (!headers["content-type"]?.includes("text/html")) {
+      res.status(400).json({ error: "The provided URL does not return an HTML page." });
+      return;
+    }
+
+    const $ = cheerio.load(html);
+
+    const name = $("meta[property='og:title']").attr("content") || $("title").text();
+    const description = $("meta[property='og:description']").attr("content") || "";
+
+    let ingredients: string[] = [];
+    let instructions: string[] = [];
+
+    // ✅ Parse ALL JSON-LD script blocks
+    $('script[type="application/ld+json"]').each((_, el) => {
+      const ldJsonRaw = $(el).html();
+      if (!ldJsonRaw) return;
+
+      try {
+        const jsonData = JSON.parse(ldJsonRaw);
+        const candidates = Array.isArray(jsonData)
+          ? jsonData
+          : jsonData["@graph"] ?? [jsonData];
+
+        for (const item of candidates) {
+          if (item["@type"] === "Recipe") {
+            if (!ingredients.length && item.recipeIngredient) {
+              ingredients = item.recipeIngredient;
+            }
+
+            const steps = item.recipeInstructions;
+            if (!instructions.length && steps) {
+              if (Array.isArray(steps)) {
+                instructions = steps.map((step: any) =>
+                  typeof step === "string" ? step : step.text || ""
+                );
+              } else if (typeof steps === "string") {
+                instructions = [steps];
+              }
+            }
+
+            break; // Stop after the first valid recipe
+          }
+        }
+      } catch (e) {
+        console.warn("Error parsing JSON-LD block", e);
+      }
+    });
+
+    // ✅ Fallback: known HTML selectors (may improve coverage on some sites)
+    if (ingredients.length === 0) {
+      $("li.ingredient, span.ingredient, .recipe-ingredients__item, ul.ingredients li").each((_, el) => {
+        const text = $(el).text().trim();
+        if (text) ingredients.push(text);
+      });
+    }
+
+    if (instructions.length === 0) {
+      $("li.instruction, .step, .instructions-section-item, ol.instructions li").each((_, el) => {
+        const text = $(el).text().trim();
+        if (text) instructions.push(text);
+      });
+    }
+
+    const unique = (arr: string[]) => [...new Set(arr.map((s) => s.trim()).filter(Boolean))];
+
+    res.status(200).json({
+      name: name?.trim() || "Untitled Recipe",
+      description: description?.trim(),
+      ingredients: unique(ingredients),
+      instructions: unique(instructions).join(" "),
+    });
+  } catch (error) {
+    console.error("Error fetching recipe:", error);
+    res.status(500).json({ error: "Failed to fetch recipe data." });
+  }
+});
+
+export default router;

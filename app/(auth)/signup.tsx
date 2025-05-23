@@ -3,17 +3,30 @@ import { View, Text, TextInput, StyleSheet, Alert, TouchableOpacity, Image, Plat
 import axios from "axios";
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
+import RNPickerSelect from "react-native-picker-select";
 
 const SignUpScreen: React.FC = () => {
   const router = useRouter();
-  
+
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const [caloriesGoal, setCaloriesGoal] = useState("");
   const [dietaryRestrictions, setDietaryRestrictions] = useState("");
+  const [allergies, setAllergies] = useState(""); // New state for allergies
   const [profilePicture, setProfilePicture] = useState<string | null>(null);
+  const [isSigningUp, setIsSigningUp] = useState(false);
+
+  const dietaryOptions = [
+    { label: "None", value: "None" },
+    { label: "Vegetarian", value: "Vegetarian" },
+    { label: "Vegan", value: "Vegan" },
+    { label: "Gluten-Free", value: "Gluten-Free" },
+    { label: "Keto", value: "Keto" },
+    { label: "Paleo", value: "Paleo" },
+  ];
 
   const requestPermission = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -35,62 +48,10 @@ const SignUpScreen: React.FC = () => {
     return re.test(email);
   };
 
-  const handleSignUp = async () => {
-    if (!username || !email || !password) {
-      Alert.alert("Error", "All fields are required");
-      return;
-    }
-
-    if (!validateEmail(email)) {
-      Alert.alert("Error", "Invalid email format");
-      return;
-    }
-
-    const formData = new FormData();
-    formData.append("username", username);
-    formData.append("email", email);
-    formData.append("password", password);
-    if (caloriesGoal) formData.append("calories_goal", caloriesGoal);
-    if (dietaryRestrictions) formData.append("dietary_restrictions", dietaryRestrictions);
-    if (profilePicture) {
-      const uriParts = profilePicture.split(".");
-      const fileType = uriParts[uriParts.length - 1];
-      formData.append("profile_picture", {
-        uri: profilePicture,
-        name: `profile_picture.${fileType}`,
-        type: `image/${fileType}`,
-      } as any);
-    }
-
-    try {
-      const response = await axios.post(`${getBaseUrl()}/signup`, formData, {
-        headers: {
-          "Content-Type": "multipart/form-data",
-        },
-      });
-      if (response.status === 200) {
-        Alert.alert("Success", "User signed up successfully", [
-          {
-            text: "OK",
-            onPress: () => router.replace("../login"), // Navigate to login after signup
-          },
-        ]);
-      }
-    } catch (error) {
-      if ((error as any).response && (error as any).response.data) {
-        const errorMessage = (error as any).response?.data?.message || "Failed to sign up";
-        Alert.alert("Error", errorMessage);
-      } else {
-        Alert.alert("Error", "Failed to sign up");
-      }
-      console.error("Error signing up:", error);
-    }
-  };
-
   const pickImage = async () => {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: ["images"],
         allowsEditing: true,
         aspect: [3, 3],
         quality: 1,
@@ -117,6 +78,72 @@ const SignUpScreen: React.FC = () => {
       Alert.alert("Error", "Failed to pick an image.");
     }
   };
+
+const handleSignUp = async () => {
+  if (isSigningUp) return; // Prevent multiple submissions
+  setIsSigningUp(true); // Disable the button
+
+  if (!username || !email || !password || !confirmPassword) {
+    Alert.alert("Error", "All fields are required");
+    setIsSigningUp(false); // Re-enable the button
+    return;
+  }
+
+  if (password !== confirmPassword) {
+    Alert.alert("Error", "Passwords do not match");
+    setIsSigningUp(false); // Re-enable the button
+    return;
+  }
+
+  if (!validateEmail(email)) {
+    Alert.alert("Error", "Invalid email format");
+    setIsSigningUp(false); // Re-enable the button
+    return;
+  }
+
+  const formData = new FormData();
+  formData.append("username", username);
+  formData.append("email", email);
+  formData.append("password", password);
+  if (caloriesGoal) formData.append("calories_goal", caloriesGoal);
+  if (dietaryRestrictions) formData.append("dietary_restrictions", dietaryRestrictions);
+  if (allergies) formData.append("allergies", allergies); // Add allergies to the form data
+  if (profilePicture) {
+    const uriParts = profilePicture.split(".");
+    const fileType = uriParts[uriParts.length - 1];
+    formData.append("profile_picture", {
+      uri: profilePicture,
+      name: `profile_picture.${fileType}`,
+      type: `image/${fileType}`,
+    } as any);
+  }
+
+  try {
+    const response = await axios.post(`${getBaseUrl()}/users/signup`, formData, {
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
+    });
+    if (response.status === 200) {
+      Alert.alert("Success", "User signed up successfully", [
+        {
+          text: "OK",
+          onPress: () => router.replace("../login"), // Navigate to login after signup
+        },
+      ]);
+    }
+  } catch (error) {
+    if ((error as any).response && (error as any).response.data) {
+      const errorMessage = (error as any).response?.data?.message || "Failed to sign up";
+      Alert.alert("Error", errorMessage);
+    } else {
+      Alert.alert("Error", "Failed to sign up");
+    }
+    console.error("Error signing up:", error);
+  } finally {
+    setIsSigningUp(false); // Re-enable the button after the process is complete
+  }
+};
 
   return (
     <View style={styles.container}>
@@ -151,16 +178,36 @@ const SignUpScreen: React.FC = () => {
       </View>
       <TextInput
         style={styles.input}
+        placeholder="Confirm Password"
+        value={confirmPassword}
+        onChangeText={setConfirmPassword}
+        secureTextEntry={!isPasswordVisible}
+      />
+      <TextInput
+        style={styles.input}
         placeholder="Calories Goal (optional)"
         value={caloriesGoal}
         onChangeText={setCaloriesGoal}
         keyboardType="numeric"
       />
+      <RNPickerSelect
+        onValueChange={(value) => setDietaryRestrictions(value)}
+        items={dietaryOptions}
+        placeholder={{
+          label: "Select Dietary Restrictions (optional)",
+          value: null,
+        }}
+        style={{
+          inputIOS: styles.pickerInput,
+          inputAndroid: styles.pickerInput,
+        }}
+        value={dietaryRestrictions}
+      />
       <TextInput
         style={styles.input}
-        placeholder="Dietary Restrictions (optional)"
-        value={dietaryRestrictions}
-        onChangeText={setDietaryRestrictions}
+        placeholder="Allergies (optional)" // New input for allergies
+        value={allergies}
+        onChangeText={setAllergies}
       />
       <TouchableOpacity style={styles.uploadButton} onPress={pickImage}>
         <Text style={styles.uploadButtonText}>Upload Profile Picture (optional)</Text>
@@ -185,6 +232,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
     padding: 20,
     width: "100%",
+  },
+  pickerInput: {
+    width: "100%",
+    borderWidth: 1,
+    borderColor: "#ccc",
+    padding: 15,
+    marginBottom: 10,
+    borderRadius: 8,
+    backgroundColor: "#fff",
+    fontSize: 16,
   },
   title: {
     fontSize: 24,

@@ -16,7 +16,7 @@ const LoginScreen = () => {
   const handleLogin = async () => {
     try {
       const response = await axios.post(
-        `${Platform.OS === "android" ? "http://10.0.2.2:5000" : "http://localhost:5000"}/login`,
+        `${Platform.OS === "android" ? "http://10.0.2.2:5000" : "http://localhost:5000"}/users/login`,
         { username, password }
       );
 

@@ -8,8 +8,8 @@ import {
   Platform,
   Alert,
   Modal,
-} from "react-native";
-import DateTimePicker from "@react-native-community/datetimepicker";
+  Image,
+  Linking } from "react-native";
 import { useTheme } from "../../../../context/ThemeContext";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import axios from "axios";
@@ -17,6 +17,8 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Picker } from "@react-native-picker/picker";
 import { format } from "date-fns";
 import { Meal } from "../../../../types/types";
+import QRCode from "react-native-qrcode-svg";
+import DateTimePicker from "@react-native-community/datetimepicker";
 
 const BASE_URL = Platform.OS === "android" ? "http://10.0.2.2:5000" : "http://localhost:5000";
 
@@ -30,11 +32,12 @@ const MyMealInfo = () => {
   const [mealType, setMealType] = useState("Breakfast");
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [isQRModalVisible, setIsQRModalVisible] = useState(false);
 
   const fetchMeal = async () => {
     try {
       const token = await AsyncStorage.getItem("token");
-      const response = await axios.get(`${BASE_URL}/meals/${id}`, {
+      const response = await axios.get(`${BASE_URL}/meal/meals/${id}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (response.status === 200) {
@@ -59,7 +62,7 @@ const MyMealInfo = () => {
       }
 
       const response = await axios.post(
-        `${BASE_URL}/meal-plan`,
+        `${BASE_URL}/mealplan/meal-plan`,
         {
           meal_id: id,
           date: selectedDate,
@@ -95,7 +98,7 @@ const MyMealInfo = () => {
         return;
       }
 
-      const response = await axios.delete(`${BASE_URL}/meals/${id}`, {
+      const response = await axios.delete(`${BASE_URL}/meal/meals/${id}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
@@ -125,17 +128,64 @@ const MyMealInfo = () => {
 
   return (
     <ScrollView contentContainerStyle={[styles.scrollContainer, { backgroundColor: theme.background }]}>
-      <View style={[styles.container, { backgroundColor: theme.background }]}>
-        <Text style={[styles.title, { color: theme.text }]}>{meal.name}</Text>
-        <Text style={[styles.description, { color: theme.subtext }]}>{meal.description}</Text>
-        <Text style={[styles.details, { color: theme.text }]}>Ingredients: {meal.ingredients}</Text>
-        <Text style={[styles.details, { color: theme.text }]}>Instructions: {meal.instructions}</Text>
-        <Text style={[styles.details, { color: theme.text }]}>Calories: {meal.calories}</Text>
-        <Text style={[styles.details, { color: theme.text }]}>Protein: {meal.protein}g</Text>
-        <Text style={[styles.details, { color: theme.text }]}>Carbs: {meal.carbohydrates}g</Text>
-        <Text style={[styles.details, { color: theme.text }]}>Fat: {meal.fat}g</Text>
-        <Text style={[styles.details, { color: theme.text }]}>Visibility: {meal.visibility ? "Public" : "Private"}</Text>
+      {/* Meal Picture */}
+      {meal.picture ? (
+        <Image
+          source={{ uri: typeof meal.picture === "string" ? meal.picture : "" }}
+          style={styles.mealImage}
+          resizeMode="cover"
+        />
+      ) : (
+        <View style={[styles.placeholder, { backgroundColor: theme.card }]}>
+          <Text style={[styles.placeholderText, { color: theme.subtext }]}>No Image Available</Text>
+        </View>
+      )}
 
+      <View style={[styles.container, { backgroundColor: theme.background }]}>
+        {/* Meal Name */}
+        <Text style={[styles.title, { color: theme.text }]}>{meal.name}</Text>
+
+        {/* Description */}
+        <Text style={[styles.description, { color: theme.subtext }]}>{meal.description}</Text>
+
+        {/* Instructions */}
+        <Text style={[styles.sectionTitle, { color: theme.text }]}>Instructions</Text>
+        <Text style={[styles.details, { color: theme.text }]}>{meal.instructions}</Text>
+
+        {/* Meal Link */}
+        {meal.recipeLink && (
+          <>
+            <Text style={[styles.sectionTitle, { color: theme.text }]}>Recipe Link</Text>
+            <Text
+              style={[styles.linkText, { color: theme.primary }]}
+              onPress={() => meal.recipeLink && Linking.openURL(meal.recipeLink)}
+            >
+              {meal.recipeLink}
+            </Text>
+          </>
+        )}
+        {/* Ingredients */}
+        <Text style={[styles.sectionTitle, { color: theme.text }]}>Ingredients</Text>
+        <Text style={[styles.details, { color: theme.text }]}>{meal.ingredients}</Text>
+
+        {/* Nutrition Info */}
+        <Text style={[styles.sectionTitle, { color: theme.text }]}>Nutrition Info</Text>
+        <View style={styles.nutritionContainer}>
+          <Text style={[styles.nutritionText, { color: theme.text }]}>
+            Calories: {meal.calories}
+          </Text>
+          <Text style={[styles.nutritionText, { color: theme.text }]}>
+            Protein: {meal.protein}g
+          </Text>
+          <Text style={[styles.nutritionText, { color: theme.text }]}>
+            Carbs: {meal.carbohydrates}g
+          </Text>
+          <Text style={[styles.nutritionText, { color: theme.text }]}>
+            Fat: {meal.fat}g
+          </Text>
+        </View>
+
+        {/* Buttons */}
         <TouchableOpacity
           style={[styles.button, { backgroundColor: theme.primary }]}
           onPress={() => setIsModalVisible(true)}
@@ -148,6 +198,13 @@ const MyMealInfo = () => {
           onPress={() => router.push(`/my-meals/${id}/edit`)} // Navigate to the edit screen
         >
           <Text style={[styles.buttonText, { color: theme.buttonText }]}>Edit Meal</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.button, { backgroundColor: theme.primary }]}
+          onPress={() => setIsQRModalVisible(true)}
+        >
+          <Text style={[styles.buttonText, { color: theme.buttonText }]}>Share via QR Code</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -164,6 +221,27 @@ const MyMealInfo = () => {
           <Text style={[styles.buttonText, { color: theme.buttonText }]}>Back</Text>
         </TouchableOpacity>
       </View>
+
+      {/* QR Code Modal */}
+      <Modal visible={isQRModalVisible} transparent animationType="slide">
+        <View style={styles.modalContainer}>
+          <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
+            <Text style={[styles.modalTitle, { color: theme.text }]}>Scan to Save Meal</Text>
+            <QRCode
+              value={`${BASE_URL}/meal/meals/${id}`} // Shareable URL or meal ID
+              size={200}
+              color={theme.text}
+              backgroundColor={theme.card}
+            />
+            <TouchableOpacity
+              style={[styles.button, { backgroundColor: theme.danger }]}
+              onPress={() => setIsQRModalVisible(false)}
+            >
+              <Text style={[styles.buttonText, { color: theme.buttonText }]}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       {/* Modal for Adding to Meal Plan */}
       <Modal visible={isModalVisible} transparent animationType="slide">
@@ -236,6 +314,23 @@ const styles = StyleSheet.create({
   scrollContainer: {
     flexGrow: 1,
   },
+  mealImage: {
+    width: "100%",
+    height: 200,
+    borderRadius: 8,
+    marginBottom: 16,
+  },
+  placeholder: {
+    width: "100%",
+    height: 200,
+    borderRadius: 8,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  placeholderText: {
+    fontSize: 16,
+    fontWeight: "bold",
+  },
   title: {
     fontSize: 24,
     fontWeight: "bold",
@@ -245,9 +340,24 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginBottom: 16,
   },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    marginTop: 16,
+    marginBottom: 8,
+  },
   details: {
     fontSize: 14,
     marginBottom: 8,
+  },
+  nutritionContainer: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    marginBottom: 16,
+  },
+  nutritionText: {
+    fontSize: 14,
+    fontWeight: "bold",
   },
   button: {
     padding: 12,
@@ -274,6 +384,10 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "bold",
     marginBottom: 16,
+  },
+  linkText: {
+    fontSize: 16,
+    textDecorationLine: "underline",
   },
   input: {
     borderWidth: 1,

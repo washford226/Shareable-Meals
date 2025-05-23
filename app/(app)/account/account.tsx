@@ -1,31 +1,22 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity, Alert, TextInput, StyleSheet, Platform, Image, Switch } from 'react-native';
-import * as ImagePicker from 'expo-image-picker';
+import { View, Text, TouchableOpacity, Alert, Image, Switch, StyleSheet, Platform } from 'react-native';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../../../context/ThemeContext'; // Import the ThemeContext
-import { Link, useRouter } from 'expo-router'; // Import Link and useRouter from Expo Router
 import BottomNav from 'components/bottomNav';
+import { useRouter } from 'expo-router';
 
 const BASE_URL = Platform.OS === 'android' ? 'http://10.0.2.2:5000' : 'http://localhost:5000';
 
 const AccountScreen: React.FC = () => {
   const [username, setUsername] = useState<string>('');
   const [caloriesGoal, setCaloriesGoal] = useState<number | null>(null);
-  const [isEditingCaloriesGoal, setIsEditingCaloriesGoal] = useState<boolean>(false);
-  const [newCaloriesGoal, setNewCaloriesGoal] = useState<string>('');
   const [dietaryRestrictions, setDietaryRestrictions] = useState<string>('');
-  const [isEditingDietaryRestrictions, setIsEditingDietaryRestrictions] = useState<boolean>(false);
-  const [newDietaryRestrictions, setNewDietaryRestrictions] = useState<string>('');
-  const [profilePicture, setProfilePicture] = useState<string | null>(null); // State for profile picture
-  const [isEditingEmail, setIsEditingEmail] = useState(false);
-  const [newEmail, setNewEmail] = useState('');
-  const [isEditingPassword, setIsEditingPassword] = useState(false);
-  const [newPassword, setNewPassword] = useState('');
-  const [currentPassword, setCurrentPassword] = useState('');
+  const [allergies, setAllergies] = useState<string>(''); // State for allergies
+  const [profilePicture, setProfilePicture] = useState<string | null>(null);
+  const [email, setEmail] = useState<string>(''); // State for email
 
-  const { theme, toggleTheme } = useTheme(); // Access theme and toggleTheme from ThemeContext
-
+  const { theme, toggleTheme } = useTheme(); // Access theme and toggleTheme
   const router = useRouter();
 
   useEffect(() => {
@@ -36,7 +27,7 @@ const AccountScreen: React.FC = () => {
           throw new Error('No token found');
         }
 
-        const response = await axios.get(`${BASE_URL}/user`, {
+        const response = await axios.get(`${BASE_URL}/users/user`, {
           headers: {
             Authorization: `Bearer ${token}`,
           },
@@ -45,6 +36,8 @@ const AccountScreen: React.FC = () => {
         setUsername(response.data.username);
         setCaloriesGoal(response.data.calories_goal);
         setDietaryRestrictions(response.data.dietary_restrictions);
+        setEmail(response.data.email); // Set the email from the response
+        setAllergies(response.data.allergies); // Set the allergies from the response
 
         if (response.data.profile_picture) {
           setProfilePicture(response.data.profile_picture);
@@ -58,139 +51,59 @@ const AccountScreen: React.FC = () => {
 
     fetchUserData();
   }, []);
-
+  
 
   const handleLogout = async () => {
     try {
       await AsyncStorage.removeItem('token');
-      router.replace('/login'); // or whatever your login route is
+      router.replace('/login');
     } catch (error) {
       console.error('Error during logout:', error);
     }
   };
 
   const handleDeleteAccount = async () => {
-    try {
-      const token = await AsyncStorage.getItem('token');
-      if (!token) {
-        throw new Error('No token found');
-      }
+  Alert.alert(
+    "Confirm Deletion",
+    "Are you sure you want to delete your account? This action cannot be undone.",
+    [
+      {
+        text: "Cancel",
+        style: "cancel", // Makes the button appear as a cancel action
+      },
+      {
+        text: "Delete",
+        style: "destructive", // Highlights the button as a destructive action
+        onPress: async () => {
+          try {
+            const token = await AsyncStorage.getItem("token");
+            if (!token) {
+              throw new Error("No token found");
+            }
 
-      const response = await axios.delete(`${BASE_URL}/userdelete`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
+            const response = await axios.delete(`${BASE_URL}/users/userdelete`, {
+              headers: {
+                Authorization: `Bearer ${token}`,
+              },
+            });
+
+            if (response.status === 200) {
+              Alert.alert("Success", "Account deleted successfully");
+              handleLogout(); // Log out the user after account deletion
+            }
+          } catch (error) {
+            console.error("Error deleting account:", error);
+            Alert.alert("Error", "Failed to delete account");
+          }
         },
-      });
-
-      if (response.status === 200) {
-        Alert.alert('Success', 'Account deleted successfully');
-        handleLogout();
-      }
-    } catch (error) {
-      console.error('Error deleting account:', error);
-      Alert.alert('Error', 'Failed to delete account');
-    }
-  };
-
-  const handleEditCaloriesGoal = async () => {
-    try {
-      const token = await AsyncStorage.getItem('token');
-      if (!token) {
-        throw new Error('No token found');
-      }
-
-      const response = await axios.put(
-        `${BASE_URL}/user/${username}`,
-        { calories_goal: newCaloriesGoal },
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
-
-      if (response.status === 200) {
-        setCaloriesGoal(parseInt(newCaloriesGoal, 10));
-        setIsEditingCaloriesGoal(false);
-        Alert.alert('Success', 'Calories goal updated successfully');
-      }
-    } catch (error) {
-      console.error('Error updating calories goal:', error);
-      Alert.alert('Error', 'Failed to update calories goal');
-    }
-  };
-
-  const handleEditDietaryRestrictions = async () => {
-    try {
-      const token = await AsyncStorage.getItem('token');
-      if (!token) {
-        throw new Error('No token found');
-      }
-
-      const response = await axios.put(
-        `${BASE_URL}/user/${username}`,
-        { dietary_restrictions: newDietaryRestrictions },
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
-
-      if (response.status === 200) {
-        setDietaryRestrictions(newDietaryRestrictions);
-        setIsEditingDietaryRestrictions(false);
-        Alert.alert('Success', 'Dietary restrictions updated successfully');
-      }
-    } catch (error) {
-      console.error('Error updating dietary restrictions:', error);
-      Alert.alert('Error', 'Failed to update dietary restrictions');
-    }
-  };
-
-  const pickImage = async () => {
-    try {
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [1, 1], // Square aspect ratio
-        quality: 1,
-      });
-
-      if (!result.canceled) {
-        const token = await AsyncStorage.getItem('token');
-        if (!token) {
-          throw new Error('No token found');
-        }
-
-        const formData = new FormData();
-        formData.append('profile_picture', {
-          uri: result.assets[0].uri,
-          name: 'profile_picture.jpg',
-          type: 'image/jpeg',
-        } as any);
-
-        const response = await axios.post(`${BASE_URL}/upload-profile-picture`, formData, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'multipart/form-data',
-          },
-        });
-
-        if (response.status === 200) {
-          Alert.alert('Success', 'Profile picture updated successfully');
-          setProfilePicture(result.assets[0].uri); // Update the profile picture state
-        }
-      }
-    } catch (error) {
-      console.error('Error updating profile picture:', error);
-      Alert.alert('Error', 'Failed to update profile picture');
-    }
-  };
+      },
+    ]
+  );
+};
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
-      <BottomNav /> 
+      <BottomNav />
       {/* Profile Picture */}
       {profilePicture ? (
         <Image source={{ uri: profilePicture }} style={styles.profilePicture} />
@@ -199,77 +112,74 @@ const AccountScreen: React.FC = () => {
           <Text style={[styles.profilePicturePlaceholderText, { color: theme.text }]}>No Picture</Text>
         </View>
       )}
-      <TouchableOpacity style={styles.updatePictureButton} onPress={pickImage}>
-        <Text style={styles.updatePictureButtonText}>Update Profile Picture</Text>
-      </TouchableOpacity>
+      <Text style={[styles.title, { color: theme.text, marginBottom: 4 }]}>{username}</Text>
 
-      <Text style={[styles.title, { color: theme.text }]}>Welcome, {username}!</Text>
+      {/* Email */}
+      <View style={styles.centeredRow}>
+        <Text style={[styles.email, { color: theme.text, marginVertical: 4 }]}>{email}</Text>
+      </View>
+
+      <View style={styles.row}>
+        <Text style={[styles.title, { color: theme.text }]}>Meal Plan</Text>
+      </View>
 
       {/* Calories Goal */}
-      <View style={styles.row}>
-        <Text style={[styles.leftAlignText, { color: theme.text }]}>Calories Goal: {caloriesGoal}</Text>
-        <TouchableOpacity style={[styles.editButton, { backgroundColor: theme.button }]} onPress={() => setIsEditingCaloriesGoal(true)}>
-          <Text style={[styles.editButtonText, { color: theme.buttonText }]}>Edit</Text>
-        </TouchableOpacity>
+      <View style={[styles.borderRow, { backgroundColor: theme.button, borderColor: theme.border, borderWidth: 1, borderRadius: 8, padding: 15 }]}>
+        <Text style={[styles.leftAlignText, { color: theme.text, fontSize: 18 }]}>Calories Goal: {caloriesGoal}</Text>
       </View>
-      {isEditingCaloriesGoal && (
-        <View>
-          <TextInput
-            style={[styles.input, { borderColor: theme.border, color: theme.text }]}
-            placeholder="Enter new calories goal"
-            placeholderTextColor={theme.placeholder}
-            value={newCaloriesGoal}
-            onChangeText={setNewCaloriesGoal}
-            keyboardType="numeric"
-          />
-          <TouchableOpacity onPress={handleEditCaloriesGoal}>
-            <Text style={{ color: theme.button, marginTop: 10 }}>Save</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => setIsEditingCaloriesGoal(false)}>
-            <Text style={{ color: theme.danger, marginTop: 10 }}>Cancel</Text>
-          </TouchableOpacity>
-        </View>
-      )}
 
       {/* Dietary Restrictions */}
-      <View style={styles.row}>
-        <Text style={[styles.leftAlignText, { color: theme.text }]}>Dietary Restrictions: {dietaryRestrictions}</Text>
-        <TouchableOpacity style={[styles.editButton, { backgroundColor: theme.button }]} onPress={() => setIsEditingDietaryRestrictions(true)}>
-          <Text style={[styles.editButtonText, { color: theme.buttonText }]}>Edit</Text>
-        </TouchableOpacity>
+      <View style={[styles.borderRow, { backgroundColor: theme.button, borderColor: theme.border, borderWidth: 1, borderRadius: 8, padding: 15 }]}>
+        <Text style={[styles.leftAlignText, { color: theme.text, fontSize: 18 }]}>Dietary Restrictions: {dietaryRestrictions}</Text>
       </View>
-      {isEditingDietaryRestrictions && (
-        <View>
-          <TextInput
-            style={[styles.input, { borderColor: theme.border, color: theme.text }]}
-            placeholder="Enter new dietary restrictions"
-            placeholderTextColor={theme.placeholder}
-            value={newDietaryRestrictions}
-            onChangeText={setNewDietaryRestrictions}
-          />
-          <TouchableOpacity onPress={handleEditDietaryRestrictions}>
-            <Text style={{ color: theme.button, marginTop: 10 }}>Save</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => setIsEditingDietaryRestrictions(false)}>
-            <Text style={{ color: theme.danger, marginTop: 10 }}>Cancel</Text>
-          </TouchableOpacity>
-        </View>
-      )}
 
-      {/* Link to other screens */}
-      <Link href="/(app)/account/edit-email">
-        <Text style={{ color: theme.primary }}>Change Email</Text>
-      </Link>
+      <View style={[styles.borderRow, { backgroundColor: theme.button, borderColor: theme.border, borderWidth: 1, borderRadius: 8, padding: 15 }]}>
+        <Text style={[styles.leftAlignText, { color: theme.text, fontSize: 18 }]}>Allergies: {allergies}</Text>
+      </View>
 
-      <Link href="/(app)/account/edit-password">
-        <Text style={{ color: theme.primary }}>Change Password</Text>
-      </Link>
 
-      <TouchableOpacity onPress={handleLogout}>
-        <Text style={{ color: theme.danger, marginTop: 20 }}>Logout</Text>
+      <View style={styles.row}>
+        <Text style={[styles.title, { color: theme.text }]}>Themes</Text>
+      </View>
+
+      {/* Dark Mode Toggle */}
+      <View style={[styles.borderRow, { backgroundColor: theme.button, borderColor: theme.border, borderWidth: 1, borderRadius: 10, padding: 15, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}>
+        <Text style={[styles.themeButtonText, { color: theme.text }]}>
+          {theme.background === '#121212' ? 'Dark Mode' : 'Light Mode'}
+        </Text>
+        <Switch
+          value={theme.background === '#121212'} // Correctly reflects the current theme
+          onValueChange={toggleTheme} // Toggles the theme
+          thumbColor={theme.primary}
+          trackColor={{ false: theme.border, true: theme.primary }}
+          style={styles.switch} // Apply custom switch style
+        />
+      </View>
+
+      {/* Edit User Information Button */}
+      <TouchableOpacity
+        style={[styles.editButton, { backgroundColor: theme.button, borderColor: theme.border, borderWidth: 1, borderRadius: 10 }]}
+        onPress={() => router.push('./edit-user')} // Navigate to the edit user screen
+      >
+        <Text style={[styles.editButtonText, { color: theme.text, alignSelf: 'flex-start' }]}>
+          Edit Information
+        </Text>
       </TouchableOpacity>
-      <TouchableOpacity onPress={handleDeleteAccount}>
-        <Text style={{ color: theme.warning, marginTop: 20 }}>Delete Account</Text>
+
+      {/* Logout Button */}
+      <TouchableOpacity
+        style={[styles.logoutButton, { backgroundColor: theme.button, borderColor: theme.border, borderWidth: 1, borderRadius: 10 }]}
+        onPress={handleLogout}
+      >
+        <Text style={[styles.logoutButtonText, { color: theme.buttonText, alignSelf: 'flex-start' }]}>Logout</Text>
+      </TouchableOpacity>
+
+      {/* Delete Account Button */}
+      <TouchableOpacity
+        style={[styles.deleteButton, { backgroundColor: theme.button, borderColor: theme.border, borderWidth: 1, borderRadius: 10 }]}
+        onPress={handleDeleteAccount}
+      >
+        <Text style={[styles.deleteButtonText, { color: theme.danger, alignSelf: 'flex-start' }]}>Delete Account</Text>
       </TouchableOpacity>
     </View>
   );
@@ -281,6 +191,50 @@ const styles = StyleSheet.create({
     padding: 20,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  themeButtonText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  switch: {
+    transform: [{ scaleX: 1.5 }, { scaleY: 1.5 }], // Make the switch bigger
+  },
+  borderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between', // Space between text and switch
+    alignItems: 'center',
+    width: '100%',
+    marginBottom: 15,
+  },
+  editButton: {
+    marginTop: 20,
+    padding: 12,
+    alignItems: 'center',
+    width: '100%',
+  },
+  editButtonText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  logoutButton: {
+    marginTop: 20,
+    padding: 12,
+    alignItems: 'center',
+    width: '100%',
+  },
+  logoutButtonText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  deleteButton: {
+    marginTop: 20,
+    padding: 12,
+    alignItems: 'center',
+    width: '100%',
+  },
+  deleteButtonText: {
+    fontSize: 16,
+    fontWeight: 'bold',
   },
   title: {
     fontSize: 20,
@@ -303,15 +257,6 @@ const styles = StyleSheet.create({
   profilePicturePlaceholderText: {
     color: 'white',
   },
-  updatePictureButton: {
-    marginTop: 10,
-    padding: 10,
-    backgroundColor: '#ccc',
-    borderRadius: 5,
-  },
-  updatePictureButtonText: {
-    color: '#333',
-  },
   row: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -321,49 +266,16 @@ const styles = StyleSheet.create({
   leftAlignText: {
     fontSize: 16,
   },
-  editButton: {
-    padding: 5,
-    borderRadius: 5,
-  },
-  editButtonText: {
-    color: 'white',
-  },
-  input: {
-    width: '100%',
-    padding: 10,
-    marginBottom: 10,
-    borderWidth: 1,
-    borderRadius: 5,
-  },
   centeredRow: {
+    justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 20,
+    width: '100%',
+    marginBottom: 15,
   },
-  centeredButton: {
-    padding: 15,
-    borderRadius: 5,
-    marginTop: 20,
-  },
-  buttonText: {
+  email: {
     fontSize: 16,
-  },
-  deleteButton: {
-    padding: 15,
-    borderRadius: 5,
-    marginTop: 30,
-  },
-  deleteButtonText: {
-    color: 'white',
-    fontSize: 16,
-  },
-  logoutButton: {
-    padding: 15,
-    borderRadius: 5,
-    marginTop: 20,
-  },
-  logoutButtonText: {
-    color: 'white',
-    fontSize: 16,
+    textAlign: 'center',
+    marginVertical: 10,
   },
 });
 

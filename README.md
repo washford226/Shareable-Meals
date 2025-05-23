@@ -59,9 +59,11 @@ Replace `yourpassword`, `your_jwt_secret`, `your_email@gmail.com`, and `your_ema
 
 #### 4. Start the Backend Server
 
-Navigate to the `backend` directory and start the server:
+Navigate to the `backend` directory and start the server and the command for USDA:
 
 ```bash
+npx ts-node backend/routes/import_usda.ts
+
 cd backend
 npm run server
 ```
@@ -126,6 +128,8 @@ Exercise caution and ensure all inputs and actions are correct when using the we
 
 
 ---
+USDA command
+npx ts-node backend/routes/import_usda.ts
 
 ### **License**
 This project is licensed under the MIT License.

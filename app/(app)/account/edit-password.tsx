@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -20,41 +20,75 @@ const EditPassword = () => {
   const [currentPassword, setCurrentPassword] = useState<string>("");
   const [newPassword, setNewPassword] = useState<string>("");
   const [confirmPassword, setConfirmPassword] = useState<string>("");
+  const [username, setUsername] = useState<string>(""); // State for username
   const [loading, setLoading] = useState(false);
+  const [fetchingUsername, setFetchingUsername] = useState(true); // State for fetching username
 
   const { theme } = useTheme();
   const router = useRouter();
+
+  // Fetch the username when the screen loads
+  useEffect(() => {
+    const fetchUsername = async () => {
+      try {
+        const token = await AsyncStorage.getItem("token");
+        if (!token) {
+          Alert.alert("Error", "User not authenticated. Please log in.");
+          router.replace("/login"); // Redirect to login if not authenticated
+          return;
+        }
+
+        const response = await axios.get(`${BASE_URL}/users/user`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        if (response.status === 200) {
+          setUsername(response.data.username); // Set the username from the response
+        } else {
+          Alert.alert("Error", "Failed to fetch user information.");
+        }
+      } catch (error) {
+        if (axios.isAxiosError(error)) {
+          console.error("Error fetching username:", error.response?.data || error.message);
+        } else {
+          console.error("Error fetching username:", error);
+        }
+        Alert.alert("Error", "An error occurred while fetching user information.");
+      } finally {
+        setFetchingUsername(false); // Stop the loading indicator
+      }
+    };
+
+    fetchUsername();
+  }, []);
 
   const handleUpdatePassword = async () => {
     if (!currentPassword || !newPassword || !confirmPassword) {
       Alert.alert("Error", "All fields are required.");
       return;
     }
-
+  
     if (newPassword !== confirmPassword) {
       Alert.alert("Error", "New password and confirmation do not match.");
       return;
     }
-
-    if (newPassword.length < 8) {
-      Alert.alert("Error", "Password must be at least 8 characters long.");
-      return;
-    }
-
+  
     setLoading(true);
-
+  
     try {
       const token = await AsyncStorage.getItem("token");
       if (!token) {
         Alert.alert("Error", "User not authenticated. Please log in.");
         return;
       }
-
+  
       const response = await axios.put(
-        `${BASE_URL}/account/password`,
+        `${BASE_URL}/users/user/${username}/password`, // Use the fetched username
         {
-          current_password: currentPassword,
-          new_password: newPassword,
+          currentPassword,
+          password: newPassword, // Match the backend's expected field
         },
         {
           headers: {
@@ -62,7 +96,7 @@ const EditPassword = () => {
           },
         }
       );
-
+  
       if (response.status === 200) {
         Alert.alert("Success", "Your password has been updated!");
         router.back(); // Navigate back after successful update
@@ -70,12 +104,28 @@ const EditPassword = () => {
         Alert.alert("Error", "Failed to update password. Please try again.");
       }
     } catch (error) {
-      console.error("Error updating password:", error);
-      Alert.alert("Error", "An error occurred while updating your password.");
+      if (axios.isAxiosError(error)) {
+        console.error("Error updating password:", error.response?.data || error.message);
+      } else {
+        console.error("Error updating password:", error);
+      }
+      const errorMessage = axios.isAxiosError(error) && error.response?.data?.error
+        ? error.response.data.error
+        : "An error occurred while updating your password.";
+      Alert.alert("Error", errorMessage);
     } finally {
       setLoading(false);
     }
   };
+
+  if (fetchingUsername) {
+    return (
+      <View style={[styles.container, { backgroundColor: theme.background }]}>
+        <ActivityIndicator size="large" color={theme.primary} />
+        <Text style={[styles.loadingText, { color: theme.text }]}>Fetching user information...</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
@@ -167,6 +217,11 @@ const styles = StyleSheet.create({
   },
   cancelButtonText: {
     fontSize: 16,
+  },
+  loadingText: {
+    fontSize: 16,
+    marginTop: 10,
+    textAlign: "center",
   },
 });
 

@@ -93,7 +93,7 @@ const OtherMeals: React.FC = () => {
           setSearchQuery(savedSearchQuery);
         }
 
-        const response = await axios.get(`${BASE_URL}/meals`, {
+        const response = await axios.get(`${BASE_URL}/meal/meals`, {
           headers: { Authorization: `Bearer ${token}` },
         });
 
@@ -201,46 +201,55 @@ const OtherMeals: React.FC = () => {
         </TouchableOpacity>
       </View>
 
+      {/* Weekly Meals Button */}
+      <TouchableOpacity
+        style={[styles.weeklyMealsButton, { backgroundColor: theme.primary }]}
+        onPress={() => router.push("/competition/current-meals")} // Navigate to the Weekly Meals screen
+      >
+        <Text style={[styles.weeklyMealsButtonText, { color: theme.buttonText }]}>
+          Weekly Meals
+        </Text>
+      </TouchableOpacity>
+
       <FlatList
-        data={filteredMeals}
-        keyExtractor={(item) => item.id.toString()}
-        renderItem={({ item }) => (
-          <TouchableOpacity
-            style={[styles.mealItem, { backgroundColor: theme.card, borderColor: theme.border }]}
-            onPress={() => {
-              onMealSelect(item);
-              router.push(`/other-meals/${item.id}/other-meals-info`); 
-            }}
-          >
-            {item.picture && typeof item.picture === "string" ? (
-              <Image source={{ uri: item.picture }} style={styles.mealPicture} />
-            ) : (
-              <View style={styles.mealPicturePlaceholder}>
-                <Text style={styles.mealPicturePlaceholderText}>No Image</Text>
-              </View>
-            )}
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.mealName, { color: theme.text }]}>{item.name}</Text>
-              <Text style={[styles.mealDescription, { color: theme.subtext }]}>{item.description}</Text>
-              <Text style={[styles.mealUser, { color: theme.subtext }]}>By: {item.userName}</Text>
-              <View style={styles.ratingContainer}>
-                {[...Array(5)].map((_, index) => (
-                  <Icon
-                    key={index}
-                    name="star"
-                    size={16}
-                    color={index < Math.floor(item.averageRating) ? "#FFD700" : "#CCCCCC"}
-                  />
-                ))}
-                <Text style={[styles.reviewCount, { color: theme.subtext }]}>
-                  ({item.reviewCount} reviews)
-                </Text>
-              </View>
-            </View>
-          </TouchableOpacity>
-        )}
-        contentContainerStyle={{ paddingBottom: 60 }}
-      />
+  data={filteredMeals}
+  keyExtractor={(item) => item.id.toString()}
+  numColumns={2} // Display two items per row
+  renderItem={({ item }) => (
+    <TouchableOpacity
+      style={[styles.mealItem, { backgroundColor: theme.card, borderColor: theme.border }]}
+      onPress={() => onMealSelect(item)}
+    >
+      {item.picture && typeof item.picture === "string" ? (
+        <Image source={{ uri: item.picture }} style={styles.mealPicture} />
+      ) : (
+        <View style={styles.mealPicturePlaceholder}>
+          <Text style={styles.mealPicturePlaceholderText}>No Image</Text>
+        </View>
+      )}
+      <Text style={[styles.mealName, { color: theme.text }]}>{item.name}</Text>
+      <Text style={[styles.mealDescription, { color: theme.subtext }]}>
+        {item.description.length > 100
+          ? `${item.description.slice(0, 100)}...` // Limit to 100 characters
+          : item.description}
+      </Text>
+      <View style={styles.ratingContainer}>
+        {[...Array(5)].map((_, index) => (
+          <Icon
+            key={index}
+            name="star"
+            size={16}
+            color={index < Math.floor(item.averageRating) ? "#FFD700" : "#CCCCCC"}
+          />
+        ))}
+        <Text style={[styles.reviewCount, { color: theme.subtext }]}>
+          ({item.reviewCount} reviews)
+        </Text>
+      </View>
+    </TouchableOpacity>
+  )}
+  contentContainerStyle={styles.mealsGrid}
+/>
       <Modal visible={isFilterModalVisible} transparent animationType="slide">
         <View style={styles.modalContainer}>
           <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
@@ -298,15 +307,74 @@ const styles = StyleSheet.create({
     flex: 1,
     width: "100%",
   },
-  loadingText: {
-    marginTop: 16,
+  mealItem: {
+    flex: 1, // Ensure items take up equal space
+    margin: 8, // Add spacing between items
+    padding: 16,
+    borderWidth: 1,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "flex-start", // Align content to the top
+  },
+  weeklyMealsButton: {
+    margin: 16,
+    padding: 12,
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  weeklyMealsButtonText: {
     fontSize: 16,
+    fontWeight: "bold",
+  },
+  mealPicture: {
+    width: "100%", // Make the picture take up the full width of the item
+    height: 100, // Set a fixed height for the picture
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  mealPicturePlaceholder: {
+    width: "100%",
+    height: 100,
+    borderRadius: 8,
+    backgroundColor: "#e0e0e0",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 8,
+  },
+  mealPicturePlaceholderText: {
+    fontSize: 12,
+    color: "#888",
+  },
+  mealName: {
+    fontSize: 16,
+    fontWeight: "bold",
     textAlign: "center",
+    marginBottom: 4,
+  },
+  mealDescription: {
+    fontSize: 14,
+    textAlign: "center",
+    color: "#666",
+    marginBottom: 4,
   },
   ratingContainer: {
     flexDirection: "row",
     alignItems: "center",
-    marginTop: 8,
+    justifyContent: "center",
+    marginTop: 4,
+  },
+  reviewCount: {
+    fontSize: 12,
+    marginLeft: 4,
+    color: "#888",
+  },
+  mealsGrid: {
+    paddingBottom: 60,
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    textAlign: "center",
   },
   searchBarContainer: {
     flexDirection: "row",
@@ -332,21 +400,6 @@ const styles = StyleSheet.create({
   filterButtonText: {
     fontSize: 16,
     fontWeight: "bold",
-  },
-  mealItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 16,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderRadius: 8,
-  },
-  mealName: {
-    fontSize: 18,
-    fontWeight: "bold",
-  },
-  mealDescription: {
-    fontSize: 14,
   },
   mealUser: {
     fontSize: 12,
@@ -404,29 +457,7 @@ const styles = StyleSheet.create({
   cancelButtonText: {
     fontSize: 16,
     fontWeight: "bold",
-  },
-  reviewCount: {
-    fontSize: 12,
-    marginLeft: 4,
-  },
-  mealPicture: {
-    width: 80,
-    height: 80,
-    borderRadius: 8,
-    marginRight: 16,
-  },
-  mealPicturePlaceholder: {
-    width: 80,
-    height: 80,
-    borderRadius: 8,
-    backgroundColor: "#f0f0f0",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  mealPicturePlaceholderText: {
-    fontSize: 12,
-    color: "#888",
-  },
+  },  
 });
 
 export default OtherMeals;

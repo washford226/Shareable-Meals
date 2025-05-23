@@ -35,7 +35,7 @@ const AddMealToDate = () => {
         return;
       }
 
-      const response = await axios.get(`${BASE_URL}/meals`, {
+      const response = await axios.get(`${BASE_URL}/meal/meals`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
@@ -59,14 +59,14 @@ const AddMealToDate = () => {
       }
 
       await axios.post(
-        `${BASE_URL}/meal-plan`,
+        `${BASE_URL}/mealplan/meal-plan`,
         { date, meal_id: mealId, meal_type: mealType },
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
       Alert.alert("Success", "Meal added to your plan.");
       setIsModalVisible(false);
-      router.back();
+      router.push("/(app)/meal-plan/calendar");
     } catch (error) {
       console.error("Add meal error:", error);
       Alert.alert("Error", "Could not add meal.");

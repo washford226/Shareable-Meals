@@ -47,7 +47,7 @@ const CreateReview = () => {
       }
 
       await axios.post(
-        `${BASE_URL}/reviews`,
+        `${BASE_URL}/reviews/reviews`,
         {
           meal_id: mealId,
           rating,
