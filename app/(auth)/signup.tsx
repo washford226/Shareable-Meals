@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { View, Text, TextInput, StyleSheet, Alert, TouchableOpacity, Image, Platform } from "react-native";
+import { View, Text, TextInput, StyleSheet, Alert, TouchableOpacity, Image, Platform, ActivityIndicator } from "react-native";
 import axios from "axios";
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
@@ -80,8 +80,14 @@ const SignUpScreen: React.FC = () => {
   };
 
 const handleSignUp = async () => {
-  if (isSigningUp) return; // Prevent multiple submissions
-  setIsSigningUp(true); // Disable the button
+  setIsSigningUp(true); // Disable the button while signing up
+  {isSigningUp ? (
+  <ActivityIndicator size="large" color="#007bff" style={{ marginVertical: 20 }} />
+) : (
+  <TouchableOpacity style={styles.button} onPress={handleSignUp}>
+    <Text style={styles.buttonText}>Sign Up</Text>
+  </TouchableOpacity>
+)}
 
   if (!username || !email || !password || !confirmPassword) {
     Alert.alert("Error", "All fields are required");
@@ -215,10 +221,19 @@ const handleSignUp = async () => {
       {profilePicture && (
         <Image source={{ uri: profilePicture }} style={styles.profilePicture} />
       )}
-      <TouchableOpacity style={styles.button} onPress={handleSignUp}>
-        <Text style={styles.buttonText}>Sign Up</Text>
-      </TouchableOpacity>
-      <TouchableOpacity style={styles.button} onPress={() => router.replace("/login")}>
+      {isSigningUp ? (
+        <ActivityIndicator size="large" color="#007bff" style={{ marginVertical: 20 }} />
+      ) : (
+        <TouchableOpacity style={styles.button} onPress={handleSignUp}>
+          <Text style={styles.buttonText}>Sign Up</Text>
+        </TouchableOpacity>
+      )}
+
+      <TouchableOpacity
+        style={styles.button}
+        onPress={() => router.replace("/login")}
+        disabled={isSigningUp}
+      >
         <Text style={styles.buttonText}>Back to Login</Text>
       </TouchableOpacity>
     </View>

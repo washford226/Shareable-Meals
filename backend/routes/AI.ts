@@ -62,7 +62,7 @@ router.post("/generate-meal", authMiddleware, async (req: Request, res: Response
   } Please provide the output in the following format:
   - Name: [Meal Name]
   - Description: [Meal Description]
-  - Ingredients: [List of Ingredients]
+  - Ingredients: List each ingredient on a new line with quantity and unit. Avoid alternatives (e.g., "1 tbsp olive oil or vegetable oil").
   - Instructions: [Cooking Instructions]`;
 
   try {

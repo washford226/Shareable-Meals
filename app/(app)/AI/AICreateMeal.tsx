@@ -40,11 +40,25 @@ const AICreateMeal = () => {
 
   // Add this helper function above your component
 function parseAIIngredients(ingredientText: string) {
+  function parseFraction(str: string) {
+    // Handles "1/2", "3/4", "/2", "1", "0.5", etc.
+    if (/^\d+\/\d+$/.test(str)) {
+      const [num, denom] = str.split("/").map(Number);
+      return denom ? (num / denom).toString() : str;
+    }
+    if (/^\/\d+$/.test(str)) {
+      // Handles "/2" as "0.5"
+      const denom = Number(str.replace("/", ""));
+      return denom ? (1 / denom).toString() : str;
+    }
+    return str;
+  }
+
   return ingredientText
     .split(/\r?\n|,/)
     .map(line => line.replace(/^\*\s*/, '').trim())
     .filter(line =>
-      // Only keep lines that start with a number or fraction (optionally after a bullet/asterisk)
+      // Only keep lines that start with a number, fraction, or /fraction (optionally after a bullet/asterisk)
       /^(\*?\s*)?([\d¼½¾⅓⅔⅛⅜⅝⅞\/\.]+)\s+[a-zA-Z]+/.test(line)
     )
     .map(line => {
@@ -52,7 +66,7 @@ function parseAIIngredients(ingredientText: string) {
       const match = line.match(/^(\*?\s*)?([\d¼½¾⅓⅔⅛⅜⅝⅞\/\.]+)\s+([a-zA-Z]+)\s+(.+)$/);
       if (match) {
         return {
-          quantity: match[2],
+          quantity: parseFraction(match[2]),
           unit: match[3],
           name: match[4],
           raw_name: match[4],
