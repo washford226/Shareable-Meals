@@ -9,6 +9,8 @@ const SignUpScreen: React.FC = () => {
   const router = useRouter();
 
   const [username, setUsername] = useState("");
+  const [isUsernameAvailable, setIsUsernameAvailable] = useState<null | boolean>(null);
+  const [checkingUsername, setCheckingUsername] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -42,6 +44,29 @@ const SignUpScreen: React.FC = () => {
   const getBaseUrl = () => {
     return Platform.OS === "android" ? "http://10.0.2.2:5000" : "http://localhost:5000";
   };
+
+  // Username check effect
+  useEffect(() => {
+    if (!username) {
+      setIsUsernameAvailable(null);
+      return;
+    }
+    const delayDebounce = setTimeout(async () => {
+      setCheckingUsername(true);
+      try {
+        const res = await axios.get(`${getBaseUrl()}/meal/check-username`, {
+          params: { username }
+        });
+        setIsUsernameAvailable(!res.data.taken);
+      } catch (e) {
+        setIsUsernameAvailable(null);
+      } finally {
+        setCheckingUsername(false);
+      }
+    }, 500); // debounce
+
+    return () => clearTimeout(delayDebounce);
+  }, [username]);
 
   const validateEmail = (email: string) => {
     const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -79,77 +104,76 @@ const SignUpScreen: React.FC = () => {
     }
   };
 
-const handleSignUp = async () => {
-  setIsSigningUp(true); // Disable the button while signing up
-  {isSigningUp ? (
-  <ActivityIndicator size="large" color="#007bff" style={{ marginVertical: 20 }} />
-) : (
-  <TouchableOpacity style={styles.button} onPress={handleSignUp}>
-    <Text style={styles.buttonText}>Sign Up</Text>
-  </TouchableOpacity>
-)}
+  const handleSignUp = async () => {
+    setIsSigningUp(true); // Disable the button while signing up
 
-  if (!username || !email || !password || !confirmPassword) {
-    Alert.alert("Error", "All fields are required");
-    setIsSigningUp(false); // Re-enable the button
-    return;
-  }
+    if (!username || !email || !password || !confirmPassword) {
+      Alert.alert("Error", "All fields are required");
+      setIsSigningUp(false); // Re-enable the button
+      return;
+    }
 
-  if (password !== confirmPassword) {
-    Alert.alert("Error", "Passwords do not match");
-    setIsSigningUp(false); // Re-enable the button
-    return;
-  }
+    if (isUsernameAvailable === false) {
+      Alert.alert("Error", "Username is already taken");
+      setIsSigningUp(false);
+      return;
+    }
 
-  if (!validateEmail(email)) {
-    Alert.alert("Error", "Invalid email format");
-    setIsSigningUp(false); // Re-enable the button
-    return;
-  }
+    if (password !== confirmPassword) {
+      Alert.alert("Error", "Passwords do not match");
+      setIsSigningUp(false); // Re-enable the button
+      return;
+    }
 
-  const formData = new FormData();
-  formData.append("username", username);
-  formData.append("email", email);
-  formData.append("password", password);
-  if (caloriesGoal) formData.append("calories_goal", caloriesGoal);
-  if (dietaryRestrictions) formData.append("dietary_restrictions", dietaryRestrictions);
-  if (allergies) formData.append("allergies", allergies); // Add allergies to the form data
-  if (profilePicture) {
-    const uriParts = profilePicture.split(".");
-    const fileType = uriParts[uriParts.length - 1];
-    formData.append("profile_picture", {
-      uri: profilePicture,
-      name: `profile_picture.${fileType}`,
-      type: `image/${fileType}`,
-    } as any);
-  }
+    if (!validateEmail(email)) {
+      Alert.alert("Error", "Invalid email format");
+      setIsSigningUp(false); // Re-enable the button
+      return;
+    }
 
-  try {
-    const response = await axios.post(`${getBaseUrl()}/users/signup`, formData, {
-      headers: {
-        "Content-Type": "multipart/form-data",
-      },
-    });
-    if (response.status === 200) {
-      Alert.alert("Success", "User signed up successfully", [
-        {
-          text: "OK",
-          onPress: () => router.replace("../login"), // Navigate to login after signup
+    const formData = new FormData();
+    formData.append("username", username);
+    formData.append("email", email);
+    formData.append("password", password);
+    if (caloriesGoal) formData.append("calories_goal", caloriesGoal);
+    if (dietaryRestrictions) formData.append("dietary_restrictions", dietaryRestrictions);
+    if (allergies) formData.append("allergies", allergies); // Add allergies to the form data
+    if (profilePicture) {
+      const uriParts = profilePicture.split(".");
+      const fileType = uriParts[uriParts.length - 1];
+      formData.append("profile_picture", {
+        uri: profilePicture,
+        name: `profile_picture.${fileType}`,
+        type: `image/${fileType}`,
+      } as any);
+    }
+
+    try {
+      const response = await axios.post(`${getBaseUrl()}/users/signup`, formData, {
+        headers: {
+          "Content-Type": "multipart/form-data",
         },
-      ]);
+      });
+      if (response.status === 200) {
+        Alert.alert("Success", "User signed up successfully", [
+          {
+            text: "OK",
+            onPress: () => router.replace("../login"), // Navigate to login after signup
+          },
+        ]);
+      }
+    } catch (error) {
+      if ((error as any).response && (error as any).response.data) {
+        const errorMessage = (error as any).response?.data?.message || "Failed to sign up";
+        Alert.alert("Error", errorMessage);
+      } else {
+        Alert.alert("Error", "Failed to sign up");
+      }
+      console.error("Error signing up:", error);
+    } finally {
+      setIsSigningUp(false); // Re-enable the button after the process is complete
     }
-  } catch (error) {
-    if ((error as any).response && (error as any).response.data) {
-      const errorMessage = (error as any).response?.data?.message || "Failed to sign up";
-      Alert.alert("Error", errorMessage);
-    } else {
-      Alert.alert("Error", "Failed to sign up");
-    }
-    console.error("Error signing up:", error);
-  } finally {
-    setIsSigningUp(false); // Re-enable the button after the process is complete
-  }
-};
+  };
 
   return (
     <View style={styles.container}>
@@ -159,7 +183,17 @@ const handleSignUp = async () => {
         placeholder="Username"
         value={username}
         onChangeText={setUsername}
+        autoCapitalize="none"
       />
+      {checkingUsername && (
+        <Text style={{ color: "#007bff", marginBottom: 5 }}>Checking username...</Text>
+      )}
+      {isUsernameAvailable === false && (
+        <Text style={{ color: "red", marginBottom: 5 }}>Username is taken</Text>
+      )}
+      {isUsernameAvailable === true && (
+        <Text style={{ color: "green", marginBottom: 5 }}>Username is available</Text>
+      )}
       <TextInput
         style={styles.input}
         placeholder="Email"
@@ -224,7 +258,11 @@ const handleSignUp = async () => {
       {isSigningUp ? (
         <ActivityIndicator size="large" color="#007bff" style={{ marginVertical: 20 }} />
       ) : (
-        <TouchableOpacity style={styles.button} onPress={handleSignUp}>
+        <TouchableOpacity
+          style={styles.button}
+          onPress={handleSignUp}
+          disabled={isUsernameAvailable === false}
+        >
           <Text style={styles.buttonText}>Sign Up</Text>
         </TouchableOpacity>
       )}

@@ -730,4 +730,31 @@ router.put('/meals/:meal_id/favorite', authMiddleware, async (req: Request, res:
   }
 });
 
+// Check if a username is already taken
+router.get('/check-username', async (req: Request, res: Response) => {
+  const db = (req as any).db;
+  const { username } = req.query;
+
+  if (!username || typeof username !== "string") {
+    res.status(400).json({ error: "Username is required" });
+    return;
+  }
+
+  try {
+    const [rows]: [any[], any] = await db.query(
+      "SELECT id FROM users WHERE username = ? LIMIT 1",
+      [username]
+    );
+    if (rows.length > 0) {
+      res.json({ taken: true });
+    } else {
+      res.json({ taken: false });
+    }
+  } catch (err) {
+    console.error("Error checking username:", err);
+    res.status(500).json({ error: "Error checking username" });
+  }
+});
+
+
   export default router;
