@@ -26,11 +26,13 @@ const AICreateMeal = () => {
   const [generatedMeal, setGeneratedMeal] = useState<{
     name: string;
     description: string;
+    servings: string;
     ingredients: { name: string; quantity: string; unit: string }[];
     instructions: string;
   }>({
     name: "",
     description: "",
+    servings: "1", // <-- default to 1
     ingredients: [],
     instructions: "",
   });
@@ -171,6 +173,7 @@ const AICreateMeal = () => {
     setGeneratedMeal({
       name: "",
       description: "",
+      servings: "1", 
       ingredients: [],
       instructions: "",
     });
@@ -203,7 +206,7 @@ const AICreateMeal = () => {
         if (typeof ingredients === "string") {
           ingredients = parseAIIngredients(ingredients);
         }
-        setGeneratedMeal({ ...meal, ingredients });
+        setGeneratedMeal({ ...meal,servings: meal.servings ? String(meal.servings) : "1", ingredients });
       } else {
         Alert.alert("Error", "Failed to generate a meal. Please try again.");
       }
@@ -290,6 +293,15 @@ const AICreateMeal = () => {
               }
               placeholder="Description"
               multiline={true}
+            />
+            <TextInput
+              style={[styles.resultInput]}
+              value={generatedMeal.servings}
+              onChangeText={text =>
+                setGeneratedMeal(prev => ({ ...prev, servings: text }))
+              }
+              placeholder="Servings"
+              keyboardType="numeric"
             />
             {/* Ingredients Section */}
             <Text style={{ fontWeight: "bold", marginBottom: 8 }}>Ingredients</Text>

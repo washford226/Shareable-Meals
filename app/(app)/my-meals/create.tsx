@@ -16,8 +16,18 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as ImagePicker from "expo-image-picker";
 import { useTheme } from "../../../context/ThemeContext";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import RNPickerSelect from "react-native-picker-select";
 
 const BASE_URL = Platform.OS === "android" ? "http://10.0.2.2:5000" : "http://localhost:5000";
+
+const dietaryOptions = [
+  { label: "None", value: "" },
+  { label: "Vegetarian", value: "Vegetarian" },
+  { label: "Vegan", value: "Vegan" },
+  { label: "Gluten-Free", value: "Gluten-Free" },
+  { label: "Keto", value: "Keto" },
+  { label: "Paleo", value: "Paleo" },
+];
 
 const CreateMealScreen = () => {
   const { theme } = useTheme();
@@ -31,6 +41,8 @@ const CreateMealScreen = () => {
   const [mealRecipeLink, setMealRecipeLink] = useState("");
   const [mealPicture, setMealPicture] = useState<string | null>(null);
   const [mealVisibility, setMealVisibility] = useState(true);
+  const [mealDietaryRestriction, setMealDietaryRestriction] = useState("");
+  const [mealServings, setMealServings] = useState("1");
 
   const pickMealImage = async () => {
     try {
@@ -90,6 +102,8 @@ const CreateMealScreen = () => {
     formData.append("recipeLink", mealRecipeLink);
     formData.append("visibility", mealVisibility ? "1" : "0");
     formData.append("day", selectedDay || "");
+    formData.append("dietary_restrictions", mealDietaryRestriction);
+    formData.append("servings", mealServings);
 
     if (mealPicture) {
       const uriParts = mealPicture.split(".");
@@ -121,7 +135,7 @@ const CreateMealScreen = () => {
       }
 
       Alert.alert("Success", "Meal added successfully!");
-      router.back();
+      router.push("/(app)/my-meals/meals");
     } catch (error) {
       console.error("Error adding meal:", error);
       Alert.alert("Error", "Failed to add the meal to the database.");
@@ -191,6 +205,28 @@ const CreateMealScreen = () => {
         value={mealInstructions}
         onChangeText={setMealInstructions}
         multiline
+      />
+
+      {/* Dietary Restrictions Dropdown */}
+      <Text style={[styles.label, { color: theme.text }]}>Dietary Restrictions</Text>
+      <RNPickerSelect
+        onValueChange={setMealDietaryRestriction}
+        items={dietaryOptions}
+        placeholder={{ label: "Select Dietary Restriction (optional)", value: "" }}
+        style={{
+          inputIOS: [styles.input, { backgroundColor: theme.card, borderColor: theme.border, color: theme.text }],
+          inputAndroid: [styles.input, { backgroundColor: theme.card, borderColor: theme.border, color: theme.text }],
+        }}
+        value={mealDietaryRestriction}
+      />
+
+      <TextInput
+        style={[styles.input, { backgroundColor: theme.card, borderColor: theme.border, color: theme.text }]}
+        placeholder="Servings"
+        placeholderTextColor={theme.placeholder}
+        value={mealServings}
+        onChangeText={setMealServings}
+        keyboardType="numeric"
       />
 
       <TextInput

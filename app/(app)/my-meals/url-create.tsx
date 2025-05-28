@@ -45,6 +45,7 @@ const URLCreateMealScreen: React.FC = () => {
   const [instructions, setInstructions] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(false);
   const [saving, setSaving] = useState<boolean>(false);
+  const [servings, setServings] = useState<string>("1");
 
   // Add, remove, update ingredient handlers
   const addIngredient = () => {
@@ -129,6 +130,7 @@ function parseIngredientLine(line: string) {
         const { name, description, ingredients: ing, instructions } = response.data;
         setMealName(name || "");
         setDescription(description || "");
+        setServings(response.data.servings ? String(response.data.servings) : "1");
         // Accept both array and string for ingredients
        let parsedIngredients: { name: string; quantity: string; unit: string }[] = [];
         if (Array.isArray(ing)) {
@@ -174,6 +176,7 @@ function parseIngredientLine(line: string) {
       const formData = new FormData();
       formData.append("name", mealName);
       formData.append("description", description);
+      formData.append("servings", servings);
       formData.append("ingredients", JSON.stringify(ingredients));
       formData.append("instructions", instructions);
       formData.append("recipeLink", recipeUrl);
@@ -244,6 +247,15 @@ function parseIngredientLine(line: string) {
         onChangeText={setDescription}
         multiline
       />
+
+      <Text style={styles.label}>Servings</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Servings"
+          value={servings}
+          onChangeText={setServings}
+          keyboardType="numeric"
+        />
 
       {/* Ingredients */}
       <Text style={styles.label}>Ingredients</Text>

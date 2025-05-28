@@ -23,6 +23,7 @@ function convertToGrams(quantity: number, unit?: string): number {
     case "oz":
       return quantity * 28.3495;
     case "lb":
+    case "lbs":
     case "pound":
       return quantity * 453.592;
     case "ml":
@@ -43,6 +44,13 @@ export async function calculateAndStoreMealNutrition(
     `SELECT quantity, unit, food_id, raw_name FROM meal_ingredients WHERE meal_id = ?`,
     [mealId]
   );
+
+  // Fetch servings for this meal
+  const [mealRows]: any[] = await db.query(
+    `SELECT servings FROM meals WHERE id = ? LIMIT 1`,
+    [mealId]
+  );
+  const servings = mealRows.length && mealRows[0].servings ? Number(mealRows[0].servings) : 1;
 
   let totalCalories = 0;
   let totalProtein = 0;
@@ -149,16 +157,22 @@ export async function calculateAndStoreMealNutrition(
     }
   }
 
+  // Divide totals by servings to get per-serving values
+  const perServingCalories = totalCalories / servings;
+  const perServingProtein = totalProtein / servings;
+  const perServingFat = totalFat / servings;
+  const perServingCarbs = totalCarbs / servings;
+
   await db.query(
     `UPDATE meals SET calories = ?, protein = ?, fat = ?, carbohydrates = ? WHERE id = ?`,
     [
-      Math.round(totalCalories),
-      Math.round(totalProtein),
-      Math.round(totalFat),
-      Math.round(totalCarbs),
+      Math.round(perServingCalories),
+      Math.round(perServingProtein),
+      Math.round(perServingFat),
+      Math.round(perServingCarbs),
       mealId,
     ]
   );
 
-  console.log(`✅ Updated meal ${mealId} with total nutrition.`);
+  console.log(`✅ Updated meal ${mealId} with per-serving nutrition.`);
 }

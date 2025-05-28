@@ -20,6 +20,7 @@ import { jwtDecode } from "jwt-decode"; // Use named import for jwtDecode
 import Icon from "react-native-vector-icons/FontAwesome"; // Import FontAwesome icons
 import { useRouter } from "expo-router"; // Import useRouter from expo-router
 import BottomNav from "components/bottomNav";
+import RNPickerSelect from "react-native-picker-select";
 
 const BASE_URL = Platform.OS === "android" ? "http://10.0.2.2:5000" : "http://localhost:5000";
 
@@ -41,7 +42,27 @@ const OtherMeals: React.FC = () => {
     { type: "fat", greaterThan: "", lessThan: "" },
     { type: "protein", greaterThan: "", lessThan: "" },
     { type: "carbohydrates", greaterThan: "", lessThan: "" },
+    
   ]);
+  const aiOptions = [
+  { label: "All", value: "" },
+  { label: "AI Generated", value: "ai" },
+  { label: "Not AI Generated", value: "not_ai" },
+];
+
+const dietaryOptions = [
+  { label: "All", value: "" },
+  { label: "Vegetarian", value: "Vegetarian" },
+  { label: "Vegan", value: "Vegan" },
+  { label: "Gluten-Free", value: "Gluten-Free" },
+  { label: "Keto", value: "Keto" },
+  { label: "Paleo", value: "Paleo" },
+];
+
+const [aiFilter, setAiFilter] = useState<string>("");
+const [dietaryRestrictionFilter, setDietaryRestrictionFilter] = useState<string>("");
+const [tempAiFilter, setTempAiFilter] = useState<string>(aiFilter);
+const [tempDietaryRestrictionFilter, setTempDietaryRestrictionFilter] = useState<string>(dietaryRestrictionFilter);
 
   const { theme } = useTheme();
   const router = useRouter(); 
@@ -66,49 +87,57 @@ const OtherMeals: React.FC = () => {
   };
 
   useEffect(() => {
-    const fetchMeals = async () => {
-      try {
-        const token = await AsyncStorage.getItem("token");
-        if (!token) {
-          Alert.alert("Error", "User not authenticated. Please log in.");
-          return;
-        }
-
-        const userId = await getUserIdFromToken();
-        if (!userId) {
-          Alert.alert("Error", "User not authenticated. Please log in.");
-          return;
-        }
-
-        const savedFilters = await AsyncStorage.getItem(`filters_OtherMeals_${userId}`);
-        const savedSearchQuery = await AsyncStorage.getItem(`searchQuery_OtherMeals_${userId}`);
-
-        if (savedFilters) {
-          const parsedFilters = JSON.parse(savedFilters);
-          setFilters(parsedFilters);
-          setTempFilters(parsedFilters);
-        }
-
-        if (savedSearchQuery) {
-          setSearchQuery(savedSearchQuery);
-        }
-
-        const response = await axios.get(`${BASE_URL}/meal/meals`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-
-        setMeals(response.data);
-        setFilteredMeals(response.data);
-      } catch (error) {
-        console.error("Error fetching meals:", error);
-        Alert.alert("Error", "Failed to fetch meals. Please try again later.");
-      } finally {
-        setLoading(false);
+  const fetchMeals = async () => {
+    try {
+      const token = await AsyncStorage.getItem("token");
+      if (!token) {
+        Alert.alert("Error", "User not authenticated. Please log in.");
+        return;
       }
-    };
 
-    fetchMeals();
-  }, []);
+      const userId = await getUserIdFromToken();
+      if (!userId) {
+        Alert.alert("Error", "User not authenticated. Please log in.");
+        return;
+      }
+
+      const savedFilters = await AsyncStorage.getItem(`filters_OtherMeals_${userId}`);
+      const savedSearchQuery = await AsyncStorage.getItem(`searchQuery_OtherMeals_${userId}`);
+      const savedDietary = await AsyncStorage.getItem(`dietaryRestrictionFilter_OtherMeals_${userId}`);
+      const savedAi = await AsyncStorage.getItem(`aiFilter_OtherMeals_${userId}`);
+
+      if (savedFilters) {
+        const parsedFilters = JSON.parse(savedFilters);
+        setFilters(parsedFilters);
+        setTempFilters(parsedFilters);
+      }
+      if (savedSearchQuery) setSearchQuery(savedSearchQuery);
+      if (savedDietary !== null) setDietaryRestrictionFilter(savedDietary);
+      if (savedAi !== null) setAiFilter(savedAi);
+
+      // Build params for backend
+      const params: any = {};
+      if (dietaryRestrictionFilter) params.dietary_restrictions = dietaryRestrictionFilter;
+      if (aiFilter === "ai") params.created_by_ai = "true";
+      if (aiFilter === "not_ai") params.created_by_ai = "false";
+
+      const response = await axios.get(`${BASE_URL}/meal/meals`, {
+        headers: { Authorization: `Bearer ${token}` },
+        params,
+      });
+
+      setMeals(response.data);
+      setFilteredMeals(response.data);
+    } catch (error) {
+      console.error("Error fetching meals:", error);
+      Alert.alert("Error", "Failed to fetch meals. Please try again later.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  fetchMeals();
+}, [dietaryRestrictionFilter, aiFilter]);
 
   useEffect(() => {
     const filtered = meals.filter((meal) => {
@@ -143,21 +172,25 @@ const OtherMeals: React.FC = () => {
     setFilteredMeals(filtered);
   }, [searchQuery, filters, meals]);
 
-  const applyFilters = async () => {
-    try {
-      const userId = await getUserIdFromToken();
-      if (!userId) {
-        Alert.alert("Error", "User not authenticated. Please log in.");
-        return;
-      }
-
-      setFilters(tempFilters);
-      await AsyncStorage.setItem(`filters_OtherMeals_${userId}`, JSON.stringify(tempFilters));
-      setIsFilterModalVisible(false);
-    } catch (error) {
-      console.error("Error saving filters:", error);
+const applyFilters = async () => {
+  try {
+    const userId = await getUserIdFromToken();
+    if (!userId) {
+      Alert.alert("Error", "User not authenticated. Please log in.");
+      return;
     }
-  };
+
+    setFilters(tempFilters);
+    setAiFilter(tempAiFilter);
+    setDietaryRestrictionFilter(tempDietaryRestrictionFilter); // <-- update main filter
+    await AsyncStorage.setItem(`filters_OtherMeals_${userId}`, JSON.stringify(tempFilters));
+    await AsyncStorage.setItem(`aiFilter_OtherMeals_${userId}`, tempAiFilter);
+    await AsyncStorage.setItem(`dietaryRestrictionFilter_OtherMeals_${userId}`, tempDietaryRestrictionFilter); // <-- save temp
+    setIsFilterModalVisible(false);
+  } catch (error) {
+    console.error("Error saving filters:", error);
+  }
+};
 
   const handleSearchChange = async (text: string) => {
     setSearchQuery(text);
@@ -195,7 +228,11 @@ const OtherMeals: React.FC = () => {
         />
         <TouchableOpacity
           style={[styles.filterButton, { backgroundColor: theme.button }]}
-          onPress={() => setIsFilterModalVisible(true)}
+          onPress={() => {
+            setTempAiFilter(aiFilter);
+            setTempDietaryRestrictionFilter(dietaryRestrictionFilter);
+            setIsFilterModalVisible(true);
+          }}
         >
           <Text style={[styles.filterButtonText, { color: theme.buttonText }]}>Filter</Text>
         </TouchableOpacity>
@@ -233,6 +270,12 @@ const OtherMeals: React.FC = () => {
           ? `${item.description.slice(0, 100)}...` // Limit to 100 characters
           : item.description}
       </Text>
+         {/* AI Generated Tag */}
+    {item.created_by_ai == true && (
+      <View style={styles.aiTag}>
+        <Text style={styles.aiTagText}>AI Generated</Text>
+      </View>
+    )}
       <View style={styles.ratingContainer}>
         {[...Array(5)].map((_, index) => (
           <Icon
@@ -285,12 +328,96 @@ const OtherMeals: React.FC = () => {
                 />
               </View>
             ))}
+            <Text style={[styles.label, { color: theme.text }]}>Dietary Restriction</Text>
+            <View style={{ marginBottom: 12 }}>
+              <RNPickerSelect
+                onValueChange={setTempDietaryRestrictionFilter}
+                items={dietaryOptions}
+                value={tempDietaryRestrictionFilter}
+                style={{
+                  inputIOS: {
+                    color: dietaryRestrictionFilter ? theme.text : theme.placeholder,
+                    paddingVertical: 12,
+                    paddingHorizontal: 10,
+                    borderWidth: 1,
+                    borderColor: theme.border,
+                    borderRadius: 8,
+                    backgroundColor: theme.card,
+                    paddingRight: 30, // to ensure the dropdown icon doesn't overlap text
+                  },
+                  inputAndroid: {
+                    color: dietaryRestrictionFilter ? theme.text : theme.placeholder,
+                    paddingVertical: 12,
+                    paddingHorizontal: 10,
+                    borderWidth: 1,
+                    borderColor: theme.border,
+                    borderRadius: 8,
+                    backgroundColor: theme.card,
+                    paddingRight: 30,
+                  },
+                  iconContainer: {
+                    top: 16,
+                    right: 12,
+                  },
+                  placeholder: {
+                    color: theme.placeholder,
+                  },
+                }}
+                useNativeAndroidPickerStyle={false}
+                Icon={() => <Text style={{ fontSize: 16, color: theme.text }}>▼</Text>}
+              />
+            </View>
+
+            {/* AI Generated Switch */}
+            <Text style={[styles.label, { color: theme.text }]}>AI Generation</Text>
+            <View style={{ marginBottom: 12 }}>
+              <RNPickerSelect
+                onValueChange={setTempAiFilter}
+                items={aiOptions}
+                value={tempAiFilter}
+                style={{
+                  inputIOS: {
+                    color: theme.text,
+                    paddingVertical: 12,
+                    paddingHorizontal: 10,
+                    borderWidth: 1,
+                    borderColor: theme.border,
+                    borderRadius: 8,
+                    backgroundColor: theme.card,
+                    paddingRight: 30,
+                  },
+                  inputAndroid: {
+                    color: theme.text,
+                    paddingVertical: 12,
+                    paddingHorizontal: 10,
+                    borderWidth: 1,
+                    borderColor: theme.border,
+                    borderRadius: 8,
+                    backgroundColor: theme.card,
+                    paddingRight: 30,
+                  },
+                  iconContainer: {
+                    top: 16,
+                    right: 12,
+                  },
+                  placeholder: {
+                    color: theme.placeholder,
+                  },
+                }}
+                useNativeAndroidPickerStyle={false}
+                Icon={() => <Text style={{ fontSize: 16, color: theme.text }}>▼</Text>}
+              />
+            </View>
             <TouchableOpacity style={[styles.applyButton, { backgroundColor: theme.button }]} onPress={applyFilters}>
               <Text style={[styles.applyButtonText, { color: theme.buttonText }]}>Apply Filters</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.cancelButton, { backgroundColor: theme.danger }]}
-              onPress={() => setIsFilterModalVisible(false)}
+              onPress={() => {
+                setTempAiFilter(aiFilter);
+                setTempDietaryRestrictionFilter(dietaryRestrictionFilter);
+                setIsFilterModalVisible(false);
+              }}
             >
               <Text style={[styles.cancelButtonText, { color: theme.buttonText }]}>Cancel</Text>
             </TouchableOpacity>
@@ -315,6 +442,21 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: "center",
     justifyContent: "flex-start", // Align content to the top
+  },
+  aiTag: {
+    position: "absolute",
+    top: 8,
+    left: 8,
+    backgroundColor: "#FFD700", // Gold color for the tag
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    zIndex: 1, // Ensure the tag appears above other elements
+  },
+  aiTagText: {
+    fontSize: 12,
+    fontWeight: "bold",
+    color: "#000", // Black text for contrast
   },
   weeklyMealsButton: {
     margin: 16,
@@ -411,7 +553,8 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0, 0, 0, 0.5)",
   },
   modalContent: {
-    width: "80%",
+    width: "93%",
+    height: "70%",
     padding: 16,
     borderRadius: 8,
   },
@@ -458,6 +601,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "bold",
   },  
+  label: {
+    fontSize: 16,
+    fontWeight: "bold",
+    marginBottom: 4,
+  },
 });
 
 export default OtherMeals;

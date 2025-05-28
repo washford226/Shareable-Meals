@@ -15,6 +15,7 @@ import {
 import { useTheme } from "../../../../context/ThemeContext";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
+import RNPickerSelect from "react-native-picker-select";
 
 const BASE_URL = Platform.OS === "android" ? "http://10.0.2.2:5000" : "http://localhost:5000";
 
@@ -35,6 +36,17 @@ export default function EditMealScreen() {
   const [visibility, setVisibility] = useState<boolean>(true);
   const [loading, setLoading] = useState<boolean>(true);
   const [saving, setSaving] = useState<boolean>(false);
+  const [dietaryRestriction, setDietaryRestriction] = useState<string>("");
+
+  const dietaryOptions = [
+    { label: "None", value: "" },
+    { label: "Vegetarian", value: "Vegetarian" },
+    { label: "Vegan", value: "Vegan" },
+    { label: "Gluten-Free", value: "Gluten-Free" },
+    { label: "Keto", value: "Keto" },
+    { label: "Paleo", value: "Paleo" },
+  ];
+
 
   const fetchMealDetails = async () => {
     try {
@@ -63,6 +75,7 @@ export default function EditMealScreen() {
         setInstructions(meal.instructions || "");
         setRecipeLink(meal.recipeLink || "");
         setVisibility(meal.visibility);
+        setDietaryRestriction(meal.dietary_restrictions || "");
       } else {
         Alert.alert("Error", "Failed to fetch meal details.");
         router.back();
@@ -104,6 +117,7 @@ export default function EditMealScreen() {
           instructions: instructions.trim(),
           recipeLink: recipeLink.trim(),
           visibility,
+          dietary_restrictions: dietaryRestriction,
         },
         {
           headers: {
@@ -224,6 +238,19 @@ export default function EditMealScreen() {
         placeholder="Instructions"
         placeholderTextColor={theme.placeholder}
         multiline
+      />
+
+      {/* Dietary Restriction Dropdown */}
+      <Text style={[styles.label, { color: theme.text }]}>Dietary Restriction</Text>
+      <RNPickerSelect
+        onValueChange={setDietaryRestriction}
+        items={dietaryOptions}
+        placeholder={{ label: "Select Dietary Restriction (optional)", value: "" }}
+        style={{
+          inputIOS: [styles.input, { backgroundColor: theme.card, borderColor: theme.border, color: theme.text }],
+          inputAndroid: [styles.input, { backgroundColor: theme.card, borderColor: theme.border, color: theme.text }],
+        }}
+        value={dietaryRestriction}
       />
 
       <Text style={[styles.label, { color: theme.text }]}>Recipe Link</Text>

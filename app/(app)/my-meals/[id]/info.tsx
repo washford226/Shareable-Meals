@@ -152,6 +152,13 @@ const MyMealInfo = () => {
         <Text style={[styles.sectionTitle, { color: theme.text }]}>Instructions</Text>
         <Text style={[styles.details, { color: theme.text }]}>{meal.instructions}</Text>
 
+        {/* Dietary Restriction */}
+        {meal.dietary_restrictions && (
+          <Text style={[styles.details, { color: theme.text, fontWeight: "bold", marginBottom: 8 }]}>
+            Dietary Restriction: {meal.dietary_restrictions}
+          </Text>
+        )}
+
         {/* Meal Link */}
         {meal.recipeLink && (
           <>

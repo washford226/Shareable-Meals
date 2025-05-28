@@ -19,4 +19,6 @@ export interface Meal {
   created_at?: string; // Optional field for the creation timestamp
   created_by_ai: boolean; // Indicates if the meal was created by AI
   favorite: boolean; // Indicates if the meal is a favorite
+  dietary_restrictions?: string; // Optional field for dietary restrictions
+  servings?: number; // Optional field for number of servings
 }

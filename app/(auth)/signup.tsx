@@ -54,7 +54,7 @@ const SignUpScreen: React.FC = () => {
     const delayDebounce = setTimeout(async () => {
       setCheckingUsername(true);
       try {
-        const res = await axios.get(`${getBaseUrl()}/meal/check-username`, {
+        const res = await axios.get(`${getBaseUrl()}/users/check-username`, {
           params: { username }
         });
         setIsUsernameAvailable(!res.data.taken);

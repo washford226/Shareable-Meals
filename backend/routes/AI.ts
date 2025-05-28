@@ -54,16 +54,17 @@ router.post("/generate-meal", authMiddleware, async (req: Request, res: Response
 
   // Construct the AI prompt
   const fullPrompt = `Create a meal based on the following prompt: ${prompt}. ${
-    dietaryRestrictions ? `Dietary restrictions: ${dietaryRestrictions}.` : ""
-  } ${allergies ? `Avoid the following allergens: ${allergies}.` : ""} ${
-    usePantry && pantryItems.length > 0
-      ? `Use only these ingredients: ${pantryItems.join(", ")}.`
-      : ""
-  } Please provide the output in the following format:
-  - Name: [Meal Name]
-  - Description: [Meal Description]
-  - Ingredients: List each ingredient on a new line with quantity and unit(eg. beef 1 lb). Avoid alternatives.
-  - Instructions: [Cooking Instructions]`;
+  dietaryRestrictions ? `Dietary restrictions: ${dietaryRestrictions}.` : ""
+} ${allergies ? `Avoid the following allergens: ${allergies}.` : ""} ${
+  usePantry && pantryItems.length > 0
+    ? `Use only these ingredients: ${pantryItems.join(", ")}.`
+    : ""
+} Please provide the output in the following format:
+- Name: [Meal Name]
+- Description: [Meal Description]
+- Servings: [Number of servings]
+- Ingredients: List each ingredient on a new line with quantity and unit (eg. beef 1 lb). Avoid alternatives.
+- Instructions: [Cooking Instructions]`;
 
   try {
     const response = await axios.post(
@@ -116,17 +117,20 @@ function parseMealResponse(rawText: string) {
   const meal: {
     name?: string;
     description?: string;
+    servings?: string;
     ingredients?: { name: string; quantity: string; unit: string }[];
     instructions?: string;
   } = {};
 
   const nameMatch = rawText.match(/- Name:\s*(.+)/i);
   const descriptionMatch = rawText.match(/- Description:\s*(.+)/i);
+  const servingsMatch = rawText.match(/- Servings:\s*(.+)/i); // <-- Add this line
   const ingredientsMatch = rawText.match(/- Ingredients:\s*([\s\S]*?)(?=- Instructions:|$)/i);
   const instructionsMatch = rawText.match(/- Instructions:\s*([\s\S]*)/i);
 
   meal.name = nameMatch ? nameMatch[1].trim() : undefined;
   meal.description = descriptionMatch ? descriptionMatch[1].trim() : undefined;
+  meal.servings = servingsMatch ? servingsMatch[1].trim() : undefined;
 
   // Parse ingredients into array of objects: { name, quantity, unit }
   if (ingredientsMatch) {
