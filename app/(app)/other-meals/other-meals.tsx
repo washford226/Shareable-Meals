@@ -63,6 +63,7 @@ const [aiFilter, setAiFilter] = useState<string>("");
 const [dietaryRestrictionFilter, setDietaryRestrictionFilter] = useState<string>("");
 const [tempAiFilter, setTempAiFilter] = useState<string>(aiFilter);
 const [tempDietaryRestrictionFilter, setTempDietaryRestrictionFilter] = useState<string>(dietaryRestrictionFilter);
+const [filtersLoaded, setFiltersLoaded] = useState(false);
 
   const { theme } = useTheme();
   const router = useRouter(); 
@@ -86,8 +87,41 @@ const [tempDietaryRestrictionFilter, setTempDietaryRestrictionFilter] = useState
     router.push(`/other-meals/${meal.id}/other-meals-info`); // Navigate to the meal details screen
   };
 
-  useEffect(() => {
+  // Restore filters/search on mount
+useEffect(() => {
+  const restoreFilters = async () => {
+    const token = await AsyncStorage.getItem("token");
+    if (!token) return;
+
+    const userId = await getUserIdFromToken();
+    if (!userId) return;
+
+    const savedFilters = await AsyncStorage.getItem(`filters_OtherMeals_${userId}`);
+    const savedSearchQuery = await AsyncStorage.getItem(`searchQuery_OtherMeals_${userId}`);
+    const savedDietary = await AsyncStorage.getItem(`dietaryRestrictionFilter_OtherMeals_${userId}`);
+    const savedAi = await AsyncStorage.getItem(`aiFilter_OtherMeals_${userId}`);
+
+    if (savedFilters) {
+      const parsedFilters = JSON.parse(savedFilters);
+      setFilters(parsedFilters);
+      setTempFilters(parsedFilters);
+    }
+    if (savedSearchQuery) setSearchQuery(savedSearchQuery);
+    if (savedDietary !== null) setDietaryRestrictionFilter(savedDietary);
+    if (savedAi !== null) setAiFilter(savedAi);
+
+    setFiltersLoaded(true);
+  };
+
+  restoreFilters();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, []);
+
+useEffect(() => {
+  if (!filtersLoaded) return;
+
   const fetchMeals = async () => {
+    setLoading(true);
     try {
       const token = await AsyncStorage.getItem("token");
       if (!token) {
@@ -95,27 +129,6 @@ const [tempDietaryRestrictionFilter, setTempDietaryRestrictionFilter] = useState
         return;
       }
 
-      const userId = await getUserIdFromToken();
-      if (!userId) {
-        Alert.alert("Error", "User not authenticated. Please log in.");
-        return;
-      }
-
-      const savedFilters = await AsyncStorage.getItem(`filters_OtherMeals_${userId}`);
-      const savedSearchQuery = await AsyncStorage.getItem(`searchQuery_OtherMeals_${userId}`);
-      const savedDietary = await AsyncStorage.getItem(`dietaryRestrictionFilter_OtherMeals_${userId}`);
-      const savedAi = await AsyncStorage.getItem(`aiFilter_OtherMeals_${userId}`);
-
-      if (savedFilters) {
-        const parsedFilters = JSON.parse(savedFilters);
-        setFilters(parsedFilters);
-        setTempFilters(parsedFilters);
-      }
-      if (savedSearchQuery) setSearchQuery(savedSearchQuery);
-      if (savedDietary !== null) setDietaryRestrictionFilter(savedDietary);
-      if (savedAi !== null) setAiFilter(savedAi);
-
-      // Build params for backend
       const params: any = {};
       if (dietaryRestrictionFilter) params.dietary_restrictions = dietaryRestrictionFilter;
       if (aiFilter === "ai") params.created_by_ai = "true";
@@ -137,7 +150,7 @@ const [tempDietaryRestrictionFilter, setTempDietaryRestrictionFilter] = useState
   };
 
   fetchMeals();
-}, [dietaryRestrictionFilter, aiFilter]);
+}, [filtersLoaded, dietaryRestrictionFilter, aiFilter]);
 
   useEffect(() => {
     const filtered = meals.filter((meal) => {
@@ -207,14 +220,14 @@ const applyFilters = async () => {
     }
   };
 
-  if (loading) {
-    return (
-      <View style={[styles.container, { backgroundColor: theme.background }]}>
-        <ActivityIndicator size="large" color={theme.primary} />
-        <Text style={[styles.loadingText, { color: theme.text }]}>Loading meals...</Text>
-      </View>
-    );
-  }
+  if (loading || !filtersLoaded) {
+  return (
+    <View style={[styles.container, { backgroundColor: theme.background }]}>
+      <ActivityIndicator size="large" color={theme.primary} />
+      <Text style={[styles.loadingText, { color: theme.text }]}>Loading meals...</Text>
+    </View>
+  );
+}
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>

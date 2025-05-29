@@ -66,6 +66,7 @@ const MyMeals: React.FC<MyMealsProps> = ({ onCreateMeal}) => {
   const [aiFilter, setAiFilter] = useState<string>("");
   const [tempDietaryRestrictionFilter, setTempDietaryRestrictionFilter] = useState<string>(dietaryRestrictionFilter);
   const [tempAiFilter, setTempAiFilter] = useState<string>(aiFilter);
+  const [filtersLoaded, setFiltersLoaded] = useState(false);
 
   const { theme } = useTheme();
   const router = useRouter(); // Initialize router
@@ -96,9 +97,40 @@ const MyMeals: React.FC<MyMealsProps> = ({ onCreateMeal}) => {
       Alert.alert("Error", "Failed to update favorite status. Please try again.");
     }
   };
+  useEffect(() => {
+  const restoreFilters = async () => {
+    const token = await AsyncStorage.getItem("token");
+    if (!token) return;
+
+    const userId = await getUserIdFromToken();
+    if (!userId) return;
+
+    const savedFilters = await AsyncStorage.getItem(`filters_MyMeals_${userId}`);
+    const savedSearchQuery = await AsyncStorage.getItem(`searchQuery_MyMeals_${userId}`);
+    const savedDietary = await AsyncStorage.getItem(`dietaryRestrictionFilter_MyMeals_${userId}`);
+    const savedAi = await AsyncStorage.getItem(`aiFilter_MyMeals_${userId}`);
+
+    if (savedFilters) {
+      const parsedFilters = JSON.parse(savedFilters);
+      setFilters(parsedFilters);
+      setTempFilters(parsedFilters);
+    }
+    if (savedSearchQuery) setSearchQuery(savedSearchQuery);
+    if (savedDietary !== null) setDietaryRestrictionFilter(savedDietary);
+    if (savedAi !== null) setAiFilter(savedAi);
+
+    setFiltersLoaded(true);
+  };
+
+  restoreFilters();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, []);
 
   useEffect(() => {
+  if (!filtersLoaded) return;
+
   const fetchMyMeals = async () => {
+    setLoading(true);
     try {
       const token = await AsyncStorage.getItem("token");
       if (!token) {
@@ -106,30 +138,6 @@ const MyMeals: React.FC<MyMealsProps> = ({ onCreateMeal}) => {
         return;
       }
 
-      const userId = await getUserIdFromToken();
-      if (!userId) {
-        Alert.alert("Error", "User not authenticated. Please log in.");
-        return;
-      }
-
-      // Restore filters/search from AsyncStorage only on first load
-      if (meals.length === 0) {
-        const savedFilters = await AsyncStorage.getItem(`filters_MyMeals_${userId}`);
-        const savedSearchQuery = await AsyncStorage.getItem(`searchQuery_MyMeals_${userId}`);
-        const savedDietary = await AsyncStorage.getItem(`dietaryRestrictionFilter_MyMeals_${userId}`);
-        const savedAi = await AsyncStorage.getItem(`aiFilter_MyMeals_${userId}`);
-
-        if (savedFilters) {
-          const parsedFilters = JSON.parse(savedFilters);
-          setFilters(parsedFilters);
-          setTempFilters(parsedFilters);
-        }
-        if (savedSearchQuery) setSearchQuery(savedSearchQuery);
-        if (savedDietary !== null) setDietaryRestrictionFilter(savedDietary);
-        if (savedAi !== null) setAiFilter(savedAi);
-      }
-
-      // Always use current filter state for backend query
       const params: any = {};
       if (dietaryRestrictionFilter) params.dietary_restrictions = dietaryRestrictionFilter;
       if (aiFilter === "ai") params.created_by_ai = "true";
@@ -141,7 +149,6 @@ const MyMeals: React.FC<MyMealsProps> = ({ onCreateMeal}) => {
       });
 
       setMeals(response.data);
-      setFilteredMeals(response.data);
     } catch (error) {
       console.error("Error fetching meals:", error);
       Alert.alert("Error", "Failed to fetch meals. Please try again later.");
@@ -151,8 +158,7 @@ const MyMeals: React.FC<MyMealsProps> = ({ onCreateMeal}) => {
   };
 
   fetchMyMeals();
-  // Add dependencies so it refetches when filters change
-}, [dietaryRestrictionFilter, aiFilter]);
+}, [filtersLoaded, dietaryRestrictionFilter, aiFilter]);
 
   useEffect(() => {
     const filtered = meals.filter((meal) => {
@@ -251,14 +257,14 @@ const applyFilters = async () => {
   }
 };
 
-  if (loading) {
-    return (
-      <View style={[styles.container, { backgroundColor: theme.background }]}>
-        <ActivityIndicator size="large" color={theme.primary} />
-        <Text style={[styles.loadingText, { color: theme.text }]}>Loading your meals...</Text>
-      </View>
-    );
-  }
+  if (loading || !filtersLoaded) {
+  return (
+    <View style={[styles.container, { backgroundColor: theme.background }]}>
+      <ActivityIndicator size="large" color={theme.primary} />
+      <Text style={[styles.loadingText, { color: theme.text }]}>Loading your meals...</Text>
+    </View>
+  );
+}
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
