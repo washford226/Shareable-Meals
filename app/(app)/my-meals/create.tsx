@@ -43,6 +43,19 @@ const CreateMealScreen = () => {
   const [mealVisibility, setMealVisibility] = useState(true);
   const [mealDietaryRestriction, setMealDietaryRestriction] = useState("");
   const [mealServings, setMealServings] = useState("1");
+  const unitOptions = [
+  { label: "g", value: "g" },
+  { label: "kg", value: "kg" },
+  { label: "oz", value: "oz" },
+  { label: "lb", value: "lb" },
+  { label: "cup", value: "cup" },
+  { label: "tbsp", value: "tbsp" },
+  { label: "tsp", value: "tsp" },
+  { label: "ml", value: "ml" },
+  { label: "l", value: "l" },
+  { label: "piece", value: "piece" },
+  // Add more as needed
+];
 
   const pickMealImage = async () => {
     try {
@@ -182,13 +195,48 @@ const CreateMealScreen = () => {
             onChangeText={text => updateIngredient(idx, "quantity", text)}
             keyboardType="numeric"
           />
-          <TextInput
-            style={[styles.input, { flex: 1, marginRight: 5, backgroundColor: theme.card, borderColor: theme.border, color: theme.text }]}
-            placeholder="Unit"
-            placeholderTextColor={theme.placeholder}
-            value={ingredient.unit}
-            onChangeText={text => updateIngredient(idx, "unit", text)}
-          />
+          <RNPickerSelect
+  onValueChange={value => updateIngredient(idx, "unit", value)}
+  items={unitOptions}
+  value={ingredient.unit}
+  placeholder={{ label: "Unit", value: "" }}
+  style={{
+    inputIOS: {
+      color: ingredient.unit ? theme.text : theme.placeholder,
+      height: 50, // Match your .input height
+      paddingHorizontal: 10,
+      borderWidth: 1,
+      borderColor: theme.border,
+      borderRadius: 8,
+      backgroundColor: theme.card,
+      paddingRight: 30,
+      flex: 1,
+      marginRight: 5,
+    },
+    inputAndroid: {
+      color: ingredient.unit ? theme.text : theme.placeholder,
+      height: 50, // Match your .input height
+      paddingHorizontal: 10,
+      borderWidth: 1,
+      borderColor: theme.border,
+      borderRadius: 8,
+      backgroundColor: theme.card,
+      paddingRight: 30,
+      flex: 1,
+      marginRight: 5,
+      marginTop: -13, // Remove top margin for Android
+    },
+    iconContainer: {
+      top: 16,
+      right: 12,
+    },
+    placeholder: {
+      color: theme.placeholder,
+    },
+  }}
+  useNativeAndroidPickerStyle={false}
+  Icon={() => <Text style={{ fontSize: 16, color: theme.text }}>▼</Text>}
+/>
           <TouchableOpacity onPress={() => removeIngredient(idx)}>
             <Text style={{ color: theme.danger, fontWeight: "bold", fontSize: 18 }}>✕</Text>
           </TouchableOpacity>

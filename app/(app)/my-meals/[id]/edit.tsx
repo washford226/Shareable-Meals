@@ -26,7 +26,7 @@ export default function EditMealScreen() {
 
   const [name, setName] = useState<string>("");
   const [description, setDescription] = useState<string>("");
-  const [ingredients, setIngredients] = useState<string>("");
+  const [ingredients, setIngredients] = useState<{ name: string; quantity: string; unit: string }[]>([]);
   const [calories, setCalories] = useState<string>("");
   const [protein, setProtein] = useState<string>("");
   const [carbohydrates, setCarbohydrates] = useState<string>("");
@@ -67,7 +67,7 @@ export default function EditMealScreen() {
         const meal = response.data;
         setName(meal.name);
         setDescription(meal.description);
-        setIngredients(meal.ingredients);
+        setIngredients(Array.isArray(meal.ingredients) ? meal.ingredients : []);
         setCalories(meal.calories?.toString() || "");
         setProtein(meal.protein?.toString() || "");
         setCarbohydrates(meal.carbohydrates?.toString() || "");
@@ -90,7 +90,7 @@ export default function EditMealScreen() {
   };
 
   const handleSave = async () => {
-    if (!name.trim() || !description.trim() || !ingredients.trim()) {
+    if (!name.trim() || !description.trim() || !ingredients) {
       Alert.alert("Validation Error", "Name, description, and ingredients are required.");
       return;
     }
@@ -109,7 +109,7 @@ export default function EditMealScreen() {
         {
           name: name.trim(),
           description: description.trim(),
-          ingredients: ingredients.trim(),
+          ingredients,
           calories: calories ? parseInt(calories) : null,
           protein: protein ? parseInt(protein) : null,
           carbohydrates: carbohydrates ? parseInt(carbohydrates) : null,
@@ -181,14 +181,55 @@ export default function EditMealScreen() {
       />
 
       <Text style={[styles.label, { color: theme.text }]}>Ingredients</Text>
-      <TextInput
-        style={[styles.input, { backgroundColor: theme.card, color: theme.text }]}
-        value={ingredients}
-        onChangeText={setIngredients}
-        placeholder="Ingredients (comma-separated)"
-        placeholderTextColor={theme.placeholder}
-        multiline
-      />
+      {ingredients.map((ingredient, idx) => (
+        <View key={idx} style={{ flexDirection: "row", marginBottom: 8 }}>
+          <TextInput
+            style={[styles.input, { flex: 2, marginRight: 4, backgroundColor: theme.card, color: theme.text }]}
+            value={ingredient.name}
+            onChangeText={text => {
+              const updated = [...ingredients];
+              updated[idx].name = text;
+              setIngredients(updated);
+            }}
+            placeholder="Name"
+            placeholderTextColor={theme.placeholder}
+          />
+          <TextInput
+            style={[styles.input, { flex: 1, marginRight: 4, backgroundColor: theme.card, color: theme.text }]}
+            value={ingredient.quantity}
+            onChangeText={text => {
+              const updated = [...ingredients];
+              updated[idx].quantity = text;
+              setIngredients(updated);
+            }}
+            placeholder="Qty"
+            placeholderTextColor={theme.placeholder}
+            keyboardType="numeric"
+          />
+          <TextInput
+            style={[styles.input, { flex: 1, backgroundColor: theme.card, color: theme.text }]}
+            value={ingredient.unit}
+            onChangeText={text => {
+              const updated = [...ingredients];
+              updated[idx].unit = text;
+              setIngredients(updated);
+            }}
+            placeholder="Unit"
+            placeholderTextColor={theme.placeholder}
+          />
+          <TouchableOpacity onPress={() => {
+            setIngredients(ingredients.filter((_, i) => i !== idx));
+          }}>
+            <Text style={{ color: "#d00", fontWeight: "bold", fontSize: 18, marginLeft: 4 }}>✕</Text>
+          </TouchableOpacity>
+        </View>
+      ))}
+      <TouchableOpacity
+        onPress={() => setIngredients([...ingredients, { name: "", quantity: "", unit: "" }])}
+        style={{ marginBottom: 12 }}
+      >
+        <Text style={{ color: theme.primary, fontWeight: "bold" }}>+ Add Ingredient</Text>
+      </TouchableOpacity>
 
       <Text style={[styles.label, { color: theme.text }]}>Calories</Text>
       <TextInput
