@@ -15,6 +15,7 @@ import {
 import { useTheme } from "../../../../context/ThemeContext";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
+import RNPickerSelect from "react-native-picker-select";
 
 const BASE_URL = Platform.OS === "android" ? "http://10.0.2.2:5000" : "http://localhost:5000";
 
@@ -23,9 +24,23 @@ export default function EditMealScreen() {
   const router = useRouter();
   const { theme } = useTheme();
 
+  const cuisineOptions = [
+  { label: "None", value: "" },
+  { label: "Italian", value: "Italian" },
+  { label: "Mexican", value: "Mexican" },
+  { label: "Chinese", value: "Chinese" },
+  { label: "Indian", value: "Indian" },
+  { label: "American", value: "American" },
+  { label: "Japanese", value: "Japanese" },
+  { label: "Mediterranean", value: "Mediterranean" },
+  { label: "Thai", value: "Thai" },
+  { label: "French", value: "French" },
+];
+const [cuisine, setCuisine] = useState<string>("");
+
   const [name, setName] = useState<string>("");
   const [description, setDescription] = useState<string>("");
-  const [ingredients, setIngredients] = useState<string>("");
+  const [ingredients, setIngredients] = useState<{ name: string; quantity: string; unit: string }[]>([]);
   const [calories, setCalories] = useState<string>("");
   const [protein, setProtein] = useState<string>("");
   const [carbohydrates, setCarbohydrates] = useState<string>("");
@@ -35,6 +50,18 @@ export default function EditMealScreen() {
   const [visibility, setVisibility] = useState<boolean>(true);
   const [loading, setLoading] = useState<boolean>(true);
   const [saving, setSaving] = useState<boolean>(false);
+  const [dietaryRestriction, setDietaryRestriction] = useState<string>("");
+  
+
+  const dietaryOptions = [
+    { label: "None", value: "" },
+    { label: "Vegetarian", value: "Vegetarian" },
+    { label: "Vegan", value: "Vegan" },
+    { label: "Gluten-Free", value: "Gluten-Free" },
+    { label: "Keto", value: "Keto" },
+    { label: "Paleo", value: "Paleo" },
+  ];
+
 
   const fetchMealDetails = async () => {
     try {
@@ -55,7 +82,7 @@ export default function EditMealScreen() {
         const meal = response.data;
         setName(meal.name);
         setDescription(meal.description);
-        setIngredients(meal.ingredients);
+        setIngredients(Array.isArray(meal.ingredients) ? meal.ingredients : []);
         setCalories(meal.calories?.toString() || "");
         setProtein(meal.protein?.toString() || "");
         setCarbohydrates(meal.carbohydrates?.toString() || "");
@@ -63,6 +90,8 @@ export default function EditMealScreen() {
         setInstructions(meal.instructions || "");
         setRecipeLink(meal.recipeLink || "");
         setVisibility(meal.visibility);
+        setDietaryRestriction(meal.dietary_restrictions || "");
+        setCuisine(meal.cuisine || "");
       } else {
         Alert.alert("Error", "Failed to fetch meal details.");
         router.back();
@@ -77,7 +106,7 @@ export default function EditMealScreen() {
   };
 
   const handleSave = async () => {
-    if (!name.trim() || !description.trim() || !ingredients.trim()) {
+    if (!name.trim() || !description.trim() || !ingredients) {
       Alert.alert("Validation Error", "Name, description, and ingredients are required.");
       return;
     }
@@ -96,7 +125,7 @@ export default function EditMealScreen() {
         {
           name: name.trim(),
           description: description.trim(),
-          ingredients: ingredients.trim(),
+          ingredients,
           calories: calories ? parseInt(calories) : null,
           protein: protein ? parseInt(protein) : null,
           carbohydrates: carbohydrates ? parseInt(carbohydrates) : null,
@@ -104,6 +133,8 @@ export default function EditMealScreen() {
           instructions: instructions.trim(),
           recipeLink: recipeLink.trim(),
           visibility,
+          dietary_restrictions: dietaryRestriction,
+          cuisine,
         },
         {
           headers: {
@@ -167,14 +198,55 @@ export default function EditMealScreen() {
       />
 
       <Text style={[styles.label, { color: theme.text }]}>Ingredients</Text>
-      <TextInput
-        style={[styles.input, { backgroundColor: theme.card, color: theme.text }]}
-        value={ingredients}
-        onChangeText={setIngredients}
-        placeholder="Ingredients (comma-separated)"
-        placeholderTextColor={theme.placeholder}
-        multiline
-      />
+      {ingredients.map((ingredient, idx) => (
+        <View key={idx} style={{ flexDirection: "row", marginBottom: 8 }}>
+          <TextInput
+            style={[styles.input, { flex: 2, marginRight: 4, backgroundColor: theme.card, color: theme.text }]}
+            value={ingredient.name}
+            onChangeText={text => {
+              const updated = [...ingredients];
+              updated[idx].name = text;
+              setIngredients(updated);
+            }}
+            placeholder="Name"
+            placeholderTextColor={theme.placeholder}
+          />
+          <TextInput
+            style={[styles.input, { flex: 1, marginRight: 4, backgroundColor: theme.card, color: theme.text }]}
+            value={ingredient.quantity}
+            onChangeText={text => {
+              const updated = [...ingredients];
+              updated[idx].quantity = text;
+              setIngredients(updated);
+            }}
+            placeholder="Qty"
+            placeholderTextColor={theme.placeholder}
+            keyboardType="numeric"
+          />
+          <TextInput
+            style={[styles.input, { flex: 1, backgroundColor: theme.card, color: theme.text }]}
+            value={ingredient.unit}
+            onChangeText={text => {
+              const updated = [...ingredients];
+              updated[idx].unit = text;
+              setIngredients(updated);
+            }}
+            placeholder="Unit"
+            placeholderTextColor={theme.placeholder}
+          />
+          <TouchableOpacity onPress={() => {
+            setIngredients(ingredients.filter((_, i) => i !== idx));
+          }}>
+            <Text style={{ color: "#d00", fontWeight: "bold", fontSize: 18, marginLeft: 4 }}>✕</Text>
+          </TouchableOpacity>
+        </View>
+      ))}
+      <TouchableOpacity
+        onPress={() => setIngredients([...ingredients, { name: "", quantity: "", unit: "" }])}
+        style={{ marginBottom: 12 }}
+      >
+        <Text style={{ color: theme.primary, fontWeight: "bold" }}>+ Add Ingredient</Text>
+      </TouchableOpacity>
 
       <Text style={[styles.label, { color: theme.text }]}>Calories</Text>
       <TextInput
@@ -224,6 +296,31 @@ export default function EditMealScreen() {
         placeholder="Instructions"
         placeholderTextColor={theme.placeholder}
         multiline
+      />
+
+      {/* Dietary Restriction Dropdown */}
+      <Text style={[styles.label, { color: theme.text }]}>Dietary Restriction</Text>
+      <RNPickerSelect
+        onValueChange={setDietaryRestriction}
+        items={dietaryOptions}
+        placeholder={{ label: "Select Dietary Restriction (optional)", value: "" }}
+        style={{
+          inputIOS: [styles.input, { backgroundColor: theme.card, borderColor: theme.border, color: theme.text }],
+          inputAndroid: [styles.input, { backgroundColor: theme.card, borderColor: theme.border, color: theme.text }],
+        }}
+        value={dietaryRestriction}
+      />
+
+      <Text style={[styles.label, { color: theme.text }]}>Cuisine</Text>
+      <RNPickerSelect
+        onValueChange={setCuisine}
+        items={cuisineOptions}
+        placeholder={{ label: "Select Cuisine (optional)", value: "" }}
+        style={{
+          inputIOS: [styles.input, { backgroundColor: theme.card, borderColor: theme.border, color: theme.text }],
+          inputAndroid: [styles.input, { backgroundColor: theme.card, borderColor: theme.border, color: theme.text }],
+        }}
+        value={cuisine}
       />
 
       <Text style={[styles.label, { color: theme.text }]}>Recipe Link</Text>

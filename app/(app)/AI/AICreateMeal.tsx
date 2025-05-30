@@ -1,4 +1,4 @@
-import React, { useState, useEffect, use } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -26,42 +26,39 @@ const AICreateMeal = () => {
   const [generatedMeal, setGeneratedMeal] = useState<{
     name: string;
     description: string;
-    ingredients: string;
+    servings: string;
+    ingredients: { name: string; quantity: string; unit: string }[];
     instructions: string;
   }>({
     name: "",
     description: "",
-    ingredients: "",
+    servings: "1", // <-- default to 1
+    ingredients: [],
     instructions: "",
   });
   const [loading, setLoading] = useState(false);
   const [usePantry, setUsePantry] = useState(false); // State for pantry checkbox
   const [fetchingRestrictions, setFetchingRestrictions] = useState(true);
 
-  // Add this helper function above your component
-function parseAIIngredients(ingredientText: string) {
-  return ingredientText
-    .split(/\r?\n|,/)
-    .map(line => line.replace(/^\*\s*/, '').trim())
-    .filter(line =>
-      // Only keep lines that start with a number or fraction (optionally after a bullet/asterisk)
-      /^(\*?\s*)?([\d¼½¾⅓⅔⅛⅜⅝⅞\/\.]+)\s+[a-zA-Z]+/.test(line)
-    )
-    .map(line => {
-      // Match: [optional bullet] [quantity] [unit] [name]
-      const match = line.match(/^(\*?\s*)?([\d¼½¾⅓⅔⅛⅜⅝⅞\/\.]+)\s+([a-zA-Z]+)\s+(.+)$/);
-      if (match) {
-        return {
-          quantity: match[2],
-          unit: match[3],
-          name: match[4],
-          raw_name: match[4],
-        };
-      }
-      // Fallback: treat whole line as name
-      return { quantity: "1", unit: "", name: line, raw_name: line };
-    });
-}
+  // Helper function to parse AI ingredients into array of objects
+  function parseAIIngredients(ingredientText: string) {
+    return ingredientText
+      .split(/\r?\n|,/)
+      .map(line => line.replace(/^\*\s*/, '').trim())
+      .filter(line => line.length > 0)
+      .map(line => {
+        // Try to match "quantity unit name"
+        const match = line.match(/^([\d\/\.]+)?\s*([a-zA-Z]+)?\s*(.+)$/);
+        if (match) {
+          return {
+            quantity: match[1] || "",
+            unit: match[2] || "",
+            name: match[3] || line,
+          };
+        }
+        return { quantity: "", unit: "", name: line };
+      });
+  }
 
   // Fetch dietary restrictions and user ID from the backend
   useEffect(() => {
@@ -97,57 +94,74 @@ function parseAIIngredients(ingredientText: string) {
     fetchDietaryRestrictions();
   }, []);
 
-  
-
- const handleSaveMeal = async () => {
-  if (
-    !generatedMeal.name ||
-    !generatedMeal.description ||
-    !generatedMeal.ingredients ||
-    !generatedMeal.instructions
-  ) {
-    Alert.alert("Error", "Please ensure all fields are filled before saving.");
-    return;
-  }
-
-  try {
-    const token = await AsyncStorage.getItem("token");
-    if (!token) {
-      Alert.alert("Error", "User not authenticated. Please log in.");
+  const handleSaveMeal = async () => {
+    if (
+      !generatedMeal.name ||
+      !generatedMeal.description ||
+      !generatedMeal.ingredients.length ||
+      !generatedMeal.instructions
+    ) {
+      Alert.alert("Error", "Please ensure all fields are filled before saving.");
       return;
     }
 
-    // Use the robust parser for AI-generated ingredients
-    const ingredientObjects = parseAIIngredients(generatedMeal.ingredients);
+    try {
+      const token = await AsyncStorage.getItem("token");
+      if (!token) {
+        Alert.alert("Error", "User not authenticated. Please log in.");
+        return;
+      }
 
-    const payload = {
-      name: generatedMeal.name,
-      description: generatedMeal.description,
-      ingredients: ingredientObjects,
-      instructions: generatedMeal.instructions,
-    };
+      const payload = {
+        name: generatedMeal.name,
+        description: generatedMeal.description,
+        ingredients: generatedMeal.ingredients,
+        instructions: generatedMeal.instructions,
+      };
 
-    const response = await fetch(`${BASE_URL}/meal/meal-ai`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify(payload),
-    });
+      const response = await fetch(`${BASE_URL}/meal/meal-ai`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
+      });
 
-    if (!response.ok) {
-      throw new Error("Failed to add meal to the database.");
+      if (!response.ok) {
+        throw new Error("Failed to add meal to the database.");
+      }
+
+      Alert.alert("Success", "Meal added successfully!");
+      router.push("/(app)/my-meals/meals");
+    } catch (error) {
+      console.error("Error adding meal:", error);
+      Alert.alert("Error", "Failed to add the meal to the database.");
     }
+  };
 
-    Alert.alert("Success", "Meal added successfully!");
-    router.push("/(app)/my-meals/meals");
-  } catch (error) {
-    console.error("Error adding meal:", error);
-    Alert.alert("Error", "Failed to add the meal to the database.");
-  }
-};
+  // Ingredient input handlers
+  const addIngredient = () => {
+    setGeneratedMeal(prev => ({
+      ...prev,
+      ingredients: [...prev.ingredients, { name: "", quantity: "", unit: "" }],
+    }));
+  };
 
+  const removeIngredient = (index: number) => {
+    setGeneratedMeal(prev => ({
+      ...prev,
+      ingredients: prev.ingredients.filter((_, i) => i !== index),
+    }));
+  };
+
+  const updateIngredient = (index: number, field: "name" | "quantity" | "unit", value: string) => {
+    setGeneratedMeal(prev => {
+      const newIngredients = [...prev.ingredients];
+      newIngredients[index][field] = value;
+      return { ...prev, ingredients: newIngredients };
+    });
+  };
 
   const handleGenerateMeal = async () => {
     if (!prompt.trim()) {
@@ -159,7 +173,8 @@ function parseAIIngredients(ingredientText: string) {
     setGeneratedMeal({
       name: "",
       description: "",
-      ingredients: "",
+      servings: "1", 
+      ingredients: [],
       instructions: "",
     });
 
@@ -185,7 +200,13 @@ function parseAIIngredients(ingredientText: string) {
       );
 
       if (response.status === 200) {
-        setGeneratedMeal(response.data); // Set the structured meal response
+        const meal = response.data;
+        // Only parse if ingredients is a string
+        let ingredients = meal.ingredients;
+        if (typeof ingredients === "string") {
+          ingredients = parseAIIngredients(ingredients);
+        }
+        setGeneratedMeal({ ...meal,servings: meal.servings ? String(meal.servings) : "1", ingredients });
       } else {
         Alert.alert("Error", "Failed to generate a meal. Please try again.");
       }
@@ -242,15 +263,15 @@ function parseAIIngredients(ingredientText: string) {
       </TouchableOpacity>
 
       <View style={styles.checkboxContainer}>
-  <TouchableOpacity
-    style={[
-      styles.checkbox,
-      { backgroundColor: usePantry ? "#007BFF" : "transparent" },
-    ]}
-    onPress={() => setUsePantry(!usePantry)} // Toggle the checkbox state
-  />
-  <Text style={styles.checkboxLabel}>Use ingredients from my pantry</Text>
-</View>
+        <TouchableOpacity
+          style={[
+            styles.checkbox,
+            { backgroundColor: usePantry ? "#007BFF" : "transparent" },
+          ]}
+          onPress={() => setUsePantry(!usePantry)} // Toggle the checkbox state
+        />
+        <Text style={styles.checkboxLabel}>Use ingredients from my pantry</Text>
+      </View>
 
       <ScrollView style={styles.resultContainer}>
         {generatedMeal.name ? (
@@ -274,14 +295,46 @@ function parseAIIngredients(ingredientText: string) {
               multiline={true}
             />
             <TextInput
-              style={[styles.resultInput, styles.multilineInput]}
-              value={generatedMeal.ingredients}
-              onChangeText={(text) =>
-                setGeneratedMeal((prev) => ({ ...prev, ingredients: text }))
+              style={[styles.resultInput]}
+              value={generatedMeal.servings}
+              onChangeText={text =>
+                setGeneratedMeal(prev => ({ ...prev, servings: text }))
               }
-              placeholder="Ingredients"
-              multiline={true}
+              placeholder="Servings"
+              keyboardType="numeric"
             />
+            {/* Ingredients Section */}
+            <Text style={{ fontWeight: "bold", marginBottom: 8 }}>Ingredients</Text>
+            {generatedMeal.ingredients.map((ingredient, idx) => (
+              <View key={idx} style={{ flexDirection: "row", marginBottom: 10, alignItems: "center" }}>
+                <TextInput
+                  style={[styles.resultInput, { flex: 2, marginRight: 5 }]}
+                  placeholder="Name"
+                  value={ingredient.name}
+                  onChangeText={text => updateIngredient(idx, "name", text)}
+                />
+                <TextInput
+                  style={[styles.resultInput, { flex: 1, marginRight: 5 }]}
+                  placeholder="Qty"
+                  value={ingredient.quantity}
+                  onChangeText={text => updateIngredient(idx, "quantity", text)}
+                  keyboardType="numeric"
+                />
+                <TextInput
+                  style={[styles.resultInput, { flex: 1, marginRight: 5 }]}
+                  placeholder="Unit"
+                  value={ingredient.unit}
+                  onChangeText={text => updateIngredient(idx, "unit", text)}
+                />
+                <TouchableOpacity onPress={() => removeIngredient(idx)}>
+                  <Text style={{ color: "#d00", fontWeight: "bold", fontSize: 18 }}>✕</Text>
+                </TouchableOpacity>
+              </View>
+            ))}
+            <TouchableOpacity onPress={addIngredient} style={{ marginBottom: 15 }}>
+              <Text style={{ color: "#007BFF", fontWeight: "bold" }}>+ Add Ingredient</Text>
+            </TouchableOpacity>
+            {/* End Ingredients Section */}
             <TextInput
               style={[styles.resultInput, styles.multilineInput]}
               value={generatedMeal.instructions}
@@ -400,22 +453,22 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   checkboxContainer: {
-  flexDirection: "row",
-  alignItems: "center",
-  marginBottom: 16,
-},
-checkbox: {
-  width: 20,
-  height: 20,
-  borderWidth: 1,
-  borderColor: "#007BFF",
-  marginRight: 8,
-  borderRadius: 4, // Optional: Add rounded corners
-},
-checkboxLabel: {
-  fontSize: 16,
-  color: "#555",
-},
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderWidth: 1,
+    borderColor: "#007BFF",
+    marginRight: 8,
+    borderRadius: 4, // Optional: Add rounded corners
+  },
+  checkboxLabel: {
+    fontSize: 16,
+    color: "#555",
+  },
 });
 
 export default AICreateMeal;

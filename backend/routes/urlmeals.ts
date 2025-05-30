@@ -36,6 +36,7 @@ router.post("/fetch-recipe", async (req: Request, res: Response) => {
 
     let ingredients: string[] = [];
     let instructions: string[] = [];
+    let servings: string | undefined;
 
     // ✅ Parse ALL JSON-LD script blocks
     $('script[type="application/ld+json"]').each((_, el) => {
@@ -65,6 +66,15 @@ router.post("/fetch-recipe", async (req: Request, res: Response) => {
               }
             }
 
+            // Get servings from recipeYield
+            if (!servings && item.recipeYield) {
+              if (typeof item.recipeYield === "string") {
+                servings = item.recipeYield.replace(/[^\d]/g, "") || item.recipeYield;
+              } else if (Array.isArray(item.recipeYield)) {
+                servings = item.recipeYield[0].replace(/[^\d]/g, "") || item.recipeYield[0];
+              }
+            }
+
             break; // Stop after the first valid recipe
           }
         }
@@ -88,6 +98,25 @@ router.post("/fetch-recipe", async (req: Request, res: Response) => {
       });
     }
 
+    // Fallback: try to find servings in common HTML elements if not found in JSON-LD
+    if (!servings) {
+      const servingsSelectors = [
+        '[itemprop="recipeYield"]',
+        '.servings',
+        '.recipe-servings',
+        '.yield',
+        'span:contains("Servings")',
+        'span:contains("Yield")'
+      ];
+      for (const selector of servingsSelectors) {
+        const text = $(selector).first().text().trim();
+        if (text) {
+          servings = text.replace(/[^\d]/g, "") || text;
+          if (servings) break;
+        }
+      }
+    }
+
     const unique = (arr: string[]) => [...new Set(arr.map((s) => s.trim()).filter(Boolean))];
 
     res.status(200).json({
@@ -95,6 +124,7 @@ router.post("/fetch-recipe", async (req: Request, res: Response) => {
       description: description?.trim(),
       ingredients: unique(ingredients),
       instructions: unique(instructions).join(" "),
+      servings: servings || "1", // Default to 1 if not found
     });
   } catch (error) {
     console.error("Error fetching recipe:", error);

@@ -14,9 +14,9 @@ import axios from "axios";
 const router = Router();
 
 router.post("/generate-meal", authMiddleware, async (req: Request, res: Response): Promise<void> => {
-  const { prompt, dietaryRestrictions, allergies, usePantry } = req.body; // Include usePantry in the request body
-  const user = req.user; // Authenticated user
-  const db = req.db; // Database connection
+  const { prompt, dietaryRestrictions, allergies, usePantry } = req.body;
+  const user = req.user;
+  const db = req.db;
 
   if (!prompt) {
     res.status(400).json({ error: "Prompt is required to generate a meal." });
@@ -54,16 +54,17 @@ router.post("/generate-meal", authMiddleware, async (req: Request, res: Response
 
   // Construct the AI prompt
   const fullPrompt = `Create a meal based on the following prompt: ${prompt}. ${
-    dietaryRestrictions ? `Dietary restrictions: ${dietaryRestrictions}.` : ""
-  } ${allergies ? `Avoid the following allergens: ${allergies}.` : ""} ${
-    usePantry && pantryItems.length > 0
-      ? `Use only these ingredients: ${pantryItems.join(", ")}.`
-      : ""
-  } Please provide the output in the following format:
-  - Name: [Meal Name]
-  - Description: [Meal Description]
-  - Ingredients: [List of Ingredients]
-  - Instructions: [Cooking Instructions]`;
+  dietaryRestrictions ? `Dietary restrictions: ${dietaryRestrictions}.` : ""
+} ${allergies ? `Avoid the following allergens: ${allergies}.` : ""} ${
+  usePantry && pantryItems.length > 0
+    ? `Use only these ingredients: ${pantryItems.join(", ")}.`
+    : ""
+} Please provide the output in the following format:
+- Name: [Meal Name]
+- Description: [Meal Description]
+- Servings: [Number of servings]
+- Ingredients: List each ingredient on a new line with quantity and unit (eg. beef 1 lb). Avoid alternatives.
+- Instructions: [Cooking Instructions]`;
 
   try {
     const response = await axios.post(
@@ -116,21 +117,24 @@ function parseMealResponse(rawText: string) {
   const meal: {
     name?: string;
     description?: string;
-    ingredients?: string;
+    servings?: string;
+    ingredients?: { name: string; quantity: string; unit: string }[];
     instructions?: string;
   } = {};
 
   const nameMatch = rawText.match(/- Name:\s*(.+)/i);
   const descriptionMatch = rawText.match(/- Description:\s*(.+)/i);
+  const servingsMatch = rawText.match(/- Servings:\s*(.+)/i); // <-- Add this line
   const ingredientsMatch = rawText.match(/- Ingredients:\s*([\s\S]*?)(?=- Instructions:|$)/i);
   const instructionsMatch = rawText.match(/- Instructions:\s*([\s\S]*)/i);
 
   meal.name = nameMatch ? nameMatch[1].trim() : undefined;
   meal.description = descriptionMatch ? descriptionMatch[1].trim() : undefined;
+  meal.servings = servingsMatch ? servingsMatch[1].trim() : undefined;
 
-  // Process ingredients to ensure they are separated by commas and only use the first name before "or"
+  // Parse ingredients into array of objects: { name, quantity, unit }
   if (ingredientsMatch) {
-    const ingredients = ingredientsMatch[1]
+    const ingredientLines = ingredientsMatch[1]
       .split(/\n|,/g)
       .map((item) => {
         let cleaned = item.trim();
@@ -143,7 +147,25 @@ function parseMealResponse(rawText: string) {
         return cleaned;
       })
       .filter((item) => item);
-    meal.ingredients = ingredients.join(", ");
+
+    meal.ingredients = ingredientLines.map(line => {
+      // Try to match "name quantity unit" or "name unit quantity"
+      // We'll use a simple regex: (name) (quantity) (unit)
+      // Example: "beef sirloin 1 lb"
+      const match = line.match(/^(.+?)\s+([\d\/\.]+)\s*([a-zA-Z]+)?$/);
+      if (match) {
+        return {
+          name: match[1].trim(),
+          quantity: match[2].trim(),
+          unit: match[3]?.trim() || "",
+        };
+      } else {
+        // fallback: just name
+        return { name: line, quantity: "", unit: "" };
+      }
+    });
+  } else {
+    meal.ingredients = [];
   }
 
   if (instructionsMatch) {

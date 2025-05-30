@@ -16,8 +16,32 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as ImagePicker from "expo-image-picker";
 import { useTheme } from "../../../context/ThemeContext";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import RNPickerSelect from "react-native-picker-select";
 
 const BASE_URL = Platform.OS === "android" ? "http://10.0.2.2:5000" : "http://localhost:5000";
+
+const dietaryOptions = [
+  { label: "None", value: "" },
+  { label: "Vegetarian", value: "Vegetarian" },
+  { label: "Vegan", value: "Vegan" },
+  { label: "Gluten-Free", value: "Gluten-Free" },
+  { label: "Keto", value: "Keto" },
+  { label: "Paleo", value: "Paleo" },
+];
+
+const cuisineOptions = [
+  { label: "None", value: "" },
+  { label: "Italian", value: "Italian" },
+  { label: "Mexican", value: "Mexican" },
+  { label: "Chinese", value: "Chinese" },
+  { label: "Indian", value: "Indian" },
+  { label: "American", value: "American" },
+  { label: "Japanese", value: "Japanese" },
+  { label: "Mediterranean", value: "Mediterranean" },
+  { label: "Thai", value: "Thai" },
+  { label: "French", value: "French" },
+  // Add more as needed
+];
 
 const CreateMealScreen = () => {
   const { theme } = useTheme();
@@ -31,6 +55,22 @@ const CreateMealScreen = () => {
   const [mealRecipeLink, setMealRecipeLink] = useState("");
   const [mealPicture, setMealPicture] = useState<string | null>(null);
   const [mealVisibility, setMealVisibility] = useState(true);
+  const [mealDietaryRestriction, setMealDietaryRestriction] = useState("");
+  const [mealCuisine, setMealCuisine] = useState("");
+  const [mealServings, setMealServings] = useState("1");
+  const unitOptions = [
+  { label: "g", value: "g" },
+  { label: "kg", value: "kg" },
+  { label: "oz", value: "oz" },
+  { label: "lb", value: "lb" },
+  { label: "cup", value: "cup" },
+  { label: "tbsp", value: "tbsp" },
+  { label: "tsp", value: "tsp" },
+  { label: "ml", value: "ml" },
+  { label: "l", value: "l" },
+  { label: "piece", value: "piece" },
+  // Add more as needed
+];
 
   const pickMealImage = async () => {
     try {
@@ -90,6 +130,9 @@ const CreateMealScreen = () => {
     formData.append("recipeLink", mealRecipeLink);
     formData.append("visibility", mealVisibility ? "1" : "0");
     formData.append("day", selectedDay || "");
+    formData.append("dietary_restrictions", mealDietaryRestriction);
+    formData.append("servings", mealServings);
+    formData.append("cuisine", mealCuisine);
 
     if (mealPicture) {
       const uriParts = mealPicture.split(".");
@@ -121,7 +164,7 @@ const CreateMealScreen = () => {
       }
 
       Alert.alert("Success", "Meal added successfully!");
-      router.back();
+      router.push("/(app)/my-meals/meals");
     } catch (error) {
       console.error("Error adding meal:", error);
       Alert.alert("Error", "Failed to add the meal to the database.");
@@ -168,13 +211,48 @@ const CreateMealScreen = () => {
             onChangeText={text => updateIngredient(idx, "quantity", text)}
             keyboardType="numeric"
           />
-          <TextInput
-            style={[styles.input, { flex: 1, marginRight: 5, backgroundColor: theme.card, borderColor: theme.border, color: theme.text }]}
-            placeholder="Unit"
-            placeholderTextColor={theme.placeholder}
-            value={ingredient.unit}
-            onChangeText={text => updateIngredient(idx, "unit", text)}
-          />
+          <RNPickerSelect
+  onValueChange={value => updateIngredient(idx, "unit", value)}
+  items={unitOptions}
+  value={ingredient.unit}
+  placeholder={{ label: "Unit", value: "" }}
+  style={{
+    inputIOS: {
+      color: ingredient.unit ? theme.text : theme.placeholder,
+      height: 50, // Match your .input height
+      paddingHorizontal: 10,
+      borderWidth: 1,
+      borderColor: theme.border,
+      borderRadius: 8,
+      backgroundColor: theme.card,
+      paddingRight: 30,
+      flex: 1,
+      marginRight: 5,
+    },
+    inputAndroid: {
+      color: ingredient.unit ? theme.text : theme.placeholder,
+      height: 50, // Match your .input height
+      paddingHorizontal: 10,
+      borderWidth: 1,
+      borderColor: theme.border,
+      borderRadius: 8,
+      backgroundColor: theme.card,
+      paddingRight: 30,
+      flex: 1,
+      marginRight: 5,
+      marginTop: -13, // Remove top margin for Android
+    },
+    iconContainer: {
+      top: 16,
+      right: 12,
+    },
+    placeholder: {
+      color: theme.placeholder,
+    },
+  }}
+  useNativeAndroidPickerStyle={false}
+  Icon={() => <Text style={{ fontSize: 16, color: theme.text }}>▼</Text>}
+/>
           <TouchableOpacity onPress={() => removeIngredient(idx)}>
             <Text style={{ color: theme.danger, fontWeight: "bold", fontSize: 18 }}>✕</Text>
           </TouchableOpacity>
@@ -191,6 +269,40 @@ const CreateMealScreen = () => {
         value={mealInstructions}
         onChangeText={setMealInstructions}
         multiline
+      />
+
+      {/* Dietary Restrictions Dropdown */}
+      <Text style={[styles.label, { color: theme.text }]}>Dietary Restrictions</Text>
+      <RNPickerSelect
+        onValueChange={setMealDietaryRestriction}
+        items={dietaryOptions}
+        placeholder={{ label: "Select Dietary Restriction (optional)", value: "" }}
+        style={{
+          inputIOS: [styles.input, { backgroundColor: theme.card, borderColor: theme.border, color: theme.text }],
+          inputAndroid: [styles.input, { backgroundColor: theme.card, borderColor: theme.border, color: theme.text }],
+        }}
+        value={mealDietaryRestriction}
+      />
+
+      <Text style={[styles.label, { color: theme.text }]}>Cuisine</Text>
+      <RNPickerSelect
+        onValueChange={setMealCuisine}
+        items={cuisineOptions}
+        placeholder={{ label: "Select Cuisine (optional)", value: "" }}
+        style={{
+          inputIOS: [styles.input, { backgroundColor: theme.card, borderColor: theme.border, color: theme.text }],
+          inputAndroid: [styles.input, { backgroundColor: theme.card, borderColor: theme.border, color: theme.text }],
+        }}
+        value={mealCuisine}
+      />
+
+      <TextInput
+        style={[styles.input, { backgroundColor: theme.card, borderColor: theme.border, color: theme.text }]}
+        placeholder="Servings"
+        placeholderTextColor={theme.placeholder}
+        value={mealServings}
+        onChangeText={setMealServings}
+        keyboardType="numeric"
       />
 
       <TextInput
