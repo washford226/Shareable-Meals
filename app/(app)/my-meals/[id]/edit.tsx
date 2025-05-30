@@ -24,6 +24,20 @@ export default function EditMealScreen() {
   const router = useRouter();
   const { theme } = useTheme();
 
+  const cuisineOptions = [
+  { label: "None", value: "" },
+  { label: "Italian", value: "Italian" },
+  { label: "Mexican", value: "Mexican" },
+  { label: "Chinese", value: "Chinese" },
+  { label: "Indian", value: "Indian" },
+  { label: "American", value: "American" },
+  { label: "Japanese", value: "Japanese" },
+  { label: "Mediterranean", value: "Mediterranean" },
+  { label: "Thai", value: "Thai" },
+  { label: "French", value: "French" },
+];
+const [cuisine, setCuisine] = useState<string>("");
+
   const [name, setName] = useState<string>("");
   const [description, setDescription] = useState<string>("");
   const [ingredients, setIngredients] = useState<{ name: string; quantity: string; unit: string }[]>([]);
@@ -37,6 +51,7 @@ export default function EditMealScreen() {
   const [loading, setLoading] = useState<boolean>(true);
   const [saving, setSaving] = useState<boolean>(false);
   const [dietaryRestriction, setDietaryRestriction] = useState<string>("");
+  
 
   const dietaryOptions = [
     { label: "None", value: "" },
@@ -76,6 +91,7 @@ export default function EditMealScreen() {
         setRecipeLink(meal.recipeLink || "");
         setVisibility(meal.visibility);
         setDietaryRestriction(meal.dietary_restrictions || "");
+        setCuisine(meal.cuisine || "");
       } else {
         Alert.alert("Error", "Failed to fetch meal details.");
         router.back();
@@ -118,6 +134,7 @@ export default function EditMealScreen() {
           recipeLink: recipeLink.trim(),
           visibility,
           dietary_restrictions: dietaryRestriction,
+          cuisine,
         },
         {
           headers: {
@@ -292,6 +309,18 @@ export default function EditMealScreen() {
           inputAndroid: [styles.input, { backgroundColor: theme.card, borderColor: theme.border, color: theme.text }],
         }}
         value={dietaryRestriction}
+      />
+
+      <Text style={[styles.label, { color: theme.text }]}>Cuisine</Text>
+      <RNPickerSelect
+        onValueChange={setCuisine}
+        items={cuisineOptions}
+        placeholder={{ label: "Select Cuisine (optional)", value: "" }}
+        style={{
+          inputIOS: [styles.input, { backgroundColor: theme.card, borderColor: theme.border, color: theme.text }],
+          inputAndroid: [styles.input, { backgroundColor: theme.card, borderColor: theme.border, color: theme.text }],
+        }}
+        value={cuisine}
       />
 
       <Text style={[styles.label, { color: theme.text }]}>Recipe Link</Text>

@@ -158,6 +158,12 @@ const MyMealInfo = () => {
             Dietary Restriction: {meal.dietary_restrictions}
           </Text>
         )}
+        {/* Cuisine */}
+        {meal.cuisine && (
+          <Text style={[styles.details, { color: theme.text, fontWeight: "bold", marginBottom: 8 }]}>
+            Cuisine: {meal.cuisine}
+          </Text>
+        )}
 
         {/* Meal Link */}
         {meal.recipeLink && (

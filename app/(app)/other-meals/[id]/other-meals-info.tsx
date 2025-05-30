@@ -184,6 +184,13 @@ const MealDetails = () => {
           ) : (
             <Text style={[styles.details, { color: theme.text }]}>{meal.ingredients}</Text>
           )}
+
+          {/* Cuisine */}
+          {meal.cuisine && (
+            <Text style={[styles.details, { color: theme.text, fontWeight: "bold", marginBottom: 8 }]}>
+              Cuisine: {meal.cuisine}
+            </Text>
+          )}
   
         {/* Nutrition Info */}
         <Text style={[styles.sectionTitle, { color: theme.text }]}>Nutrition Info</Text>

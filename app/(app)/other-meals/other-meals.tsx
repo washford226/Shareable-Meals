@@ -59,6 +59,21 @@ const dietaryOptions = [
   { label: "Paleo", value: "Paleo" },
 ];
 
+const cuisineOptions = [
+  { label: "All", value: "" },
+  { label: "Italian", value: "Italian" },
+  { label: "Mexican", value: "Mexican" },
+  { label: "Chinese", value: "Chinese" },
+  { label: "Indian", value: "Indian" },
+  { label: "American", value: "American" },
+  { label: "Japanese", value: "Japanese" },
+  { label: "Mediterranean", value: "Mediterranean" },
+  { label: "Thai", value: "Thai" },
+  { label: "French", value: "French" },
+];
+const [cuisineFilter, setCuisineFilter] = useState<string>("");
+const [tempCuisineFilter, setTempCuisineFilter] = useState<string>(cuisineFilter);
+
 const [aiFilter, setAiFilter] = useState<string>("");
 const [dietaryRestrictionFilter, setDietaryRestrictionFilter] = useState<string>("");
 const [tempAiFilter, setTempAiFilter] = useState<string>(aiFilter);
@@ -87,6 +102,12 @@ const [filtersLoaded, setFiltersLoaded] = useState(false);
     router.push(`/other-meals/${meal.id}/other-meals-info`); // Navigate to the meal details screen
   };
 
+  const isFilterActive =
+  aiFilter !== "" ||
+  dietaryRestrictionFilter !== "" ||
+  cuisineFilter !== "" ||
+  filters.some(f => f.greaterThan !== "" || f.lessThan !== "");
+
   // Restore filters/search on mount
 useEffect(() => {
   const restoreFilters = async () => {
@@ -100,6 +121,9 @@ useEffect(() => {
     const savedSearchQuery = await AsyncStorage.getItem(`searchQuery_OtherMeals_${userId}`);
     const savedDietary = await AsyncStorage.getItem(`dietaryRestrictionFilter_OtherMeals_${userId}`);
     const savedAi = await AsyncStorage.getItem(`aiFilter_OtherMeals_${userId}`);
+    const savedCuisine = await AsyncStorage.getItem(`cuisineFilter_OtherMeals_${userId}`);
+
+    if (savedCuisine !== null) setCuisineFilter(savedCuisine);
 
     if (savedFilters) {
       const parsedFilters = JSON.parse(savedFilters);
@@ -133,6 +157,7 @@ useEffect(() => {
       if (dietaryRestrictionFilter) params.dietary_restrictions = dietaryRestrictionFilter;
       if (aiFilter === "ai") params.created_by_ai = "true";
       if (aiFilter === "not_ai") params.created_by_ai = "false";
+      if (cuisineFilter) params.cuisine = cuisineFilter;
 
       const response = await axios.get(`${BASE_URL}/meal/meals`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -150,7 +175,7 @@ useEffect(() => {
   };
 
   fetchMeals();
-}, [filtersLoaded, dietaryRestrictionFilter, aiFilter]);
+}, [filtersLoaded, dietaryRestrictionFilter, aiFilter, cuisineFilter]);
 
   useEffect(() => {
     const filtered = meals.filter((meal) => {
@@ -196,6 +221,8 @@ const applyFilters = async () => {
     setFilters(tempFilters);
     setAiFilter(tempAiFilter);
     setDietaryRestrictionFilter(tempDietaryRestrictionFilter); // <-- update main filter
+    setCuisineFilter(tempCuisineFilter);
+  await AsyncStorage.setItem(`cuisineFilter_OtherMeals_${userId}`, tempCuisineFilter);
     await AsyncStorage.setItem(`filters_OtherMeals_${userId}`, JSON.stringify(tempFilters));
     await AsyncStorage.setItem(`aiFilter_OtherMeals_${userId}`, tempAiFilter);
     await AsyncStorage.setItem(`dietaryRestrictionFilter_OtherMeals_${userId}`, tempDietaryRestrictionFilter); // <-- save temp
@@ -203,6 +230,33 @@ const applyFilters = async () => {
   } catch (error) {
     console.error("Error saving filters:", error);
   }
+};
+
+const clearFilters = async () => {
+  const defaultFilters = [
+    { type: "calories", greaterThan: "", lessThan: "" },
+    { type: "fat", greaterThan: "", lessThan: "" },
+    { type: "protein", greaterThan: "", lessThan: "" },
+    { type: "carbohydrates", greaterThan: "", lessThan: "" },
+  ];
+  setFilters(defaultFilters);
+  setTempFilters(defaultFilters);
+  setAiFilter("");
+  setTempAiFilter("");
+  setDietaryRestrictionFilter("");
+  setTempDietaryRestrictionFilter("");
+  setCuisineFilter("");
+  setTempCuisineFilter("");
+  setSearchQuery("");
+  const userId = await getUserIdFromToken();
+  if (userId) {
+    await AsyncStorage.removeItem(`filters_OtherMeals_${userId}`);
+    await AsyncStorage.removeItem(`searchQuery_OtherMeals_${userId}`);
+    await AsyncStorage.removeItem(`dietaryRestrictionFilter_OtherMeals_${userId}`);
+    await AsyncStorage.removeItem(`aiFilter_OtherMeals_${userId}`);
+    await AsyncStorage.removeItem(`cuisineFilter_OtherMeals_${userId}`);
+  }
+  setIsFilterModalVisible(false); // Close the modal
 };
 
   const handleSearchChange = async (text: string) => {
@@ -240,15 +294,18 @@ const applyFilters = async () => {
           onChangeText={handleSearchChange}
         />
         <TouchableOpacity
-          style={[styles.filterButton, { backgroundColor: theme.button }]}
-          onPress={() => {
-            setTempAiFilter(aiFilter);
-            setTempDietaryRestrictionFilter(dietaryRestrictionFilter);
-            setIsFilterModalVisible(true);
-          }}
-        >
-          <Text style={[styles.filterButtonText, { color: theme.buttonText }]}>Filter</Text>
-        </TouchableOpacity>
+  style={[
+    styles.filterButton,
+    { backgroundColor: isFilterActive ? theme.primary : theme.button }
+  ]}
+  onPress={() => {
+    setTempAiFilter(aiFilter);
+    setTempDietaryRestrictionFilter(dietaryRestrictionFilter);
+    setIsFilterModalVisible(true);
+  }}
+>
+  <Text style={[styles.filterButtonText, { color: theme.buttonText }]}>Filter</Text>
+</TouchableOpacity>
       </View>
 
       {/* Weekly Meals Button */}
@@ -381,6 +438,47 @@ const applyFilters = async () => {
               />
             </View>
 
+            <Text style={[styles.label, { color: theme.text }]}>Cuisine</Text>
+<View style={{ marginBottom: 12 }}>
+  <RNPickerSelect
+    onValueChange={setTempCuisineFilter}
+    items={cuisineOptions}
+    value={tempCuisineFilter}
+    style={{
+      inputIOS: {
+        color: tempCuisineFilter ? theme.text : theme.placeholder,
+        paddingVertical: 12,
+        paddingHorizontal: 10,
+        borderWidth: 1,
+        borderColor: theme.border,
+        borderRadius: 8,
+        backgroundColor: theme.card,
+        paddingRight: 30,
+      },
+      inputAndroid: {
+        color: tempCuisineFilter ? theme.text : theme.placeholder,
+        paddingVertical: 12,
+        paddingHorizontal: 10,
+        borderWidth: 1,
+        borderColor: theme.border,
+        borderRadius: 8,
+        backgroundColor: theme.card,
+        paddingRight: 30,
+      },
+      iconContainer: {
+        top: 16,
+        right: 12,
+      },
+      placeholder: {
+        color: theme.placeholder,
+      },
+    }}
+    useNativeAndroidPickerStyle={false}
+    Icon={() => <Text style={{ fontSize: 16, color: theme.text }}>▼</Text>}
+    placeholder={{ label: "Select Cuisine", value: "" }}
+  />
+</View>
+
             {/* AI Generated Switch */}
             <Text style={[styles.label, { color: theme.text }]}>AI Generation</Text>
             <View style={{ marginBottom: 12 }}>
@@ -424,6 +522,14 @@ const applyFilters = async () => {
             <TouchableOpacity style={[styles.applyButton, { backgroundColor: theme.button }]} onPress={applyFilters}>
               <Text style={[styles.applyButtonText, { color: theme.buttonText }]}>Apply Filters</Text>
             </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.cancelButton, { backgroundColor: theme.button, marginTop: 8 }]}
+              onPress={clearFilters}
+            >
+              <Text style={[styles.cancelButtonText, { color: theme.buttonText }]}>Clear Filters</Text>
+            </TouchableOpacity>
+
             <TouchableOpacity
               style={[styles.cancelButton, { backgroundColor: theme.danger }]}
               onPress={() => {

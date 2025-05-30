@@ -67,6 +67,25 @@ const MyMeals: React.FC<MyMealsProps> = ({ onCreateMeal}) => {
   const [tempDietaryRestrictionFilter, setTempDietaryRestrictionFilter] = useState<string>(dietaryRestrictionFilter);
   const [tempAiFilter, setTempAiFilter] = useState<string>(aiFilter);
   const [filtersLoaded, setFiltersLoaded] = useState(false);
+  const cuisineOptions = [
+  { label: "All", value: "" },
+  { label: "Italian", value: "Italian" },
+  { label: "Mexican", value: "Mexican" },
+  { label: "Chinese", value: "Chinese" },
+  { label: "Indian", value: "Indian" },
+  { label: "American", value: "American" },
+  { label: "Japanese", value: "Japanese" },
+  { label: "Mediterranean", value: "Mediterranean" },
+  { label: "Thai", value: "Thai" },
+  { label: "French", value: "French" },
+];
+const [cuisineFilter, setCuisineFilter] = useState<string>("");
+const [tempCuisineFilter, setTempCuisineFilter] = useState<string>(cuisineFilter);
+  const isFilterActive =
+    aiFilter !== "" ||
+    dietaryRestrictionFilter !== "" ||
+    cuisineFilter !== "" ||
+    filters.some(f => f.greaterThan !== "" || f.lessThan !== "");
 
   const { theme } = useTheme();
   const router = useRouter(); // Initialize router
@@ -97,6 +116,7 @@ const MyMeals: React.FC<MyMealsProps> = ({ onCreateMeal}) => {
       Alert.alert("Error", "Failed to update favorite status. Please try again.");
     }
   };
+
   useEffect(() => {
   const restoreFilters = async () => {
     const token = await AsyncStorage.getItem("token");
@@ -109,6 +129,8 @@ const MyMeals: React.FC<MyMealsProps> = ({ onCreateMeal}) => {
     const savedSearchQuery = await AsyncStorage.getItem(`searchQuery_MyMeals_${userId}`);
     const savedDietary = await AsyncStorage.getItem(`dietaryRestrictionFilter_MyMeals_${userId}`);
     const savedAi = await AsyncStorage.getItem(`aiFilter_MyMeals_${userId}`);
+    const savedCuisine = await AsyncStorage.getItem(`cuisineFilter_MyMeals_${userId}`);
+    if (savedCuisine !== null) setCuisineFilter(savedCuisine);
 
     if (savedFilters) {
       const parsedFilters = JSON.parse(savedFilters);
@@ -142,6 +164,7 @@ const MyMeals: React.FC<MyMealsProps> = ({ onCreateMeal}) => {
       if (dietaryRestrictionFilter) params.dietary_restrictions = dietaryRestrictionFilter;
       if (aiFilter === "ai") params.created_by_ai = "true";
       if (aiFilter === "not_ai") params.created_by_ai = "false";
+      if (cuisineFilter) params.cuisine = cuisineFilter;
 
       const response = await axios.get(`${BASE_URL}/meal/my-meals`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -158,7 +181,7 @@ const MyMeals: React.FC<MyMealsProps> = ({ onCreateMeal}) => {
   };
 
   fetchMyMeals();
-}, [filtersLoaded, dietaryRestrictionFilter, aiFilter]);
+}, [filtersLoaded, dietaryRestrictionFilter, aiFilter, cuisineFilter]);
 
   useEffect(() => {
     const filtered = meals.filter((meal) => {
@@ -226,6 +249,34 @@ const MyMeals: React.FC<MyMealsProps> = ({ onCreateMeal}) => {
     }
   };
 
+  const clearFilters = async () => {
+  const defaultFilters = [
+    { type: "calories", greaterThan: "", lessThan: "" },
+    { type: "fat", greaterThan: "", lessThan: "" },
+    { type: "protein", greaterThan: "", lessThan: "" },
+    { type: "carbohydrates", greaterThan: "", lessThan: "" },
+  ];
+  setFilters(defaultFilters);
+  setTempFilters(defaultFilters);
+  setAiFilter("");
+  setTempAiFilter("");
+  setDietaryRestrictionFilter("");
+  setTempDietaryRestrictionFilter("");
+  setCuisineFilter("");
+  setTempCuisineFilter("");
+  setSearchQuery("");
+  // Optionally clear from AsyncStorage as well
+  const userId = await getUserIdFromToken();
+  if (userId) {
+    await AsyncStorage.removeItem(`filters_MyMeals_${userId}`);
+    await AsyncStorage.removeItem(`searchQuery_MyMeals_${userId}`);
+    await AsyncStorage.removeItem(`dietaryRestrictionFilter_MyMeals_${userId}`);
+    await AsyncStorage.removeItem(`aiFilter_MyMeals_${userId}`);
+    await AsyncStorage.removeItem(`cuisineFilter_MyMeals_${userId}`);
+  }
+  setIsFilterModalVisible(false);
+};
+
 const applyFilters = async () => {
   try {
     const userId = await getUserIdFromToken(); 
@@ -248,6 +299,8 @@ const applyFilters = async () => {
     setFilters(tempFilters); 
     setDietaryRestrictionFilter(tempDietaryRestrictionFilter); 
     setAiFilter(tempAiFilter);
+    setCuisineFilter(tempCuisineFilter);
+    await AsyncStorage.setItem(`cuisineFilter_MyMeals_${userId}`, tempCuisineFilter);
     await AsyncStorage.setItem(`filters_MyMeals_${userId}`, JSON.stringify(tempFilters)); 
     await AsyncStorage.setItem(`aiFilter_MyMeals_${userId}`, tempAiFilter);
     await AsyncStorage.setItem(`dietaryRestrictionFilter_MyMeals_${userId}`, tempDietaryRestrictionFilter);
@@ -277,16 +330,18 @@ const applyFilters = async () => {
           onChangeText={handleSearchChange} 
         />
         <TouchableOpacity
-          style={[styles.filterButton, { backgroundColor: theme.button }]}
-          onPress={() => {
-            setTempFilters(filters);
-            setTempDietaryRestrictionFilter(dietaryRestrictionFilter);
-            setTempAiFilter(aiFilter);
-            setIsFilterModalVisible(true);
-          }}
-        >
-          <Text style={[styles.filterButtonText, { color: theme.buttonText }]}>Filter</Text>
-        </TouchableOpacity>
+  style={[
+    styles.filterButton,
+    { backgroundColor: isFilterActive ? theme.primary : theme.button }
+  ]}
+  onPress={() => {
+    setTempAiFilter(aiFilter);
+    setTempDietaryRestrictionFilter(dietaryRestrictionFilter);
+    setIsFilterModalVisible(true);
+  }}
+>
+  <Text style={[styles.filterButtonText, { color: theme.buttonText }]}>Filter</Text>
+</TouchableOpacity>
       </View>
 
       <TouchableOpacity
@@ -461,6 +516,47 @@ const applyFilters = async () => {
               />
             </View>
 
+            <Text style={[styles.label, { color: theme.text }]}>Cuisine</Text>
+<View style={{ marginBottom: 12 }}>
+  <RNPickerSelect
+    onValueChange={setTempCuisineFilter}
+    items={cuisineOptions}
+    value={tempCuisineFilter}
+    style={{
+      inputIOS: {
+        color: tempCuisineFilter ? theme.text : theme.placeholder,
+        paddingVertical: 12,
+        paddingHorizontal: 10,
+        borderWidth: 1,
+        borderColor: theme.border,
+        borderRadius: 8,
+        backgroundColor: theme.card,
+        paddingRight: 30,
+      },
+      inputAndroid: {
+        color: tempCuisineFilter ? theme.text : theme.placeholder,
+        paddingVertical: 12,
+        paddingHorizontal: 10,
+        borderWidth: 1,
+        borderColor: theme.border,
+        borderRadius: 8,
+        backgroundColor: theme.card,
+        paddingRight: 30,
+      },
+      iconContainer: {
+        top: 16,
+        right: 12,
+      },
+      placeholder: {
+        color: theme.placeholder,
+      },
+    }}
+    useNativeAndroidPickerStyle={false}
+    Icon={() => <Text style={{ fontSize: 16, color: theme.text }}>▼</Text>}
+    placeholder={{ label: "Select Cuisine", value: "" }}
+  />
+</View>
+
             {/* AI Generated Switch */}
             <Text style={[styles.label, { color: theme.text }]}>AI Generation</Text>
             <View style={{ marginBottom: 12 }}>
@@ -504,6 +600,14 @@ const applyFilters = async () => {
             <TouchableOpacity style={[styles.applyButton, { backgroundColor: theme.button }]} onPress={applyFilters}>
               <Text style={[styles.applyButtonText, { color: theme.buttonText }]}>Apply Filters</Text>
             </TouchableOpacity>
+
+            <TouchableOpacity
+  style={[styles.clearButton, { backgroundColor: theme.button, marginTop: 8 }]}
+  onPress={clearFilters}
+>
+  <Text style={[styles.clearButtonText, { color: theme.buttonText }]}>Clear Filters</Text>
+</TouchableOpacity>
+
             <TouchableOpacity
               style={[styles.cancelButton, { backgroundColor: theme.danger }]}
               onPress={() => {
@@ -551,6 +655,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "flex-start", // Align content to the top
   },
+  clearButton: {
+  padding: 12,
+  borderRadius: 8,
+  alignItems: "center",
+  marginVertical: 4,
+},
+clearButtonText: {
+  fontWeight: "bold",
+  fontSize: 16,
+},
   mealPicture: {
     width: "100%", // Make the picture take up the full width of the item
     height: 100, // Set a fixed height for the picture

@@ -40,6 +40,7 @@ CREATE TABLE IF NOT EXISTS meals (
     favorite BOOLEAN DEFAULT FALSE,
     dietary_restrictions VARCHAR(255),
     servings INT DEFAULT 1,
+    cuisine VARCHAR(100) DEFAULT NULL,
     picture BLOB,
     visibility BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

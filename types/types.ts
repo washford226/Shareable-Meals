@@ -21,4 +21,5 @@ export interface Meal {
   favorite: boolean; // Indicates if the meal is a favorite
   dietary_restrictions?: string; // Optional field for dietary restrictions
   servings?: number; // Optional field for number of servings
+  cuisine?: string; // Optional field for cuisine type
 }

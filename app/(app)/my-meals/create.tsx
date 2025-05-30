@@ -29,6 +29,20 @@ const dietaryOptions = [
   { label: "Paleo", value: "Paleo" },
 ];
 
+const cuisineOptions = [
+  { label: "None", value: "" },
+  { label: "Italian", value: "Italian" },
+  { label: "Mexican", value: "Mexican" },
+  { label: "Chinese", value: "Chinese" },
+  { label: "Indian", value: "Indian" },
+  { label: "American", value: "American" },
+  { label: "Japanese", value: "Japanese" },
+  { label: "Mediterranean", value: "Mediterranean" },
+  { label: "Thai", value: "Thai" },
+  { label: "French", value: "French" },
+  // Add more as needed
+];
+
 const CreateMealScreen = () => {
   const { theme } = useTheme();
   const router = useRouter();
@@ -42,6 +56,7 @@ const CreateMealScreen = () => {
   const [mealPicture, setMealPicture] = useState<string | null>(null);
   const [mealVisibility, setMealVisibility] = useState(true);
   const [mealDietaryRestriction, setMealDietaryRestriction] = useState("");
+  const [mealCuisine, setMealCuisine] = useState("");
   const [mealServings, setMealServings] = useState("1");
   const unitOptions = [
   { label: "g", value: "g" },
@@ -117,6 +132,7 @@ const CreateMealScreen = () => {
     formData.append("day", selectedDay || "");
     formData.append("dietary_restrictions", mealDietaryRestriction);
     formData.append("servings", mealServings);
+    formData.append("cuisine", mealCuisine);
 
     if (mealPicture) {
       const uriParts = mealPicture.split(".");
@@ -266,6 +282,18 @@ const CreateMealScreen = () => {
           inputAndroid: [styles.input, { backgroundColor: theme.card, borderColor: theme.border, color: theme.text }],
         }}
         value={mealDietaryRestriction}
+      />
+
+      <Text style={[styles.label, { color: theme.text }]}>Cuisine</Text>
+      <RNPickerSelect
+        onValueChange={setMealCuisine}
+        items={cuisineOptions}
+        placeholder={{ label: "Select Cuisine (optional)", value: "" }}
+        style={{
+          inputIOS: [styles.input, { backgroundColor: theme.card, borderColor: theme.border, color: theme.text }],
+          inputAndroid: [styles.input, { backgroundColor: theme.card, borderColor: theme.border, color: theme.text }],
+        }}
+        value={mealCuisine}
       />
 
       <TextInput

@@ -112,7 +112,7 @@ router.post('/meal-ai', authMiddleware, upload.none(), async (req: any, res: any
 
 // Create a new meal
 router.post('/meals', authMiddleware, upload.single('picture'), async (req: any, res: any): Promise<void> => {
-  const { name, description, ingredients, visibility, instructions, recipeLink, created_by, dietary_restrictions, servings } = req.body;
+  const { name, description, ingredients, visibility, instructions, recipeLink, created_by, dietary_restrictions, servings, cuisine } = req.body;
   const user_id = req.user?.id;
   const picture = req.file ? req.file.buffer : null;
   const db = (req as any).db;
@@ -138,8 +138,8 @@ router.post('/meals', authMiddleware, upload.single('picture'), async (req: any,
 
   try {
     const [result]: any = await db.query(
-      `INSERT INTO meals (name, description, ingredients, visibility, user_id, picture, instructions, recipeLink, created_by, dietary_restrictions, servings)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO meals (name, description, ingredients, visibility, user_id, picture, instructions, recipeLink, created_by, dietary_restrictions, servings, cuisine)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         name,
         description,
@@ -151,7 +151,8 @@ router.post('/meals', authMiddleware, upload.single('picture'), async (req: any,
         recipeLink,
         created_by || 'User',
         dietary_restrictions || null,
-        servings ? Number(servings) : 1 // <-- Add this line for servings
+        servings ? Number(servings) : 1,
+        cuisine || null // <-- Add cuisine here
       ]
     );
 
@@ -231,7 +232,7 @@ router.put('/meals/:meal_id/image', authMiddleware, upload.single('picture'), as
   // Get all meals (with filters and search)
   router.get('/meals', authMiddleware, async (req: Request, res: Response): Promise<void> => {
   const db = (req as any).db;
-  const { search, filters, created_by_ai, dietary_restrictions } = req.query;
+  const { search, filters, created_by_ai, dietary_restrictions, cuisine } = req.query;
 
   let query = `
     SELECT 
@@ -253,7 +254,8 @@ router.put('/meals/:meal_id/image', authMiddleware, upload.single('picture'), as
       users.username AS userName,
       COALESCE(AVG(reviews.rating), 0) AS averageRating,
       COUNT(reviews.review_id) AS reviewCount,
-      meals.dietary_restrictions
+      meals.dietary_restrictions,
+      meals.cuisine
     FROM meals
     INNER JOIN users ON meals.user_id = users.id
     LEFT JOIN reviews ON meals.id = reviews.meal_id
@@ -308,6 +310,12 @@ router.put('/meals/:meal_id/image', authMiddleware, upload.single('picture'), as
       query += ` AND meals.dietary_restrictions IN (${restrictions.map(() => "?").join(",")})`;
       values.push(...restrictions);
     }
+  }
+
+  // Cuisine filter
+  if (cuisine) {
+    query += ` AND meals.cuisine = ?`;
+    values.push(cuisine);
   }
 
   query += `
@@ -371,9 +379,10 @@ router.post('/meals/:meal_id', authMiddleware, async (req: Request, res: Respons
         created_by,
         favorite,
         dietary_restrictions,
-        servings
+        servings,
+        cuisine           -- <-- Add cuisine here
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
     const mealValues = [
       meal.name,
@@ -392,7 +401,8 @@ router.post('/meals/:meal_id', authMiddleware, async (req: Request, res: Respons
       meal.created_by,
       false, // favorite should be false for a copied meal
       meal.dietary_restrictions,
-      meal.servings
+      meal.servings,
+      meal.cuisine      // <-- Add cuisine here
     ];
 
     const [insertResult]: any = await db.query(insertMealQuery, mealValues);
@@ -423,7 +433,7 @@ router.post('/meals/:meal_id', authMiddleware, async (req: Request, res: Respons
 router.get('/my-meals', authMiddleware, async (req: Request, res: Response): Promise<void> => {
   const user = (req as any).user; // Get the authenticated user
   const db = (req as any).db; // Get the database instance
-  const { search, filters, created_by_ai, dietary_restrictions } = req.query; // Add new query params
+  const { search, filters, created_by_ai, dietary_restrictions, cuisine } = req.query; // Add cuisine
 
   if (!user) {
     res.status(401).send('User not authenticated');
@@ -448,7 +458,8 @@ router.get('/my-meals', authMiddleware, async (req: Request, res: Response): Pro
       meals.created_by_ai,
       meals.favorite,
       meals.created_by,
-      meals.dietary_restrictions
+      meals.dietary_restrictions,
+      meals.cuisine       
     FROM meals
     WHERE meals.user_id = ?
   `;
@@ -502,6 +513,12 @@ router.get('/my-meals', authMiddleware, async (req: Request, res: Response): Pro
     }
   }
 
+  // Filter for cuisine if provided
+  if (cuisine) {
+    query += ` AND meals.cuisine = ?`;
+    values.push(cuisine);
+  }
+
   query += `
     ORDER BY meals.favorite DESC, meals.created_at DESC
   `;
@@ -510,10 +527,12 @@ router.get('/my-meals', authMiddleware, async (req: Request, res: Response): Pro
     const [rows]: [any[], any] = await db.query(query, values);
 
     // Convert the picture BLOB to Base64 for frontend display
-    const mealsWithImages = rows.map((meal: any) => ({
-      ...meal,
-      picture: meal.picture ? `data:image/jpeg;base64,${meal.picture.toString('base64')}` : null,
-    }));
+    const mealsWithImages = Array.isArray(rows)
+      ? rows.map((meal: any) => ({
+          ...meal,
+          picture: meal.picture ? `data:image/jpeg;base64,${meal.picture.toString('base64')}` : null,
+        }))
+      : [];
 
     res.status(200).json(mealsWithImages);
   } catch (err) {
@@ -537,7 +556,8 @@ router.put('/meals/:meal_id', authMiddleware, async (req: Request, res: Response
     instructions,
     recipeLink,
     dietary_restrictions,
-    servings
+    servings,
+    cuisine // <-- Add cuisine here
   } = req.body;
   const user = (req as any).user;
   const db = (req as any).db;
@@ -589,7 +609,8 @@ router.put('/meals/:meal_id', authMiddleware, async (req: Request, res: Response
         instructions = ?, 
         recipeLink = ?,
         dietary_restrictions = ?,
-        servings = ?
+        servings = ?,
+        cuisine = ?         -- <-- Add cuisine here
       WHERE id = ? AND user_id = ?
     `;
     const values = [
@@ -605,6 +626,7 @@ router.put('/meals/:meal_id', authMiddleware, async (req: Request, res: Response
       recipeLink,
       dietary_restrictions || null,
       servings ? Number(servings) : 1,
+      cuisine || null,      // <-- Add cuisine here
       meal_id,
       user.id,
     ];
@@ -612,14 +634,11 @@ router.put('/meals/:meal_id', authMiddleware, async (req: Request, res: Response
     await db.query(query, values);
 
     // --- Update meal_ingredients table ---
-    // Remove existing ingredients for this meal
     await db.query('DELETE FROM meal_ingredients WHERE meal_id = ?', [meal_id]);
 
-    // Insert updated ingredients
     for (const ing of parsedIngredients) {
       if (!ing.name || !ing.quantity || !ing.unit) continue;
 
-      // Optionally, you could re-link food_id using your findBestFoodMatch logic
       let food_id = ing.food_id;
       if (!food_id) {
         const foodMatch = await findBestFoodMatch(db, ing.raw_name ?? ing.name);
@@ -642,7 +661,7 @@ router.put('/meals/:meal_id', authMiddleware, async (req: Request, res: Response
 });
   
   // Get a specific meal by ID
-  router.get('/meals/:meal_id', authMiddleware, async (req: Request, res: Response): Promise<void> => {
+router.get('/meals/:meal_id', authMiddleware, async (req: Request, res: Response): Promise<void> => {
   const { meal_id } = req.params; // Extract the meal ID from the URL
   const db = (req as any).db; // Get the database instance
 
@@ -666,6 +685,7 @@ router.put('/meals/:meal_id', authMiddleware, async (req: Request, res: Response
         meals.created_by_ai,
         meals.created_by,
         meals.dietary_restrictions,
+        meals.cuisine,                -- <-- Add this line
         users.username AS userName
       FROM meals
       INNER JOIN users ON meals.user_id = users.id
