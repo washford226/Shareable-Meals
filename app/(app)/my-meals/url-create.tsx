@@ -1,12 +1,7 @@
 import React, { useState } from "react";
-import { View, Text, TextInput, TouchableOpacity, Alert, StyleSheet, ScrollView, Platform } from "react-native";
-import axios from "axios";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { View, Text, TextInput, TouchableOpacity, Alert, StyleSheet, ScrollView } from "react-native";
 import { useRouter } from "expo-router";
-
-// Dynamically set the BASE_URL based on the platform
-const BASE_URL =
-  Platform.OS === "android" ? "http://10.0.2.2:5000" : "http://localhost:5000";
+import { supabase } from "app/utils_supabase";
 
 // Ingredient input row component
 const IngredientRow = ({ ingredient, onChange, onRemove }: any) => (
@@ -65,57 +60,58 @@ const URLCreateMealScreen: React.FC = () => {
   };
 
   // Parse a string or array of ingredients into [{name, quantity, unit}]
-function parseIngredientLine(line: string) {
-  if (!line || typeof line !== 'string') return null;
-  let cleaned = line.trim();
-  cleaned = cleaned.replace(/^[\*\-\d\.\s\/]+/, '').trim();
+  function parseIngredientLine(line: string) {
+    if (!line || typeof line !== 'string') return null;
+    let cleaned = line.trim();
+    cleaned = cleaned.replace(/^[\*\-\d\.\s\/]+/, '').trim();
 
-  // Common units for matching
-  const units = [
-    "cup", "cups", "tablespoon", "tablespoons", "tbsp", "teaspoon", "teaspoons", "tsp",
-    "oz", "ounce", "ounces", "lb", "pound", "pounds", "g", "gram", "grams", "kg", "ml", "l", "clove", "cloves", "slice", "slices", "can", "cans", "package", "packages", "stick", "sticks", "inch", "inches"
-  ];
-  const unitsPattern = units.join("|");
+    // Common units for matching
+    const units = [
+      "cup", "cups", "tablespoon", "tablespoons", "tbsp", "teaspoon", "teaspoons", "tsp",
+      "oz", "ounce", "ounces", "lb", "pound", "pounds", "g", "gram", "grams", "kg", "ml", "l", "clove", "cloves", "slice", "slices", "can", "cans", "package", "packages", "stick", "sticks", "inch", "inches"
+    ];
+    const unitsPattern = units.join("|");
 
-  // 1. quantity unit name (e.g., "1 cup ketchup")
-  let match = cleaned.match(
-    new RegExp(`^([\\d¼½¾⅓⅔⅛⅜⅝⅞\\/\\.]+)\\s+(${unitsPattern})\\s+(.+)$`, "i")
-  );
-  if (match) {
-    const [, quantity, unit, name] = match;
-    return { quantity, unit, name };
+    // 1. quantity unit name (e.g., "1 cup ketchup")
+    let match = cleaned.match(
+      new RegExp(`^([\\d¼½¾⅓⅔⅛⅜⅝⅞\\/\\.]+)\\s+(${unitsPattern})\\s+(.+)$`, "i")
+    );
+    if (match) {
+      const [, quantity, unit, name] = match;
+      return { quantity, unit, name };
+    }
+
+    // 2. quantity name (e.g., "2 eggs")
+    match = cleaned.match(/^([\d¼½¾⅓⅔⅛⅜⅝⅞\/\.]+)\s+(.+)$/);
+    if (match) {
+      const [, quantity, name] = match;
+      return { quantity, unit: "", name };
+    }
+
+    // 3. name quantity unit (e.g., "soy sauce 1/4 cup")
+    match = cleaned.match(/^(.+?)\s+([\d¼½¾⅓⅔⅛⅜⅝⅞\/\.]+)\s*([a-zA-Z]+)?$/);
+    if (match) {
+      return {
+        name: match[1].trim(),
+        quantity: match[2].trim(),
+        unit: match[3]?.trim() || "",
+      };
+    }
+
+    // 4. unit name (e.g., "cup ketchup")
+    match = cleaned.match(
+      new RegExp(`^(${unitsPattern})\\s+(.+)$`, "i")
+    );
+    if (match) {
+      const [, unit, name] = match;
+      return { quantity: "1", unit, name };
+    }
+
+    // fallback
+    return { name: cleaned, quantity: "", unit: "" };
   }
 
-  // 2. quantity name (e.g., "2 eggs")
-  match = cleaned.match(/^([\d¼½¾⅓⅔⅛⅜⅝⅞\/\.]+)\s+(.+)$/);
-  if (match) {
-    const [, quantity, name] = match;
-    return { quantity, unit: "", name };
-  }
-
-  // 3. name quantity unit (e.g., "soy sauce 1/4 cup")
-  match = cleaned.match(/^(.+?)\s+([\d¼½¾⅓⅔⅛⅜⅝⅞\/\.]+)\s*([a-zA-Z]+)?$/);
-  if (match) {
-    return {
-      name: match[1].trim(),
-      quantity: match[2].trim(),
-      unit: match[3]?.trim() || "",
-    };
-  }
-
-  // 4. unit name (e.g., "cup ketchup")
-  match = cleaned.match(
-    new RegExp(`^(${unitsPattern})\\s+(.+)$`, "i")
-  );
-  if (match) {
-    const [, unit, name] = match;
-    return { quantity: "1", unit, name };
-  }
-
-  // fallback
-  return { name: cleaned, quantity: "", unit: "" };
-}
-
+  // Fetch recipe data from a backend API (user must provide their own endpoint)
   const handleFetchRecipe = async () => {
     if (!recipeUrl || !recipeUrl.startsWith("http")) {
       Alert.alert("Error", "Please enter a valid URL starting with http or https.");
@@ -124,29 +120,26 @@ function parseIngredientLine(line: string) {
 
     try {
       setLoading(true);
-      const response = await axios.post(`${BASE_URL}/urlmeals/fetch-recipe`, { url: recipeUrl });
+      // Replace this with your own backend endpoint for URL parsing
+      const response = await fetch("https://api.spoonacular.com/recipes/extract?url=" + encodeURIComponent(recipeUrl) + "&apiKey=YOUR_SPOONACULAR_API_KEY");
+      const data = await response.json();
 
-      if (response.status === 200) {
-        const { name, description, ingredients: ing, instructions } = response.data;
-        setMealName(name || "");
-        setDescription(description || "");
-        setServings(response.data.servings ? String(response.data.servings) : "1");
-        // Accept both array and string for ingredients
-       let parsedIngredients: { name: string; quantity: string; unit: string }[] = [];
-        if (Array.isArray(ing)) {
-          parsedIngredients = ing
+      if (data && data.title) {
+        setMealName(data.title || "");
+        setDescription(data.summary ? data.summary.replace(/<[^>]+>/g, "") : "");
+        setServings(data.servings ? String(data.servings) : "1");
+        let parsedIngredients: { name: string; quantity: string; unit: string }[] = [];
+        if (Array.isArray(data.extendedIngredients)) {
+          parsedIngredients = data.extendedIngredients
             .map((item: any) =>
-              typeof item === "string" ? parseIngredientLine(item) : item
+              item.originalString
+                ? parseIngredientLine(item.originalString)
+                : { name: item.name, quantity: String(item.amount), unit: item.unit }
             )
-            .filter((i: any): i is { name: string; quantity: string; unit: string } => !!i && !!i.name);
-        } else if (typeof ing === "string") {
-          parsedIngredients = ing
-            .split(/\r?\n|,/)
-            .map((line: string) => parseIngredientLine(line))
             .filter((i: any): i is { name: string; quantity: string; unit: string } => !!i && !!i.name);
         }
         setIngredients(parsedIngredients);
-        setInstructions(instructions || "");
+        setInstructions(data.instructions || "");
         Alert.alert("Success", "Recipe data fetched successfully!");
       } else {
         Alert.alert("Error", "Failed to fetch recipe data.");
@@ -159,6 +152,7 @@ function parseIngredientLine(line: string) {
     }
   };
 
+  // Save meal to Supabase
   const handleSaveMeal = async () => {
     if (!mealName || !description || !ingredients.length || !instructions || !recipeUrl) {
       Alert.alert("Error", "Please ensure all fields are filled before saving.");
@@ -167,31 +161,29 @@ function parseIngredientLine(line: string) {
 
     try {
       setSaving(true);
-      const token = await AsyncStorage.getItem("token");
-      if (!token) {
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+      if (userError || !userData?.user) {
         Alert.alert("Error", "User not authenticated. Please log in.");
+        setSaving(false);
         return;
       }
+      const userId = userData.user.id;
 
-      const formData = new FormData();
-      formData.append("name", mealName);
-      formData.append("description", description);
-      formData.append("servings", servings);
-      formData.append("ingredients", JSON.stringify(ingredients));
-      formData.append("instructions", instructions);
-      formData.append("recipeLink", recipeUrl);
-      formData.append("created_by", recipeUrl);
-
-      const response = await fetch(`${BASE_URL}/meal/meals`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
+      const { error } = await supabase.from("meals").insert([
+        {
+          user_id: userId,
+          name: mealName,
+          description,
+          servings: servings ? parseInt(servings) : 1,
+          ingredients,
+          instructions,
+          recipeLink: recipeUrl,
+          created_by: recipeUrl,
         },
-        body: formData,
-      });
+      ]);
 
-      if (!response.ok) {
-        throw new Error("Failed to add meal to the database.");
+      if (error) {
+        throw error;
       }
 
       Alert.alert("Success", "Meal added successfully!", [
@@ -249,13 +241,13 @@ function parseIngredientLine(line: string) {
       />
 
       <Text style={styles.label}>Servings</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="Servings"
-          value={servings}
-          onChangeText={setServings}
-          keyboardType="numeric"
-        />
+      <TextInput
+        style={styles.input}
+        placeholder="Servings"
+        value={servings}
+        onChangeText={setServings}
+        keyboardType="numeric"
+      />
 
       {/* Ingredients */}
       <Text style={styles.label}>Ingredients</Text>

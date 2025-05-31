@@ -9,15 +9,11 @@ import {
   TouchableOpacity,
   Alert,
   ActivityIndicator,
-  Platform,
   Switch,
 } from "react-native";
 import { useTheme } from "../../../../context/ThemeContext";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import axios from "axios";
 import RNPickerSelect from "react-native-picker-select";
-
-const BASE_URL = Platform.OS === "android" ? "http://10.0.2.2:5000" : "http://localhost:5000";
+import { supabase } from "app/utils_supabase";
 
 export default function EditMealScreen() {
   const { id: mealId } = useLocalSearchParams<{ id: string }>();
@@ -25,18 +21,18 @@ export default function EditMealScreen() {
   const { theme } = useTheme();
 
   const cuisineOptions = [
-  { label: "None", value: "" },
-  { label: "Italian", value: "Italian" },
-  { label: "Mexican", value: "Mexican" },
-  { label: "Chinese", value: "Chinese" },
-  { label: "Indian", value: "Indian" },
-  { label: "American", value: "American" },
-  { label: "Japanese", value: "Japanese" },
-  { label: "Mediterranean", value: "Mediterranean" },
-  { label: "Thai", value: "Thai" },
-  { label: "French", value: "French" },
-];
-const [cuisine, setCuisine] = useState<string>("");
+    { label: "None", value: "" },
+    { label: "Italian", value: "Italian" },
+    { label: "Mexican", value: "Mexican" },
+    { label: "Chinese", value: "Chinese" },
+    { label: "Indian", value: "Indian" },
+    { label: "American", value: "American" },
+    { label: "Japanese", value: "Japanese" },
+    { label: "Mediterranean", value: "Mediterranean" },
+    { label: "Thai", value: "Thai" },
+    { label: "French", value: "French" },
+  ];
+  const [cuisine, setCuisine] = useState<string>("");
 
   const [name, setName] = useState<string>("");
   const [description, setDescription] = useState<string>("");
@@ -51,7 +47,6 @@ const [cuisine, setCuisine] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(true);
   const [saving, setSaving] = useState<boolean>(false);
   const [dietaryRestriction, setDietaryRestriction] = useState<string>("");
-  
 
   const dietaryOptions = [
     { label: "None", value: "" },
@@ -62,40 +57,42 @@ const [cuisine, setCuisine] = useState<string>("");
     { label: "Paleo", value: "Paleo" },
   ];
 
-
+  // Fetch meal details from Supabase
   const fetchMealDetails = async () => {
     try {
-      const token = await AsyncStorage.getItem("token");
-      if (!token) {
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+      if (userError || !userData?.user) {
         Alert.alert("Error", "User not authenticated. Please log in.");
         router.back();
         return;
       }
+      const userId = userData.user.id;
 
-      const response = await axios.get(`${BASE_URL}/meal/meals/${mealId}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const { data, error } = await supabase
+        .from("meals")
+        .select("*")
+        .eq("id", mealId)
+        .eq("user_id", userId)
+        .single();
 
-      if (response.status === 200) {
-        const meal = response.data;
-        setName(meal.name);
-        setDescription(meal.description);
-        setIngredients(Array.isArray(meal.ingredients) ? meal.ingredients : []);
-        setCalories(meal.calories?.toString() || "");
-        setProtein(meal.protein?.toString() || "");
-        setCarbohydrates(meal.carbohydrates?.toString() || "");
-        setFat(meal.fat?.toString() || "");
-        setInstructions(meal.instructions || "");
-        setRecipeLink(meal.recipeLink || "");
-        setVisibility(meal.visibility);
-        setDietaryRestriction(meal.dietary_restrictions || "");
-        setCuisine(meal.cuisine || "");
-      } else {
+      if (error || !data) {
         Alert.alert("Error", "Failed to fetch meal details.");
         router.back();
+        return;
       }
+
+      setName(data.name || "");
+      setDescription(data.description || "");
+      setIngredients(Array.isArray(data.ingredients) ? data.ingredients : []);
+      setCalories(data.calories?.toString() || "");
+      setProtein(data.protein?.toString() || "");
+      setCarbohydrates(data.carbohydrates?.toString() || "");
+      setFat(data.fat?.toString() || "");
+      setInstructions(data.instructions || "");
+      setRecipeLink(data.recipeLink || "");
+      setVisibility(data.visibility ?? true);
+      setDietaryRestriction(data.dietary_restrictions || "");
+      setCuisine(data.cuisine || "");
     } catch (error) {
       console.error("Error fetching meal details:", error);
       Alert.alert("Error", "An error occurred while fetching meal details.");
@@ -105,6 +102,7 @@ const [cuisine, setCuisine] = useState<string>("");
     }
   };
 
+  // Save meal changes to Supabase
   const handleSave = async () => {
     if (!name.trim() || !description.trim() || !ingredients) {
       Alert.alert("Validation Error", "Name, description, and ingredients are required.");
@@ -114,15 +112,16 @@ const [cuisine, setCuisine] = useState<string>("");
     setSaving(true);
 
     try {
-      const token = await AsyncStorage.getItem("token");
-      if (!token) {
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+      if (userError || !userData?.user) {
         Alert.alert("Error", "User not authenticated. Please log in.");
         return;
       }
+      const userId = userData.user.id;
 
-      const response = await axios.put(
-        `${BASE_URL}/meal/meals/${mealId}`,
-        {
+      const { error } = await supabase
+        .from("meals")
+        .update({
           name: name.trim(),
           description: description.trim(),
           ingredients,
@@ -135,19 +134,15 @@ const [cuisine, setCuisine] = useState<string>("");
           visibility,
           dietary_restrictions: dietaryRestriction,
           cuisine,
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
+        })
+        .eq("id", mealId)
+        .eq("user_id", userId);
 
-      if (response.status === 200) {
+      if (error) {
+        Alert.alert("Error", "Failed to update meal. Please try again.");
+      } else {
         Alert.alert("Success", "Meal updated successfully!");
         router.push(`/my-meals/${mealId}/info`);
-      } else {
-        Alert.alert("Error", "Failed to update meal. Please try again.");
       }
     } catch (error) {
       console.error("Error updating meal:", error);
@@ -163,8 +158,8 @@ const [cuisine, setCuisine] = useState<string>("");
       router.back();
       return;
     }
-
     fetchMealDetails();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mealId]);
 
   if (loading) {

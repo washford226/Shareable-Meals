@@ -6,17 +6,10 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
-  Platform,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import NutritionNav from "../../../../components/nutritionNav";
-import axios from "axios";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-
-const BASE_URL =
-  Platform.OS === "android"
-    ? "http://10.0.2.2:5000"
-    : "http://localhost:5000";
+import { supabase } from "app/utils_supabase";
 
 type MacroKey = "calories" | "protein" | "carbs" | "fat";
 
@@ -45,20 +38,28 @@ const NutritionScreen = () => {
   });
   const [loading, setLoading] = useState(true);
 
-  // Fetch user goals
+  // Fetch user goals from Supabase
   const fetchUserGoals = async () => {
     try {
-      const token = await AsyncStorage.getItem("token");
-      if (!token) return;
-      const response = await axios.get(`${BASE_URL}/users/user`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const user = response.data;
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+      if (userError || !userData?.user) return;
+      const userId = userData.user.id;
+
+      const { data, error } = await supabase
+        .from("users")
+        .select(
+          "calories_goal, protein_goal, carbohydrates_goal, fat_goal"
+        )
+        .eq("id", userId)
+        .single();
+
+      if (error || !data) return;
+
       setMacroGoals({
-        calories: user.calories_goal ?? 2000,
-        protein: user.protein_goal ?? 100,
-        carbs: user.carbohydrates_goal ?? 200,
-        fat: user.fat_goal ?? 70,
+        calories: data.calories_goal ?? 2000,
+        protein: data.protein_goal ?? 100,
+        carbs: data.carbohydrates_goal ?? 200,
+        fat: data.fat_goal ?? 70,
       });
     } catch (error) {
       console.error("Error fetching user goals:", error);
@@ -66,23 +67,38 @@ const NutritionScreen = () => {
     }
   };
 
-  // Fetch actual macros for the day
+  // Fetch actual macros for the day from Supabase
   const fetchDayMacros = async () => {
     try {
-      const token = await AsyncStorage.getItem("token");
-      if (!token) return;
-      const response = await axios.get(`${BASE_URL}/mealplan/meal-plan`, {
-        params: { date },
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const meals = Array.isArray(response.data) ? response.data : [];
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+      if (userError || !userData?.user) return;
+      const userId = userData.user.id;
+
+      // Get all meals for this user and date from meal_plan, join meals table for macros
+      const { data, error } = await supabase
+        .from("meal_plan")
+        .select(
+          `
+          meal:meals (
+            calories,
+            protein,
+            carbohydrates,
+            fat
+          )
+        `
+        )
+        .eq("user_id", userId)
+        .eq("date", date);
+
+      if (error) throw error;
+
       // Sum up macros
-      const totals = meals.reduce(
-        (acc, meal) => ({
-          calories: acc.calories + (meal.calories || 0),
-          protein: acc.protein + (meal.protein || 0),
-          carbs: acc.carbs + (meal.carbohydrates || 0),
-          fat: acc.fat + (meal.fat || 0),
+      const totals = (data || []).reduce(
+        (acc, entry) => ({
+          calories: acc.calories + (entry.meal?.calories || 0),
+          protein: acc.protein + (entry.meal?.protein || 0),
+          carbs: acc.carbs + (entry.meal?.carbohydrates || 0),
+          fat: acc.fat + (entry.meal?.fat || 0),
         }),
         { calories: 0, protein: 0, carbs: 0, fat: 0 }
       );

@@ -7,61 +7,42 @@ import {
   StyleSheet,
   Alert,
   ActivityIndicator,
-  Platform,
 } from "react-native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import axios from "axios";
 import { useTheme } from "../../../context/ThemeContext";
 import { useRouter } from "expo-router";
-
-const BASE_URL = Platform.OS === "android" ? "http://10.0.2.2:5000" : "http://localhost:5000";
+import { supabase } from "app/utils_supabase";
 
 const EditPassword = () => {
   const [currentPassword, setCurrentPassword] = useState<string>("");
   const [newPassword, setNewPassword] = useState<string>("");
   const [confirmPassword, setConfirmPassword] = useState<string>("");
-  const [username, setUsername] = useState<string>(""); // State for username
+  const [email, setEmail] = useState<string>("");
   const [loading, setLoading] = useState(false);
-  const [fetchingUsername, setFetchingUsername] = useState(true); // State for fetching username
+  const [fetchingUser, setFetchingUser] = useState(true);
 
   const { theme } = useTheme();
   const router = useRouter();
 
-  // Fetch the username when the screen loads
+  // Fetch the current user's email for re-authentication
   useEffect(() => {
-    const fetchUsername = async () => {
+    const fetchUser = async () => {
       try {
-        const token = await AsyncStorage.getItem("token");
-        if (!token) {
+        const { data: userData, error: userError } = await supabase.auth.getUser();
+        if (userError || !userData?.user) {
           Alert.alert("Error", "User not authenticated. Please log in.");
-          router.replace("/login"); // Redirect to login if not authenticated
+          router.replace("/login");
           return;
         }
-
-        const response = await axios.get(`${BASE_URL}/users/user`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
-
-        if (response.status === 200) {
-          setUsername(response.data.username); // Set the username from the response
-        } else {
-          Alert.alert("Error", "Failed to fetch user information.");
-        }
+        setEmail(userData.user.email ?? "");
       } catch (error) {
-        if (axios.isAxiosError(error)) {
-          console.error("Error fetching username:", error.response?.data || error.message);
-        } else {
-          console.error("Error fetching username:", error);
-        }
+        console.error("Error fetching user:", error);
         Alert.alert("Error", "An error occurred while fetching user information.");
       } finally {
-        setFetchingUsername(false); // Stop the loading indicator
+        setFetchingUser(false);
       }
     };
 
-    fetchUsername();
+    fetchUser();
   }, []);
 
   const handleUpdatePassword = async () => {
@@ -69,56 +50,48 @@ const EditPassword = () => {
       Alert.alert("Error", "All fields are required.");
       return;
     }
-  
+
     if (newPassword !== confirmPassword) {
       Alert.alert("Error", "New password and confirmation do not match.");
       return;
     }
-  
+
     setLoading(true);
-  
+
     try {
-      const token = await AsyncStorage.getItem("token");
-      if (!token) {
-        Alert.alert("Error", "User not authenticated. Please log in.");
+      // Supabase requires the user to be signed in to update password.
+      // If you want to re-authenticate, you can sign in again before updating.
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email,
+        password: currentPassword,
+      });
+
+      if (signInError) {
+        Alert.alert("Error", "Current password is incorrect.");
+        setLoading(false);
         return;
       }
-  
-      const response = await axios.put(
-        `${BASE_URL}/users/user/${username}/password`, // Use the fetched username
-        {
-          currentPassword,
-          password: newPassword, // Match the backend's expected field
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
-  
-      if (response.status === 200) {
-        Alert.alert("Success", "Your password has been updated!");
-        router.back(); // Navigate back after successful update
-      } else {
-        Alert.alert("Error", "Failed to update password. Please try again.");
+
+      // Now update the password
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
+
+      if (error) {
+        Alert.alert("Error", error.message || "Failed to update password. Please try again.");
+        setLoading(false);
+        return;
       }
-    } catch (error) {
-      if (axios.isAxiosError(error)) {
-        console.error("Error updating password:", error.response?.data || error.message);
-      } else {
-        console.error("Error updating password:", error);
-      }
-      const errorMessage = axios.isAxiosError(error) && error.response?.data?.error
-        ? error.response.data.error
-        : "An error occurred while updating your password.";
-      Alert.alert("Error", errorMessage);
+
+      Alert.alert("Success", "Your password has been updated!");
+      router.back();
+    } catch (error: any) {
+      console.error("Error updating password:", error);
+      Alert.alert("Error", error.message || "An error occurred while updating your password.");
     } finally {
       setLoading(false);
     }
   };
 
-  if (fetchingUsername) {
+  if (fetchingUser) {
     return (
       <View style={[styles.container, { backgroundColor: theme.background }]}>
         <ActivityIndicator size="large" color={theme.primary} />
