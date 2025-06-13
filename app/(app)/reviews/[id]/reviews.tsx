@@ -7,23 +7,20 @@ import {
   StyleSheet,
   ActivityIndicator,
   Alert,
-  Platform,
 } from "react-native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import axios from "axios";
 import StarRating from "react-native-star-rating-widget";
 import { useTheme } from "../../../../context/ThemeContext";
 import { useRouter, useLocalSearchParams } from "expo-router";
+import { supabase } from "app/utils_supabase";
 
 interface Review {
   id: string;
-  userName: string;
+  user_id: string;
   rating: number;
   comment: string;
   created_at: string;
+  profiles?: { username?: string };
 }
-
-const BASE_URL = Platform.OS === "android" ? "http://10.0.2.2:5000" : "http://localhost:5000";
 
 const ViewReviews = () => {
   const [reviews, setReviews] = useState<Review[]>([]);
@@ -41,19 +38,17 @@ const ViewReviews = () => {
     }
 
     try {
-      const token = await AsyncStorage.getItem("token");
-      if (!token) {
-        Alert.alert("Error", "You are not logged in.");
-        setLoading(false);
-        return;
-      }
+      setLoading(true);
+      // Fetch reviews and join with profiles for username
+      const { data, error } = await supabase
+        .from("reviews")
+        .select("*, profiles:user_id(username)")
+        .eq("meal_id", mealId)
+        .order("created_at", { ascending: false });
 
-      const response = await axios.get(`${BASE_URL}/reviews/reviews?meal_id=${mealId}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-      setReviews(response.data);
+      if (error) throw error;
+
+      setReviews(data || []);
     } catch (error) {
       console.error("Error fetching reviews:", error);
       Alert.alert("Error", "Failed to fetch reviews. Please try again later.");
@@ -64,6 +59,7 @@ const ViewReviews = () => {
 
   useEffect(() => {
     fetchReviews();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mealId]);
 
   if (loading) {
@@ -99,7 +95,9 @@ const ViewReviews = () => {
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
           <View style={[styles.reviewItem, { backgroundColor: theme.card, borderColor: theme.border }]}>
-            <Text style={[styles.userName, { color: theme.text }]}>{item.userName}</Text>
+            <Text style={[styles.userName, { color: theme.text }]}>
+              {item.profiles?.username || "Anonymous"}
+            </Text>
             <StarRating
               rating={item.rating}
               maxStars={5}

@@ -7,23 +7,19 @@ import {
   StyleSheet,
   Alert,
   ActivityIndicator,
-  Platform,
 } from "react-native";
-import axios from "axios";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useTheme } from "../../../context/ThemeContext";
 import { useRouter } from "expo-router";
-
-const BASE_URL = Platform.OS === "android" ? "http://10.0.2.2:5000" : "http://localhost:5000";
+import { supabase } from "app/utils_supabase";
 
 const PantryScreen = () => {
   const { theme } = useTheme();
   const router = useRouter();
 
   interface PantryItem {
-    pantry_id: number;
-    food: string; // Updated to match the database schema
-    quantity: number;
+    id: number;
+    food: string;
+    quantity: number | null;
     unit?: string;
     expiration_date?: string;
   }
@@ -31,29 +27,59 @@ const PantryScreen = () => {
   const [pantryItems, setPantryItems] = useState<PantryItem[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Fetch pantry items from the backend
+  // Fetch pantry items from Supabase
   const fetchPantryItems = async () => {
     try {
-      const token = await AsyncStorage.getItem("token");
-      const response = await axios.get(`${BASE_URL}/pantry/pantry`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      setPantryItems(response.data);
+      setLoading(true);
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+      if (userError || !userData?.user) {
+        Alert.alert("Error", "User not authenticated. Please log in.");
+        setPantryItems([]);
+        setLoading(false);
+        return;
+      }
+      const userId = userData.user.id;
+
+      const { data, error } = await supabase
+        .from("pantry")
+        .select("*")
+        .eq("user_id", userId)
+        .order("expiration_date", { ascending: true });
+
+      if (error) {
+        throw error;
+      }
+
+      setPantryItems(data || []);
     } catch (error) {
       console.error("Error fetching pantry items:", error);
       Alert.alert("Error", "Failed to fetch pantry items. Please try again later.");
+      setPantryItems([]);
     } finally {
       setLoading(false);
     }
   };
 
-  // Delete a pantry item
+  // Delete a pantry item from Supabase
   const deletePantryItem = async (id: number) => {
     try {
-      const token = await AsyncStorage.getItem("token");
-      await axios.delete(`${BASE_URL}/pantry/pantry/${id}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+      if (userError || !userData?.user) {
+        Alert.alert("Error", "User not authenticated. Please log in.");
+        return;
+      }
+      const userId = userData.user.id;
+
+      const { error } = await supabase
+        .from("pantry")
+        .delete()
+        .eq("id", id)
+        .eq("user_id", userId);
+
+      if (error) {
+        throw error;
+      }
+
       Alert.alert("Success", "Pantry item deleted successfully.");
       fetchPantryItems(); // Refresh the list
     } catch (error) {
@@ -64,6 +90,7 @@ const PantryScreen = () => {
 
   useEffect(() => {
     fetchPantryItems();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   if (loading) {
@@ -79,11 +106,11 @@ const PantryScreen = () => {
       <Text style={[styles.title, { color: theme.text }]}>My Pantry</Text>
       <FlatList
         data={pantryItems}
-        keyExtractor={(item) => item.pantry_id.toString()}
+        keyExtractor={(item) => item.id.toString()}
         renderItem={({ item }) => (
           <View style={[styles.itemContainer, { backgroundColor: theme.card }]}>
             <Text style={[styles.itemText, { color: theme.text }]}>
-              {item.food} - {item.quantity} {item.unit || ""}
+              {item.food} - {item.quantity ?? ""} {item.unit || ""}
             </Text>
             {item.expiration_date && (
               <Text style={[styles.expirationText, { color: theme.subtext }]}>
@@ -91,11 +118,11 @@ const PantryScreen = () => {
               </Text>
             )}
             <TouchableOpacity
-            style={[styles.editButton, { backgroundColor: theme.primary }]}
-            onPress={() => router.push(`/pantry/${item.pantry_id}/edit`)} 
-          >
-            <Text style={[styles.editButtonText, { color: theme.buttonText }]}>Edit</Text>
-          </TouchableOpacity>
+              style={[styles.editButton, { backgroundColor: theme.primary }]}
+              onPress={() => router.push(`/pantry/${item.id}/edit`)}
+            >
+              <Text style={[styles.editButtonText, { color: theme.buttonText }]}>Edit</Text>
+            </TouchableOpacity>
             <TouchableOpacity
               style={[styles.deleteButton, { backgroundColor: theme.danger }]}
               onPress={() =>
@@ -104,7 +131,7 @@ const PantryScreen = () => {
                   "Are you sure you want to delete this item?",
                   [
                     { text: "Cancel", style: "cancel" },
-                    { text: "Delete", onPress: () => deletePantryItem(item.pantry_id) },
+                    { text: "Delete", onPress: () => deletePantryItem(item.id) },
                   ]
                 )
               }
@@ -121,17 +148,17 @@ const PantryScreen = () => {
       />
       <TouchableOpacity
         style={[styles.addButton, { backgroundColor: theme.primary }]}
-        onPress={() => router.push("/pantry/add")} // Navigate to the Add Pantry Item screen
+        onPress={() => router.push("/pantry/add")}
       >
         <Text style={[styles.addButtonText, { color: theme.buttonText }]}>Add Item</Text>
       </TouchableOpacity>
 
       <TouchableOpacity
         style={styles.backButton}
-        onPress={() => router.push("/meal-plan/calendar")} // Navigate back to the previous screen
-        >
+        onPress={() => router.push("/meal-plan/calendar")}
+      >
         <Text style={styles.backButtonText}>Back</Text>
-        </TouchableOpacity>
+      </TouchableOpacity>
     </View>
   );
 };
@@ -146,12 +173,12 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 8,
     alignItems: "center",
-    backgroundColor: "#ccc", // Default background color
+    backgroundColor: "#ccc",
   },
   backButtonText: {
     fontSize: 16,
     fontWeight: "bold",
-    color: "#000", // Default text color
+    color: "#000",
   },
   title: {
     fontSize: 24,
@@ -197,15 +224,15 @@ const styles = StyleSheet.create({
     marginTop: 32,
   },
   editButton: {
-  marginTop: 8,
-  padding: 8,
-  borderRadius: 8,
-  alignItems: "center",
-},
-editButtonText: {
-  fontSize: 14,
-  fontWeight: "bold",
-},
+    marginTop: 8,
+    padding: 8,
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  editButtonText: {
+    fontSize: 14,
+    fontWeight: "bold",
+  },
 });
 
 export default PantryScreen;

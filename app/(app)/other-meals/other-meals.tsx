@@ -7,44 +7,19 @@ import {
   StyleSheet,
   ActivityIndicator,
   Alert,
-  Platform,
   TextInput,
   Modal,
   Image,
 } from "react-native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import axios from "axios";
 import { Meal } from "../../../types/types";
 import { useTheme } from "../../../context/ThemeContext";
-import { jwtDecode } from "jwt-decode"; // Use named import for jwtDecode
-import Icon from "react-native-vector-icons/FontAwesome"; // Import FontAwesome icons
-import { useRouter } from "expo-router"; // Import useRouter from expo-router
+import Icon from "react-native-vector-icons/FontAwesome";
+import { useRouter } from "expo-router";
 import BottomNav from "components/bottomNav";
 import RNPickerSelect from "react-native-picker-select";
+import { supabase } from "app/utils_supabase";
 
-const BASE_URL = Platform.OS === "android" ? "http://10.0.2.2:5000" : "http://localhost:5000";
-
-const OtherMeals: React.FC = () => {
-  const [meals, setMeals] = useState<Meal[]>([]);
-  const [filteredMeals, setFilteredMeals] = useState<Meal[]>([]);
-  const [searchQuery, setSearchQuery] = useState<string>("");
-  const [loading, setLoading] = useState(true);
-  const [isFilterModalVisible, setIsFilterModalVisible] = useState(false);
-
-  const [filters, setFilters] = useState<{ type: string; greaterThan: string; lessThan: string }[]>([
-    { type: "calories", greaterThan: "", lessThan: "" },
-    { type: "fat", greaterThan: "", lessThan: "" },
-    { type: "protein", greaterThan: "", lessThan: "" },
-    { type: "carbohydrates", greaterThan: "", lessThan: "" },
-  ]);
-  const [tempFilters, setTempFilters] = useState<{ type: string; greaterThan: string; lessThan: string }[]>([
-    { type: "calories", greaterThan: "", lessThan: "" },
-    { type: "fat", greaterThan: "", lessThan: "" },
-    { type: "protein", greaterThan: "", lessThan: "" },
-    { type: "carbohydrates", greaterThan: "", lessThan: "" },
-    
-  ]);
-  const aiOptions = [
+const aiOptions = [
   { label: "All", value: "" },
   { label: "AI Generated", value: "ai" },
   { label: "Not AI Generated", value: "not_ai" },
@@ -71,101 +46,88 @@ const cuisineOptions = [
   { label: "Thai", value: "Thai" },
   { label: "French", value: "French" },
 ];
-const [cuisineFilter, setCuisineFilter] = useState<string>("");
-const [tempCuisineFilter, setTempCuisineFilter] = useState<string>(cuisineFilter);
 
-const [aiFilter, setAiFilter] = useState<string>("");
-const [dietaryRestrictionFilter, setDietaryRestrictionFilter] = useState<string>("");
-const [tempAiFilter, setTempAiFilter] = useState<string>(aiFilter);
-const [tempDietaryRestrictionFilter, setTempDietaryRestrictionFilter] = useState<string>(dietaryRestrictionFilter);
-const [filtersLoaded, setFiltersLoaded] = useState(false);
+const defaultFilters = [
+  { type: "calories", greaterThan: "", lessThan: "" },
+  { type: "fat", greaterThan: "", lessThan: "" },
+  { type: "protein", greaterThan: "", lessThan: "" },
+  { type: "carbohydrates", greaterThan: "", lessThan: "" },
+];
+
+const OtherMeals: React.FC = () => {
+  const [meals, setMeals] = useState<Meal[]>([]);
+  const [filteredMeals, setFilteredMeals] = useState<Meal[]>([]);
+  const [searchQuery, setSearchQuery] = useState<string>("");
+  const [loading, setLoading] = useState(true);
+  const [isFilterModalVisible, setIsFilterModalVisible] = useState(false);
+
+  const [filters, setFilters] = useState(defaultFilters);
+  const [tempFilters, setTempFilters] = useState(defaultFilters);
+
+  const [aiFilter, setAiFilter] = useState<string>("");
+  const [dietaryRestrictionFilter, setDietaryRestrictionFilter] = useState<string>("");
+  const [cuisineFilter, setCuisineFilter] = useState<string>("");
+
+  const [tempAiFilter, setTempAiFilter] = useState<string>(aiFilter);
+  const [tempDietaryRestrictionFilter, setTempDietaryRestrictionFilter] = useState<string>(dietaryRestrictionFilter);
+  const [tempCuisineFilter, setTempCuisineFilter] = useState<string>(cuisineFilter);
 
   const { theme } = useTheme();
-  const router = useRouter(); 
-
-  const getUserIdFromToken = async (): Promise<number | null> => {
-    try {
-      const token = await AsyncStorage.getItem("token");
-      if (!token) {
-        return null;
-      }
-
-      const decodedToken: { id: number } = jwtDecode(token); 
-      return decodedToken.id;
-    } catch (error) {
-      console.error("Error decoding token:", error);
-      return null;
-    }
-  };
-
-  const onMealSelect = (meal: Meal) => {
-    router.push(`/other-meals/${meal.id}/other-meals-info`); // Navigate to the meal details screen
-  };
+  const router = useRouter();
 
   const isFilterActive =
-  aiFilter !== "" ||
-  dietaryRestrictionFilter !== "" ||
-  cuisineFilter !== "" ||
-  filters.some(f => f.greaterThan !== "" || f.lessThan !== "");
+    aiFilter !== "" ||
+    dietaryRestrictionFilter !== "" ||
+    cuisineFilter !== "" ||
+    filters.some(f => f.greaterThan !== "" || f.lessThan !== "");
 
-  // Restore filters/search on mount
-useEffect(() => {
-  const restoreFilters = async () => {
-    const token = await AsyncStorage.getItem("token");
-    if (!token) return;
-
-    const userId = await getUserIdFromToken();
-    if (!userId) return;
-
-    const savedFilters = await AsyncStorage.getItem(`filters_OtherMeals_${userId}`);
-    const savedSearchQuery = await AsyncStorage.getItem(`searchQuery_OtherMeals_${userId}`);
-    const savedDietary = await AsyncStorage.getItem(`dietaryRestrictionFilter_OtherMeals_${userId}`);
-    const savedAi = await AsyncStorage.getItem(`aiFilter_OtherMeals_${userId}`);
-    const savedCuisine = await AsyncStorage.getItem(`cuisineFilter_OtherMeals_${userId}`);
-
-    if (savedCuisine !== null) setCuisineFilter(savedCuisine);
-
-    if (savedFilters) {
-      const parsedFilters = JSON.parse(savedFilters);
-      setFilters(parsedFilters);
-      setTempFilters(parsedFilters);
-    }
-    if (savedSearchQuery) setSearchQuery(savedSearchQuery);
-    if (savedDietary !== null) setDietaryRestrictionFilter(savedDietary);
-    if (savedAi !== null) setAiFilter(savedAi);
-
-    setFiltersLoaded(true);
-  };
-
-  restoreFilters();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-}, []);
-
-useEffect(() => {
-  if (!filtersLoaded) return;
-
+  // Fetch all public meals from Supabase
   const fetchMeals = async () => {
     setLoading(true);
     try {
-      const token = await AsyncStorage.getItem("token");
-      if (!token) {
-        Alert.alert("Error", "User not authenticated. Please log in.");
-        return;
-      }
+      let query = supabase
+        .from("meals")
+        .select(
+          `
+          *,
+          profiles:user_id (
+            username
+          ),
+          reviews:reviews (
+            rating
+          )
+        `
+        )
+        .eq("visibility", true);
 
-      const params: any = {};
-      if (dietaryRestrictionFilter) params.dietary_restrictions = dietaryRestrictionFilter;
-      if (aiFilter === "ai") params.created_by_ai = "true";
-      if (aiFilter === "not_ai") params.created_by_ai = "false";
-      if (cuisineFilter) params.cuisine = cuisineFilter;
+      if (dietaryRestrictionFilter) query = query.eq("dietary_restrictions", dietaryRestrictionFilter);
+      if (aiFilter === "ai") query = query.eq("created_by_ai", true);
+      if (aiFilter === "not_ai") query = query.eq("created_by_ai", false);
+      if (cuisineFilter) query = query.eq("cuisine", cuisineFilter);
 
-      const response = await axios.get(`${BASE_URL}/meal/meals`, {
-        headers: { Authorization: `Bearer ${token}` },
-        params,
+      const { data, error } = await query;
+
+      if (error) throw error;
+
+      // Calculate average rating and review count
+      const mealsWithRatings = (data || []).map((meal: any) => {
+        let averageRating = 0;
+        let reviewCount = 0;
+        if (Array.isArray(meal.reviews) && meal.reviews.length > 0) {
+          reviewCount = meal.reviews.length;
+          averageRating =
+            meal.reviews.reduce((sum: number, r: any) => sum + (r.rating || 0), 0) / reviewCount;
+        }
+        return {
+          ...meal,
+          userName: meal.profiles?.username || "Unknown",
+          averageRating,
+          reviewCount,
+        };
       });
 
-      setMeals(response.data);
-      setFilteredMeals(response.data);
+      setMeals(mealsWithRatings);
+      setFilteredMeals(mealsWithRatings);
     } catch (error) {
       console.error("Error fetching meals:", error);
       Alert.alert("Error", "Failed to fetch meals. Please try again later.");
@@ -174,8 +136,10 @@ useEffect(() => {
     }
   };
 
-  fetchMeals();
-}, [filtersLoaded, dietaryRestrictionFilter, aiFilter, cuisineFilter]);
+  useEffect(() => {
+    fetchMeals();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dietaryRestrictionFilter, aiFilter, cuisineFilter]);
 
   useEffect(() => {
     const filtered = meals.filter((meal) => {
@@ -202,7 +166,7 @@ useEffect(() => {
         !searchQuery ||
         meal.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         meal.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        meal.userName.toLowerCase().includes(searchQuery.toLowerCase());
+        (meal.userName && meal.userName.toLowerCase().includes(searchQuery.toLowerCase()));
 
       return passesFilters && passesSearch;
     });
@@ -210,78 +174,43 @@ useEffect(() => {
     setFilteredMeals(filtered);
   }, [searchQuery, filters, meals]);
 
-const applyFilters = async () => {
-  try {
-    const userId = await getUserIdFromToken();
-    if (!userId) {
-      Alert.alert("Error", "User not authenticated. Please log in.");
-      return;
-    }
-
-    setFilters(tempFilters);
-    setAiFilter(tempAiFilter);
-    setDietaryRestrictionFilter(tempDietaryRestrictionFilter); // <-- update main filter
-    setCuisineFilter(tempCuisineFilter);
-  await AsyncStorage.setItem(`cuisineFilter_OtherMeals_${userId}`, tempCuisineFilter);
-    await AsyncStorage.setItem(`filters_OtherMeals_${userId}`, JSON.stringify(tempFilters));
-    await AsyncStorage.setItem(`aiFilter_OtherMeals_${userId}`, tempAiFilter);
-    await AsyncStorage.setItem(`dietaryRestrictionFilter_OtherMeals_${userId}`, tempDietaryRestrictionFilter); // <-- save temp
-    setIsFilterModalVisible(false);
-  } catch (error) {
-    console.error("Error saving filters:", error);
-  }
-};
-
-const clearFilters = async () => {
-  const defaultFilters = [
-    { type: "calories", greaterThan: "", lessThan: "" },
-    { type: "fat", greaterThan: "", lessThan: "" },
-    { type: "protein", greaterThan: "", lessThan: "" },
-    { type: "carbohydrates", greaterThan: "", lessThan: "" },
-  ];
-  setFilters(defaultFilters);
-  setTempFilters(defaultFilters);
-  setAiFilter("");
-  setTempAiFilter("");
-  setDietaryRestrictionFilter("");
-  setTempDietaryRestrictionFilter("");
-  setCuisineFilter("");
-  setTempCuisineFilter("");
-  setSearchQuery("");
-  const userId = await getUserIdFromToken();
-  if (userId) {
-    await AsyncStorage.removeItem(`filters_OtherMeals_${userId}`);
-    await AsyncStorage.removeItem(`searchQuery_OtherMeals_${userId}`);
-    await AsyncStorage.removeItem(`dietaryRestrictionFilter_OtherMeals_${userId}`);
-    await AsyncStorage.removeItem(`aiFilter_OtherMeals_${userId}`);
-    await AsyncStorage.removeItem(`cuisineFilter_OtherMeals_${userId}`);
-  }
-  setIsFilterModalVisible(false); // Close the modal
-};
-
-  const handleSearchChange = async (text: string) => {
-    setSearchQuery(text);
-    try {
-      const userId = await getUserIdFromToken();
-      if (!userId) {
-        Alert.alert("Error", "User not authenticated. Please log in.");
-        return;
-      }
-
-      await AsyncStorage.setItem(`searchQuery_OtherMeals_${userId}`, text);
-    } catch (error) {
-      console.error("Error saving search query:", error);
-    }
+  const onMealSelect = (meal: Meal) => {
+    router.push(`/other-meals/${meal.id}/other-meals-info`);
   };
 
-  if (loading || !filtersLoaded) {
-  return (
-    <View style={[styles.container, { backgroundColor: theme.background }]}>
-      <ActivityIndicator size="large" color={theme.primary} />
-      <Text style={[styles.loadingText, { color: theme.text }]}>Loading meals...</Text>
-    </View>
-  );
-}
+  const applyFilters = () => {
+    setFilters(tempFilters);
+    setAiFilter(tempAiFilter);
+    setDietaryRestrictionFilter(tempDietaryRestrictionFilter);
+    setCuisineFilter(tempCuisineFilter);
+    setIsFilterModalVisible(false);
+  };
+
+  const clearFilters = () => {
+    setFilters(defaultFilters);
+    setTempFilters(defaultFilters);
+    setAiFilter("");
+    setTempAiFilter("");
+    setDietaryRestrictionFilter("");
+    setTempDietaryRestrictionFilter("");
+    setCuisineFilter("");
+    setTempCuisineFilter("");
+    setSearchQuery("");
+    setIsFilterModalVisible(false);
+  };
+
+  const handleSearchChange = (text: string) => {
+    setSearchQuery(text);
+  };
+
+  if (loading) {
+    return (
+      <View style={[styles.container, { backgroundColor: theme.background }]}>
+        <ActivityIndicator size="large" color={theme.primary} />
+        <Text style={[styles.loadingText, { color: theme.text }]}>Loading meals...</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
@@ -294,24 +223,25 @@ const clearFilters = async () => {
           onChangeText={handleSearchChange}
         />
         <TouchableOpacity
-  style={[
-    styles.filterButton,
-    { backgroundColor: isFilterActive ? theme.primary : theme.button }
-  ]}
-  onPress={() => {
-    setTempAiFilter(aiFilter);
-    setTempDietaryRestrictionFilter(dietaryRestrictionFilter);
-    setIsFilterModalVisible(true);
-  }}
->
-  <Text style={[styles.filterButtonText, { color: theme.buttonText }]}>Filter</Text>
-</TouchableOpacity>
+          style={[
+            styles.filterButton,
+            { backgroundColor: isFilterActive ? theme.primary : theme.button },
+          ]}
+          onPress={() => {
+            setTempAiFilter(aiFilter);
+            setTempDietaryRestrictionFilter(dietaryRestrictionFilter);
+            setTempCuisineFilter(cuisineFilter);
+            setIsFilterModalVisible(true);
+          }}
+        >
+          <Text style={[styles.filterButtonText, { color: theme.buttonText }]}>Filter</Text>
+        </TouchableOpacity>
       </View>
 
       {/* Weekly Meals Button */}
       <TouchableOpacity
         style={[styles.weeklyMealsButton, { backgroundColor: theme.primary }]}
-        onPress={() => router.push("/competition/current-meals")} // Navigate to the Weekly Meals screen
+        onPress={() => router.push("/competition/current-meals")}
       >
         <Text style={[styles.weeklyMealsButtonText, { color: theme.buttonText }]}>
           Weekly Meals
@@ -319,50 +249,51 @@ const clearFilters = async () => {
       </TouchableOpacity>
 
       <FlatList
-  data={filteredMeals}
-  keyExtractor={(item) => item.id.toString()}
-  numColumns={2} // Display two items per row
-  renderItem={({ item }) => (
-    <TouchableOpacity
-      style={[styles.mealItem, { backgroundColor: theme.card, borderColor: theme.border }]}
-      onPress={() => onMealSelect(item)}
-    >
-      {item.picture && typeof item.picture === "string" ? (
-        <Image source={{ uri: item.picture }} style={styles.mealPicture} />
-      ) : (
-        <View style={styles.mealPicturePlaceholder}>
-          <Text style={styles.mealPicturePlaceholderText}>No Image</Text>
-        </View>
-      )}
-      <Text style={[styles.mealName, { color: theme.text }]}>{item.name}</Text>
-      <Text style={[styles.mealDescription, { color: theme.subtext }]}>
-        {item.description.length > 100
-          ? `${item.description.slice(0, 100)}...` // Limit to 100 characters
-          : item.description}
-      </Text>
-         {/* AI Generated Tag */}
-    {item.created_by_ai == true && (
-      <View style={styles.aiTag}>
-        <Text style={styles.aiTagText}>AI Generated</Text>
-      </View>
-    )}
-      <View style={styles.ratingContainer}>
-        {[...Array(5)].map((_, index) => (
-          <Icon
-            key={index}
-            name="star"
-            size={16}
-            color={index < Math.floor(item.averageRating) ? "#FFD700" : "#CCCCCC"}
-          />
-        ))}
-        <Text style={[styles.reviewCount, { color: theme.subtext }]}>
-          ({item.reviewCount} reviews)
-        </Text>
-      </View>
-    </TouchableOpacity>
-  )}
-  contentContainerStyle={styles.mealsGrid}
-/>
+        data={filteredMeals}
+        keyExtractor={(item) => item.id.toString()}
+        numColumns={2}
+        renderItem={({ item }) => (
+          <TouchableOpacity
+            style={[styles.mealItem, { backgroundColor: theme.card, borderColor: theme.border }]}
+            onPress={() => onMealSelect(item)}
+          >
+            {item.picture && typeof item.picture === "string" ? (
+              <Image source={{ uri: item.picture }} style={styles.mealPicture} />
+            ) : (
+              <View style={styles.mealPicturePlaceholder}>
+                <Text style={styles.mealPicturePlaceholderText}>No Image</Text>
+              </View>
+            )}
+            <Text style={[styles.mealName, { color: theme.text }]}>{item.name}</Text>
+            <Text style={[styles.mealDescription, { color: theme.subtext }]}>
+              {item.description.length > 100
+                ? `${item.description.slice(0, 100)}...`
+                : item.description}
+            </Text>
+            {/* AI Generated Tag */}
+            {item.created_by_ai == true && (
+              <View style={styles.aiTag}>
+                <Text style={styles.aiTagText}>AI Generated</Text>
+              </View>
+            )}
+            <View style={styles.ratingContainer}>
+              {[...Array(5)].map((_, index) => (
+                <Icon
+                  key={index}
+                  name="star"
+                  size={16}
+                  color={index < Math.floor(item.averageRating) ? "#FFD700" : "#CCCCCC"}
+                />
+              ))}
+              <Text style={[styles.reviewCount, { color: theme.subtext }]}>
+                ({item.reviewCount} reviews)
+              </Text>
+            </View>
+          </TouchableOpacity>
+        )}
+        contentContainerStyle={styles.mealsGrid}
+      />
+
       <Modal visible={isFilterModalVisible} transparent animationType="slide">
         <View style={styles.modalContainer}>
           <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
@@ -413,7 +344,7 @@ const clearFilters = async () => {
                     borderColor: theme.border,
                     borderRadius: 8,
                     backgroundColor: theme.card,
-                    paddingRight: 30, // to ensure the dropdown icon doesn't overlap text
+                    paddingRight: 30,
                   },
                   inputAndroid: {
                     color: dietaryRestrictionFilter ? theme.text : theme.placeholder,
@@ -439,45 +370,45 @@ const clearFilters = async () => {
             </View>
 
             <Text style={[styles.label, { color: theme.text }]}>Cuisine</Text>
-<View style={{ marginBottom: 12 }}>
-  <RNPickerSelect
-    onValueChange={setTempCuisineFilter}
-    items={cuisineOptions}
-    value={tempCuisineFilter}
-    style={{
-      inputIOS: {
-        color: tempCuisineFilter ? theme.text : theme.placeholder,
-        paddingVertical: 12,
-        paddingHorizontal: 10,
-        borderWidth: 1,
-        borderColor: theme.border,
-        borderRadius: 8,
-        backgroundColor: theme.card,
-        paddingRight: 30,
-      },
-      inputAndroid: {
-        color: tempCuisineFilter ? theme.text : theme.placeholder,
-        paddingVertical: 12,
-        paddingHorizontal: 10,
-        borderWidth: 1,
-        borderColor: theme.border,
-        borderRadius: 8,
-        backgroundColor: theme.card,
-        paddingRight: 30,
-      },
-      iconContainer: {
-        top: 16,
-        right: 12,
-      },
-      placeholder: {
-        color: theme.placeholder,
-      },
-    }}
-    useNativeAndroidPickerStyle={false}
-    Icon={() => <Text style={{ fontSize: 16, color: theme.text }}>▼</Text>}
-    placeholder={{ label: "Select Cuisine", value: "" }}
-  />
-</View>
+            <View style={{ marginBottom: 12 }}>
+              <RNPickerSelect
+                onValueChange={setTempCuisineFilter}
+                items={cuisineOptions}
+                value={tempCuisineFilter}
+                style={{
+                  inputIOS: {
+                    color: tempCuisineFilter ? theme.text : theme.placeholder,
+                    paddingVertical: 12,
+                    paddingHorizontal: 10,
+                    borderWidth: 1,
+                    borderColor: theme.border,
+                    borderRadius: 8,
+                    backgroundColor: theme.card,
+                    paddingRight: 30,
+                  },
+                  inputAndroid: {
+                    color: tempCuisineFilter ? theme.text : theme.placeholder,
+                    paddingVertical: 12,
+                    paddingHorizontal: 10,
+                    borderWidth: 1,
+                    borderColor: theme.border,
+                    borderRadius: 8,
+                    backgroundColor: theme.card,
+                    paddingRight: 30,
+                  },
+                  iconContainer: {
+                    top: 16,
+                    right: 12,
+                  },
+                  placeholder: {
+                    color: theme.placeholder,
+                  },
+                }}
+                useNativeAndroidPickerStyle={false}
+                Icon={() => <Text style={{ fontSize: 16, color: theme.text }}>▼</Text>}
+                placeholder={{ label: "Select Cuisine", value: "" }}
+              />
+            </View>
 
             {/* AI Generated Switch */}
             <Text style={[styles.label, { color: theme.text }]}>AI Generation</Text>
@@ -535,6 +466,7 @@ const clearFilters = async () => {
               onPress={() => {
                 setTempAiFilter(aiFilter);
                 setTempDietaryRestrictionFilter(dietaryRestrictionFilter);
+                setTempCuisineFilter(cuisineFilter);
                 setIsFilterModalVisible(false);
               }}
             >
@@ -543,7 +475,7 @@ const clearFilters = async () => {
           </View>
         </View>
       </Modal>
-      <BottomNav /> 
+      <BottomNav />
     </View>
   );
 };
@@ -554,28 +486,28 @@ const styles = StyleSheet.create({
     width: "100%",
   },
   mealItem: {
-    flex: 1, // Ensure items take up equal space
-    margin: 8, // Add spacing between items
+    flex: 1,
+    margin: 8,
     padding: 16,
     borderWidth: 1,
     borderRadius: 8,
     alignItems: "center",
-    justifyContent: "flex-start", // Align content to the top
+    justifyContent: "flex-start",
   },
   aiTag: {
     position: "absolute",
     top: 8,
     left: 8,
-    backgroundColor: "#FFD700", // Gold color for the tag
+    backgroundColor: "#FFD700",
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 8,
-    zIndex: 1, // Ensure the tag appears above other elements
+    zIndex: 1,
   },
   aiTagText: {
     fontSize: 12,
     fontWeight: "bold",
-    color: "#000", // Black text for contrast
+    color: "#000",
   },
   weeklyMealsButton: {
     margin: 16,
@@ -588,8 +520,8 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
   },
   mealPicture: {
-    width: "100%", // Make the picture take up the full width of the item
-    height: 100, // Set a fixed height for the picture
+    width: "100%",
+    height: 100,
     borderRadius: 8,
     marginBottom: 8,
   },
@@ -719,7 +651,7 @@ const styles = StyleSheet.create({
   cancelButtonText: {
     fontSize: 16,
     fontWeight: "bold",
-  },  
+  },
   label: {
     fontSize: 16,
     fontWeight: "bold",

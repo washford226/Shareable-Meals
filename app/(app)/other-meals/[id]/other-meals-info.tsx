@@ -7,17 +7,14 @@ import {
   Alert,
   Modal,
   TextInput,
-  Platform,
   Image,
   ScrollView,
   ActivityIndicator,
 } from "react-native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useTheme } from "../../../../context/ThemeContext";
-import { Meal } from "../../../../types/types"; // Adjust the import path as necessary
-
-const BASE_URL = Platform.OS === "android" ? "http://10.0.2.2:5000" : "http://localhost:5000";
+import { Meal } from "../../../../types/types";
+import { supabase } from "app/utils_supabase";
 
 const MealDetails = () => {
   const { id } = useLocalSearchParams();
@@ -28,60 +25,59 @@ const MealDetails = () => {
   const [loading, setLoading] = useState(true);
   const { theme } = useTheme();
 
-
-  const fetchMealById = async (mealId: string): Promise<void> => {
+  // Fetch meal by id from Supabase
+  const fetchMealById = async (mealId: string) => {
     try {
-      const token = await AsyncStorage.getItem("token");
-      if (!token) {
-        Alert.alert("Error", "User not authenticated. Please log in.");
-        return;
-      }
+      setLoading(true);
+      const { data, error } = await supabase
+        .from("meals")
+        .select("*")
+        .eq("id", mealId)
+        .single();
 
-      const response = await fetch(`${BASE_URL}/meal/meals/${mealId}`, {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      if (response.ok) {
-        const data: Meal = await response.json();
-        setMeal(data);
-      } else {
+      if (error || !data) {
         Alert.alert("Error", "Failed to fetch meal details.");
+        setMeal(null);
+      } else {
+        setMeal(data);
       }
     } catch (error) {
       console.error("Error fetching meal:", error);
       Alert.alert("Error", "An error occurred while fetching meal details.");
+      setMeal(null);
     } finally {
       setLoading(false);
     }
   };
 
+  // Report meal (insert into a 'reports' table)
   const handleReportMeal = async () => {
     try {
-      const token = await AsyncStorage.getItem("token");
-      if (!token) {
+      if (!meal) {
+        Alert.alert("Error", "Meal details are not available.");
+        return;
+      }
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+      if (userError || !userData?.user) {
         Alert.alert("Error", "User not authenticated. Please log in.");
         return;
       }
+      const userId = userData.user.id;
 
-      const response = await fetch(`${BASE_URL}/report/report`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
+      const { error } = await supabase.from("reports").insert([
+        {
+          meal_id: meal.id,
+          user_id: userId,
+          reason: reportReason,
         },
-        body: JSON.stringify({ meal_id: meal?.id, reason: reportReason }),
-      });
+      ]);
 
-      if (response.ok) {
+      if (error) {
+        Alert.alert("Error", "Failed to report meal.");
+      } else {
         Alert.alert("Success", "Meal reported successfully!");
         setIsReportModalVisible(false);
         setReportReason("");
-      } else {
-        const error = await response.text();
-        Alert.alert("Error", `Failed to report meal: ${error}`);
       }
     } catch (err) {
       console.error("Error reporting meal:", err);
@@ -89,28 +85,33 @@ const MealDetails = () => {
     }
   };
 
+  // Copy meal to user's meals
   const handleCopyMeal = async () => {
     try {
-      const token = await AsyncStorage.getItem("token");
-      if (!token) {
-        Alert.alert("Error", "User not authenticated. Please log in.");
-        return;
-      }
-
       if (!meal) {
         Alert.alert("Error", "Meal details are not available.");
         return;
       }
-      const response = await fetch(`${BASE_URL}/meal/meals/${meal.id}`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+      if (userError || !userData?.user) {
+        Alert.alert("Error", "User not authenticated. Please log in.");
+        return;
+      }
+      const userId = userData.user.id;
 
-      if (response.ok) {
-        Alert.alert("Success", "Meal copied successfully!");
+      // Copy all fields except id and user_id
+      const { id: _id, user_id: _user_id, ...mealData } = meal;
+      const { error } = await supabase.from("meals").insert([
+        {
+          ...mealData,
+          user_id: userId,
+        },
+      ]);
+
+      if (error) {
+        Alert.alert("Error", "Failed to copy meal.");
       } else {
-        const error = await response.text();
-        Alert.alert("Error", `Failed to copy meal: ${error}`);
+        Alert.alert("Success", "Meal copied successfully!");
       }
     } catch (err) {
       console.error("Error copying meal:", err);
@@ -122,6 +123,7 @@ const MealDetails = () => {
     if (id && typeof id === "string") {
       fetchMealById(id);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   if (loading) {
@@ -158,40 +160,40 @@ const MealDetails = () => {
             <Text style={[styles.mealPicturePlaceholderText, { color: theme.placeholder }]}>No Picture</Text>
           </View>
         )}
-  
+
         {/* Meal Name */}
         <Text style={[styles.title, { color: theme.text }]}>{meal.name}</Text>
-  
+
         {/* Description */}
         <Text style={[styles.description, { color: theme.subtext }]}>{meal.description}</Text>
-  
+
         {/* Instructions */}
         <Text style={[styles.sectionTitle, { color: theme.text }]}>Instructions</Text>
         <Text style={[styles.details, { color: theme.text }]}>{meal.instructions}</Text>
-  
+
         {/* Ingredients */}
         <Text style={[styles.sectionTitle, { color: theme.text }]}>Ingredients</Text>
-          {Array.isArray(meal.ingredients) ? (
-            meal.ingredients.length > 0 ? (
-              meal.ingredients.map((ing: any, idx: number) => (
-                <Text key={idx} style={[styles.details, { color: theme.text }]}>
-                  {ing.quantity} {ing.unit} {ing.name}
-                </Text>
-              ))
-            ) : (
-              <Text style={[styles.details, { color: theme.text }]}>No ingredients listed.</Text>
-            )
+        {Array.isArray(meal.ingredients) ? (
+          meal.ingredients.length > 0 ? (
+            meal.ingredients.map((ing: any, idx: number) => (
+              <Text key={idx} style={[styles.details, { color: theme.text }]}>
+                {ing.quantity} {ing.unit} {ing.name}
+              </Text>
+            ))
           ) : (
-            <Text style={[styles.details, { color: theme.text }]}>{meal.ingredients}</Text>
-          )}
+            <Text style={[styles.details, { color: theme.text }]}>No ingredients listed.</Text>
+          )
+        ) : (
+          <Text style={[styles.details, { color: theme.text }]}>{meal.ingredients}</Text>
+        )}
 
-          {/* Cuisine */}
-          {meal.cuisine && (
-            <Text style={[styles.details, { color: theme.text, fontWeight: "bold", marginBottom: 8 }]}>
-              Cuisine: {meal.cuisine}
-            </Text>
-          )}
-  
+        {/* Cuisine */}
+        {meal.cuisine && (
+          <Text style={[styles.details, { color: theme.text, fontWeight: "bold", marginBottom: 8 }]}>
+            Cuisine: {meal.cuisine}
+          </Text>
+        )}
+
         {/* Nutrition Info */}
         <Text style={[styles.sectionTitle, { color: theme.text }]}>Nutrition Info</Text>
         <View style={styles.nutritionContainer}>
@@ -200,7 +202,7 @@ const MealDetails = () => {
           <Text style={[styles.nutritionText, { color: theme.text }]}>Carbs: {meal.carbohydrates}g</Text>
           <Text style={[styles.nutritionText, { color: theme.text }]}>Fat: {meal.fat}g</Text>
         </View>
-  
+
         {/* Buttons */}
         <TouchableOpacity
           style={[styles.button, { backgroundColor: theme.button }]}
@@ -208,35 +210,35 @@ const MealDetails = () => {
         >
           <Text style={[styles.buttonText, { color: theme.buttonText }]}>Add Review</Text>
         </TouchableOpacity>
-  
+
         <TouchableOpacity
           style={[styles.button, { backgroundColor: theme.button }]}
           onPress={() => router.push(`/(app)/reviews/${meal.id}/reviews`)}
         >
           <Text style={[styles.buttonText, { color: theme.buttonText }]}>View Reviews</Text>
         </TouchableOpacity>
-  
+
         <TouchableOpacity
           style={[styles.button, { backgroundColor: theme.button }]}
           onPress={handleCopyMeal}
         >
           <Text style={[styles.buttonText, { color: theme.buttonText }]}>Add Meal</Text>
         </TouchableOpacity>
-  
+
         <TouchableOpacity
           style={[styles.button, { backgroundColor: theme.danger }]}
           onPress={() => setIsReportModalVisible(true)}
         >
           <Text style={[styles.buttonText, { color: theme.buttonText }]}>Report Meal</Text>
         </TouchableOpacity>
-  
+
         <TouchableOpacity
           style={[styles.button, { backgroundColor: theme.button }]}
           onPress={() => router.back()}
         >
           <Text style={[styles.buttonText, { color: theme.buttonText }]}>Back</Text>
         </TouchableOpacity>
-  
+
         {/* Report Modal */}
         <Modal visible={isReportModalVisible} transparent animationType="slide">
           <View style={styles.modalContainer}>
@@ -287,25 +289,25 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: "bold",
     marginBottom: 16,
-    textAlign: "center", // Center-align the title for better presentation
+    textAlign: "center",
   },
   description: {
     fontSize: 16,
     marginBottom: 16,
-    textAlign: "center", // Center-align the description for consistency
-    color: "#6c757d", // Muted gray for better readability
+    textAlign: "center",
+    color: "#6c757d",
   },
   sectionTitle: {
     fontSize: 18,
     fontWeight: "bold",
     marginTop: 16,
     marginBottom: 8,
-    textAlign: "left", // Align section titles to the left
+    textAlign: "left",
   },
   details: {
     fontSize: 14,
     marginBottom: 8,
-    lineHeight: 20, // Add line height for better readability
+    lineHeight: 20,
     textAlign: "left",
   },
   nutritionContainer: {
@@ -324,7 +326,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: "center",
     marginBottom: 16,
-    width: "100%", // Ensure buttons take full width
+    width: "100%",
   },
   buttonText: {
     fontSize: 16,
@@ -339,7 +341,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginBottom: 16,
     textAlign: "center",
-    color: "#dc3545", // Red for error messages
+    color: "#dc3545",
   },
   modalContainer: {
     flex: 1,
@@ -366,7 +368,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     padding: 8,
     marginBottom: 16,
-    borderColor: "#ccc", // Light gray border
+    borderColor: "#ccc",
   },
   modalButtons: {
     flexDirection: "row",
@@ -385,14 +387,14 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
   },
   mealPicture: {
-    width: "100%", // Make the picture take full width
+    width: "100%",
     height: 200,
     borderRadius: 8,
     marginBottom: 16,
     alignSelf: "center",
   },
   mealPicturePlaceholder: {
-    width: "100%", // Match the placeholder width to the picture
+    width: "100%",
     height: 200,
     justifyContent: "center",
     alignItems: "center",
@@ -403,7 +405,7 @@ const styles = StyleSheet.create({
   },
   mealPicturePlaceholderText: {
     fontSize: 16,
-    color: "#6c757d", // Muted gray for placeholder text
+    color: "#6c757d",
   },
 });
 

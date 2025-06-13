@@ -1,38 +1,44 @@
 import React, { useState } from "react";
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, Platform } from "react-native";
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from "react-native";
 import { useRouter } from "expo-router";
-import axios from "axios";
+import { supabase } from "app/utils_supabase";
 
 const ForgotPasswordScreen = () => {
   const [email, setEmail] = useState("");
+  const [loading, setLoading] = useState(false);
   const router = useRouter();
 
-  const getBaseUrl = () => {
-    return Platform.OS === "android" ? "http://10.0.2.2:5000" : "http://localhost:5000";
-  };
-
   const handleForgotPassword = async () => {
+    if (!email) {
+      Alert.alert("Error", "Please enter your email.");
+      return;
+    }
+    setLoading(true);
     try {
-      const response = await axios.post(`${getBaseUrl()}/users/forgot-password`, { email });
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: "https://your-app-url.com/reset-password", // Change to your app's reset password URL
+      });
 
-      if (response.status === 200) {
-        const { username } = response.data;
+      if (error) {
+        if (error.message.toLowerCase().includes("user not found")) {
+          Alert.alert("Error", "No account found with this email.");
+        } else {
+          Alert.alert("Error", error.message || "Failed to send email. Please try again.");
+        }
+      } else {
         Alert.alert(
           "Success",
-          `A password reset link has been sent to your email.\n\nUsername: ${username}`,
+          "A password reset link has been sent to your email.",
           [
-            { text: "OK", onPress: () => router.replace("../(auth)/login") } // <-- Go back to login screen
+            { text: "OK", onPress: () => router.replace("../(auth)/login") }
           ]
         );
       }
     } catch (error) {
       console.error("Error sending forgot password email:", error);
-
-      if ((error as any).response?.status === 404) {
-        Alert.alert("Error", "No account found with this email.");
-      } else {
-        Alert.alert("Error", "Failed to send email. Please try again.");
-      }
+      Alert.alert("Error", "Failed to send email. Please try again.");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -46,13 +52,15 @@ const ForgotPasswordScreen = () => {
         onChangeText={setEmail}
         keyboardType="email-address"
         placeholderTextColor="#aaa"
+        autoCapitalize="none"
+        autoCorrect={false}
       />
-      <TouchableOpacity style={styles.button} onPress={handleForgotPassword}>
-        <Text style={styles.buttonText}>Send Reset Link</Text>
+      <TouchableOpacity style={styles.button} onPress={handleForgotPassword} disabled={loading}>
+        <Text style={styles.buttonText}>{loading ? "Sending..." : "Send Reset Link"}</Text>
       </TouchableOpacity>
       <TouchableOpacity
         style={[styles.button, styles.secondaryButton]}
-        onPress={() => router.back()} // <-- this goes back to previous screen
+        onPress={() => router.back()}
       >
         <Text style={[styles.buttonText, styles.secondaryButtonText]}>Back to Login</Text>
       </TouchableOpacity>

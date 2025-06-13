@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from "react";
-import { View, Text, TextInput, StyleSheet, Alert, TouchableOpacity, Image, Platform, ActivityIndicator } from "react-native";
-import axios from "axios";
+import { View, Text, TextInput, StyleSheet, Alert, TouchableOpacity, Image, ActivityIndicator } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
 import RNPickerSelect from "react-native-picker-select";
+import { supabase } from "app/utils_supabase";
 
 const SignUpScreen: React.FC = () => {
   const router = useRouter();
@@ -17,7 +17,7 @@ const SignUpScreen: React.FC = () => {
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const [caloriesGoal, setCaloriesGoal] = useState("");
   const [dietaryRestrictions, setDietaryRestrictions] = useState("");
-  const [allergies, setAllergies] = useState(""); // New state for allergies
+  const [allergies, setAllergies] = useState("");
   const [profilePicture, setProfilePicture] = useState<string | null>(null);
   const [isSigningUp, setIsSigningUp] = useState(false);
 
@@ -30,22 +30,14 @@ const SignUpScreen: React.FC = () => {
     { label: "Paleo", value: "Paleo" },
   ];
 
-  const requestPermission = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== "granted") {
-      Alert.alert("Permission Required", "We need access to your gallery to pick an image.");
-    }
-  };
-
+  // Request permission for image picker
   useEffect(() => {
-    requestPermission();
+    (async () => {
+      await ImagePicker.requestMediaLibraryPermissionsAsync();
+    })();
   }, []);
 
-  const getBaseUrl = () => {
-    return Platform.OS === "android" ? "http://10.0.2.2:5000" : "http://localhost:5000";
-  };
-
-  // Username check effect
+  // Username check effect (Supabase: check if username exists in profiles)
   useEffect(() => {
     if (!username) {
       setIsUsernameAvailable(null);
@@ -54,17 +46,18 @@ const SignUpScreen: React.FC = () => {
     const delayDebounce = setTimeout(async () => {
       setCheckingUsername(true);
       try {
-        const res = await axios.get(`${getBaseUrl()}/users/check-username`, {
-          params: { username }
-        });
-        setIsUsernameAvailable(!res.data.taken);
+        const { data, error } = await supabase
+          .from("profiles")
+          .select("username")
+          .eq("username", username)
+          .single();
+        setIsUsernameAvailable(!data);
       } catch (e) {
         setIsUsernameAvailable(null);
       } finally {
         setCheckingUsername(false);
       }
-    }, 500); // debounce
-
+    }, 500);
     return () => clearTimeout(delayDebounce);
   }, [username]);
 
@@ -73,30 +66,19 @@ const SignUpScreen: React.FC = () => {
     return re.test(email);
   };
 
+  // Pick image and upload to Supabase Storage
   const pickImage = async () => {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ["images"],
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
         aspect: [3, 3],
         quality: 1,
       });
 
       if (!result.canceled) {
-        const uriParts = result.assets[0].uri.split(".");
-        const fileType = uriParts[uriParts.length - 1].toLowerCase();
-
-        if (!["jpg", "jpeg", "png"].includes(fileType)) {
-          Alert.alert("Error", "Only JPEG and PNG images are allowed.");
-          return;
-        }
-
-        if (result.assets[0].fileSize && result.assets[0].fileSize > 5 * 1024 * 1024) {
-          Alert.alert("Error", "File size exceeds the limit of 5 MB.");
-          return;
-        }
-
-        setProfilePicture(result.assets[0].uri);
+        const uri = result.assets[0].uri;
+        setProfilePicture(uri);
       }
     } catch (error) {
       console.error("Error picking image:", error);
@@ -104,12 +86,37 @@ const SignUpScreen: React.FC = () => {
     }
   };
 
+  // Upload image to Supabase Storage and return public URL
+  const uploadProfilePicture = async (userId: string, uri: string) => {
+    try {
+      const fileExt = uri.split(".").pop();
+      const fileName = `${userId}.${fileExt}`;
+      const response = await fetch(uri);
+      const blob = await response.blob();
+
+      const { error } = await supabase.storage
+        .from("profile-pictures")
+        .upload(fileName, blob, { upsert: true });
+
+      if (error) throw error;
+
+      const { data } = supabase.storage
+        .from("profile-pictures")
+        .getPublicUrl(fileName);
+
+      return data.publicUrl;
+    } catch (error) {
+      console.error("Error uploading profile picture:", error);
+      return null;
+    }
+  };
+
   const handleSignUp = async () => {
-    setIsSigningUp(true); // Disable the button while signing up
+    setIsSigningUp(true);
 
     if (!username || !email || !password || !confirmPassword) {
       Alert.alert("Error", "All fields are required");
-      setIsSigningUp(false); // Re-enable the button
+      setIsSigningUp(false);
       return;
     }
 
@@ -121,57 +128,70 @@ const SignUpScreen: React.FC = () => {
 
     if (password !== confirmPassword) {
       Alert.alert("Error", "Passwords do not match");
-      setIsSigningUp(false); // Re-enable the button
+      setIsSigningUp(false);
       return;
     }
 
     if (!validateEmail(email)) {
       Alert.alert("Error", "Invalid email format");
-      setIsSigningUp(false); // Re-enable the button
+      setIsSigningUp(false);
       return;
     }
 
-    const formData = new FormData();
-    formData.append("username", username);
-    formData.append("email", email);
-    formData.append("password", password);
-    if (caloriesGoal) formData.append("calories_goal", caloriesGoal);
-    if (dietaryRestrictions) formData.append("dietary_restrictions", dietaryRestrictions);
-    if (allergies) formData.append("allergies", allergies); // Add allergies to the form data
-    if (profilePicture) {
-      const uriParts = profilePicture.split(".");
-      const fileType = uriParts[uriParts.length - 1];
-      formData.append("profile_picture", {
-        uri: profilePicture,
-        name: `profile_picture.${fileType}`,
-        type: `image/${fileType}`,
-      } as any);
-    }
-
     try {
-      const response = await axios.post(`${getBaseUrl()}/users/signup`, formData, {
-        headers: {
-          "Content-Type": "multipart/form-data",
-        },
+      // 1. Sign up user in Supabase Auth
+      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+        email,
+        password,
       });
-      if (response.status === 200) {
-        Alert.alert("Success", "User signed up successfully", [
+
+      if (signUpError || !signUpData?.user) {
+        Alert.alert("Error", signUpError?.message || "Failed to sign up");
+        setIsSigningUp(false);
+        return;
+      }
+
+      const userId = signUpData.user.id;
+
+      // 2. Upload profile picture if provided
+      let profilePictureUrl: string | null = null;
+      if (profilePicture) {
+        profilePictureUrl = await uploadProfilePicture(userId, profilePicture);
+      }
+
+      // 3. Insert user profile in 'profiles' table
+      const { error: profileError } = await supabase.from("profiles").upsert([
+        {
+          id: userId,
+          username,
+          calories_goal: caloriesGoal ? parseInt(caloriesGoal) : null,
+          dietary_restrictions: dietaryRestrictions,
+          allergies,
+          profile_picture: profilePictureUrl,
+        },
+      ]);
+
+      if (profileError) {
+        Alert.alert("Error", profileError.message || "Failed to save profile.");
+        setIsSigningUp(false);
+        return;
+      }
+
+      Alert.alert(
+        "Success",
+        "Account created! Please check your email to confirm your account.",
+        [
           {
             text: "OK",
-            onPress: () => router.replace("../login"), // Navigate to login after signup
+            onPress: () => router.replace("../login"),
           },
-        ]);
-      }
+        ]
+      );
     } catch (error) {
-      if ((error as any).response && (error as any).response.data) {
-        const errorMessage = (error as any).response?.data?.message || "Failed to sign up";
-        Alert.alert("Error", errorMessage);
-      } else {
-        Alert.alert("Error", "Failed to sign up");
-      }
+      Alert.alert("Error", "Failed to sign up");
       console.error("Error signing up:", error);
     } finally {
-      setIsSigningUp(false); // Re-enable the button after the process is complete
+      setIsSigningUp(false);
     }
   };
 
@@ -200,6 +220,7 @@ const SignUpScreen: React.FC = () => {
         value={email}
         onChangeText={setEmail}
         keyboardType="email-address"
+        autoCapitalize="none"
       />
       <View style={styles.passwordContainer}>
         <TextInput
@@ -245,7 +266,7 @@ const SignUpScreen: React.FC = () => {
       />
       <TextInput
         style={styles.input}
-        placeholder="Allergies (optional)" // New input for allergies
+        placeholder="Allergies (optional)"
         value={allergies}
         onChangeText={setAllergies}
       />

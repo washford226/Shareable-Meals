@@ -1,40 +1,34 @@
 import { Router, Request, Response } from "express";
-import authMiddleware from "../authMiddleware"; // Adjust the path as needed
+import authMiddleware from "../authMiddleware";
+import { createClient } from "@supabase/supabase-js";
+
+// Initialize Supabase client for backend (use service role key for full access)
+const supabase = createClient(
+  process.env.SUPABASE_URL || "",
+  process.env.SUPABASE_SERVICE_ROLE_KEY || ""
+);
 
 const router = Router();
 
-// Extend the Request type to include user and db properties
-interface CustomRequest extends Request {
-  user?: {
-    id: number;
-    username: string;
-  };
-  db?: {
-    query: (sql: string, params: any[]) => Promise<any>;
-  };
-}
-
 // Get all pantry items for the authenticated user
-router.get("/pantry", authMiddleware, async (req: CustomRequest, res: Response): Promise<void> => {
-  const user = req.user; // Authenticated user
-  const db = req.db; // Database connection
+router.get("/pantry", authMiddleware, async (req: any, res: Response): Promise<void> => {
+  const user = req.user;
 
   if (!user) {
     res.status(401).json({ message: "User is not authenticated" });
     return;
   }
 
-  if (!db) {
-    res.status(500).json({ message: "Database connection is not available" });
-    return;
-  }
-
   try {
-    const [rows] = await db.query(
-      "SELECT pantry_id, food, quantity, unit, expiration_date, added_at, updated_at FROM Pantry WHERE user_id = ?",
-      [user.id]
-    );
-    res.status(200).json(rows);
+    const { data, error } = await supabase
+      .from("pantry")
+      .select("pantry_id, food, quantity, unit, expiration_date, added_at, updated_at")
+      .eq("user_id", user.id)
+      .order("added_at", { ascending: false });
+
+    if (error) throw error;
+
+    res.status(200).json(data);
   } catch (error) {
     console.error("Error fetching pantry items:", error);
     res.status(500).json({ message: "Error fetching pantry items" });
@@ -42,10 +36,9 @@ router.get("/pantry", authMiddleware, async (req: CustomRequest, res: Response):
 });
 
 // Add a new item to the pantry
-router.post("/pantry", authMiddleware, async (req: CustomRequest, res: Response): Promise<void> => {
+router.post("/pantry", authMiddleware, async (req: any, res: Response): Promise<void> => {
   const { food, quantity, unit, expiration_date } = req.body;
-  const user = req.user; // Authenticated user
-  const db = req.db; // Database connection
+  const user = req.user;
 
   if (!food) {
     res.status(400).json({ message: "Food name is required" });
@@ -57,16 +50,21 @@ router.post("/pantry", authMiddleware, async (req: CustomRequest, res: Response)
     return;
   }
 
-  if (!db) {
-    res.status(500).json({ message: "Database connection is not available" });
-    return;
-  }
-
   try {
-    await db.query(
-      "INSERT INTO Pantry (user_id, food, quantity, unit, expiration_date) VALUES (?, ?, ?, ?, ?)",
-      [user.id, food, quantity || null, unit, expiration_date]
-    );
+    const { error } = await supabase
+      .from("pantry")
+      .insert([
+        {
+          user_id: user.id,
+          food,
+          quantity: quantity || null,
+          unit,
+          expiration_date,
+        },
+      ]);
+
+    if (error) throw error;
+
     res.status(201).json({ message: "Pantry item added successfully" });
   } catch (error) {
     console.error("Error adding pantry item:", error);
@@ -75,29 +73,32 @@ router.post("/pantry", authMiddleware, async (req: CustomRequest, res: Response)
 });
 
 // Update an existing pantry item
-router.put("/pantry/:id", authMiddleware, async (req: CustomRequest, res: Response): Promise<void> => {
+router.put("/pantry/:id", authMiddleware, async (req: any, res: Response): Promise<void> => {
   const pantryId = req.params.id;
   const { food, quantity, unit, expiration_date } = req.body;
-  const user = req.user; // Authenticated user
-  const db = req.db; // Database connection
+  const user = req.user;
 
   if (!user) {
     res.status(401).json({ message: "User is not authenticated" });
     return;
   }
 
-  if (!db) {
-    res.status(500).json({ message: "Database connection is not available" });
-    return;
-  }
-
   try {
-    const [result] = await db.query(
-      "UPDATE Pantry SET food = ?, quantity = ?, unit = ?, expiration_date = ? WHERE pantry_id = ? AND user_id = ?",
-      [food, quantity || null, unit, expiration_date, pantryId, user.id]
-    );
+    const { data, error } = await supabase
+      .from("pantry")
+      .update({
+        food,
+        quantity: quantity || null,
+        unit,
+        expiration_date,
+      })
+      .eq("pantry_id", pantryId)
+      .eq("user_id", user.id)
+      .select();
 
-    if ((result as any).affectedRows === 0) {
+    if (error) throw error;
+
+    if (!data || data.length === 0) {
       res.status(404).json({ message: "Pantry item not found" });
       return;
     }
@@ -110,28 +111,26 @@ router.put("/pantry/:id", authMiddleware, async (req: CustomRequest, res: Respon
 });
 
 // Delete a pantry item
-router.delete("/pantry/:id", authMiddleware, async (req: CustomRequest, res: Response): Promise<void> => {
+router.delete("/pantry/:id", authMiddleware, async (req: any, res: Response): Promise<void> => {
   const pantryId = req.params.id;
-  const user = req.user; // Authenticated user
-  const db = req.db; // Database connection
+  const user = req.user;
 
   if (!user) {
     res.status(401).json({ message: "User is not authenticated" });
     return;
   }
 
-  if (!db) {
-    res.status(500).json({ message: "Database connection is not available" });
-    return;
-  }
-
   try {
-    const [result] = await db.query(
-      "DELETE FROM Pantry WHERE pantry_id = ? AND user_id = ?",
-      [pantryId, user.id]
-    );
+    const { data, error } = await supabase
+      .from("pantry")
+      .delete()
+      .eq("pantry_id", pantryId)
+      .eq("user_id", user.id)
+      .select();
 
-    if ((result as any).affectedRows === 0) {
+    if (error) throw error;
+
+    if (!data || data.length === 0) {
       res.status(404).json({ message: "Pantry item not found" });
       return;
     }
@@ -144,33 +143,33 @@ router.delete("/pantry/:id", authMiddleware, async (req: CustomRequest, res: Res
 });
 
 // Get a single pantry item by ID
-router.get("/pantry/:id", authMiddleware, async (req: CustomRequest, res: Response): Promise<void> => {
+router.get("/pantry/:id", authMiddleware, async (req: any, res: Response): Promise<void> => {
   const pantryId = req.params.id;
-  const user = req.user; // Authenticated user
-  const db = req.db; // Database connection
+  const user = req.user;
 
   if (!user) {
     res.status(401).json({ message: "User is not authenticated" });
     return;
   }
 
-  if (!db) {
-    res.status(500).json({ message: "Database connection is not available" });
-    return;
-  }
-
   try {
-    const [rows] = await db.query(
-      "SELECT pantry_id, food, quantity, unit, expiration_date, added_at, updated_at FROM Pantry WHERE pantry_id = ? AND user_id = ?",
-      [pantryId, user.id]
-    );
+    const { data, error } = await supabase
+      .from("pantry")
+      .select("pantry_id, food, quantity, unit, expiration_date, added_at, updated_at")
+      .eq("pantry_id", pantryId)
+      .eq("user_id", user.id)
+      .single();
 
-    if (rows.length === 0) {
-      res.status(404).json({ message: "Pantry item not found" });
+    if (error) {
+      if (error.code === "PGRST116") {
+        res.status(404).json({ message: "Pantry item not found" });
+      } else {
+        throw error;
+      }
       return;
     }
 
-    res.status(200).json(rows[0]); // Return the single pantry item
+    res.status(200).json(data);
   } catch (error) {
     console.error("Error fetching pantry item:", error);
     res.status(500).json({ message: "Error fetching pantry item" });

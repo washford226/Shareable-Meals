@@ -2,14 +2,13 @@ import "dotenv/config";
 import * as fs from "fs";
 import * as path from "path";
 import csv from "csv-parser";
-import mysql from "mysql2/promise";
+import { createClient } from "@supabase/supabase-js";
 
-const dbConfig = {
-  host: process.env.DB_HOST || "localhost",
-  user: process.env.DB_USER || "root",
-  password: process.env.DB_PASSWORD || "Password",
-  database: process.env.DB_NAME || "balance_bytes",
-};
+// Initialize Supabase client for backend (use service role key for full access)
+const supabase = createClient(
+  process.env.SUPABASE_URL || "",
+  process.env.SUPABASE_SERVICE_ROLE_KEY || ""
+);
 
 const usdaDir = path.join(__dirname, "../usda_data/FoodData_Central_foundation_food_csv_2025-04-24");
 
@@ -33,42 +32,48 @@ async function readCSV(filePath: string): Promise<any[]> {
   });
 }
 
-async function batchInsert(connection: mysql.Connection, sql: string, data: any[][], batchSize = 1000) {
+async function batchInsert(
+  table: string,
+  columns: string[],
+  data: any[][],
+  batchSize = 1000
+) {
   for (let i = 0; i < data.length; i += batchSize) {
     const batch = data.slice(i, i + batchSize);
-    await connection.query(sql, [batch]);
-    console.log(`Inserted batch ${i / batchSize + 1}/${Math.ceil(data.length / batchSize)}`);
+    const objects = batch.map(row => {
+      const obj: any = {};
+      columns.forEach((col, idx) => {
+        obj[col] = row[idx];
+      });
+      return obj;
+    });
+    const { error } = await supabase.from(table).upsert(objects);
+    if (error) {
+      throw error;
+    }
+    console.log(`Inserted batch ${i / batchSize + 1}/${Math.ceil(data.length / batchSize)} into ${table}`);
   }
 }
 
-async function importFoods(connection: mysql.Connection) {
+async function importFoods() {
   const file = path.join(usdaDir, "food.csv");
   const foods = await readCSV(file);
+  const columns = ["fdc_id", "data_type", "name", "description", "publication_date"];
   const values = foods.map(food => [
-    // food_id is AUTO_INCREMENT, do not insert
     safeInt(food.fdc_id),
     food.data_type,
     food.description, // name (USDA Foundation) is in description
     food.description,
     food.publication_date
   ]);
-
-  await connection.beginTransaction();
-  try {
-    await batchInsert(connection,
-      `INSERT IGNORE INTO Foods (fdc_id, data_type, name, description, publication_date) VALUES ?`,
-      values);
-    await connection.commit();
-    console.log(`Imported ${foods.length} foods.`);
-  } catch (err) {
-    await connection.rollback();
-    throw err;
-  }
+  await batchInsert("Foods", columns, values);
+  console.log(`Imported ${foods.length} foods.`);
 }
 
-async function importNutrients(connection: mysql.Connection) {
+async function importNutrients() {
   const file = path.join(usdaDir, "nutrient.csv");
   const nutrients = await readCSV(file);
+  const columns = ["nutrient_id", "name", "unit", "nutrient_nbr", "description"];
   const values = nutrients.map(nutrient => [
     safeInt(nutrient.id),
     nutrient.name,
@@ -76,34 +81,39 @@ async function importNutrients(connection: mysql.Connection) {
     nutrient.nutrient_nbr,
     nutrient.description || null
   ]);
-
-  await connection.beginTransaction();
-  try {
-    await batchInsert(connection,
-      `INSERT IGNORE INTO Nutrients (nutrient_id, name, unit, nutrient_nbr, description) VALUES ?`,
-      values);
-    await connection.commit();
-    console.log(`Imported ${nutrients.length} nutrients.`);
-  } catch (err) {
-    await connection.rollback();
-    throw err;
-  }
+  await batchInsert("Nutrients", columns, values);
+  console.log(`Imported ${nutrients.length} nutrients.`);
 }
 
-async function importFoodNutrients(connection: mysql.Connection) {
+async function importFoodNutrients() {
   const file = path.join(usdaDir, "food_nutrient.csv");
   const rows = await readCSV(file);
 
   // Step 1: Map fdc_id → food_id from the Foods table
-  const [foodRows] = await connection.query(
-    `SELECT food_id, fdc_id FROM Foods`
-  );
+  const { data: foodRows, error: foodError } = await supabase
+    .from("Foods")
+    .select("food_id, fdc_id");
+  if (foodError) throw foodError;
   const fdcToFoodId = new Map<number, number>();
   for (const row of foodRows as any[]) {
     fdcToFoodId.set(row.fdc_id, row.food_id);
   }
 
   // Step 2: Transform CSV rows to match table schema
+  const columns = [
+    "id",
+    "food_id",
+    "fdc_id",
+    "nutrient_id",
+    "amount",
+    "data_points",
+    "derivation_id",
+    "min",
+    "max",
+    "median",
+    "footnote",
+    "min_year_acquired"
+  ];
   const values = rows
     .map(fn => {
       const fdcId = safeInt(fn.fdc_id);
@@ -128,27 +138,27 @@ async function importFoodNutrients(connection: mysql.Connection) {
     })
     .filter((row): row is any[] => row !== null); // remove nulls and ensure type is any[][]
 
-  // Step 3: Insert data in transaction
-  await connection.beginTransaction();
-  try {
-    await batchInsert(connection,
-      `INSERT IGNORE INTO Food_Nutrient 
-      (id, food_id, fdc_id, nutrient_id, amount, data_points, derivation_id, min, max, median, footnote, min_year_acquired) 
-      VALUES ?`,
-      values
-    );
-    await connection.commit();
-    console.log(`✅ Imported ${values.length} food_nutrients.`);
-  } catch (err) {
-    await connection.rollback();
-    throw err;
-  }
+  await batchInsert("Food_Nutrient", columns, values);
+  console.log(`✅ Imported ${values.length} food_nutrients.`);
 }
 
-
-async function importPortions(connection: mysql.Connection) {
+async function importPortions() {
   const file = path.join(usdaDir, "food_portion.csv");
   const rows = await readCSV(file);
+  const columns = [
+    "portion_id",
+    "food_id",
+    "fdc_id",
+    "seq_num",
+    "amount",
+    "measure_unit_id",
+    "portion_description",
+    "modifier",
+    "weight_in_grams",
+    "data_points",
+    "footnote",
+    "min_year_acquired"
+  ];
   const values = rows.map(row => [
     safeInt(row.id),
     safeInt(row.fdc_id), // food_id (references Foods.food_id)
@@ -163,116 +173,76 @@ async function importPortions(connection: mysql.Connection) {
     row.footnote || null,
     row.min_year_acquired || null
   ]);
-
-  await connection.beginTransaction();
-  try {
-    await batchInsert(connection,
-      `INSERT IGNORE INTO Portions (portion_id, food_id, fdc_id, seq_num, amount, measure_unit_id, portion_description, modifier, weight_in_grams, data_points, footnote, min_year_acquired) VALUES ?`,
-      values);
-    await connection.commit();
-    console.log(`Imported ${rows.length} portions.`);
-  } catch (err) {
-    await connection.rollback();
-    throw err;
-  }
+  await batchInsert("Portions", columns, values);
+  console.log(`Imported ${rows.length} portions.`);
 }
 
-async function importMeasureUnits(connection: mysql.Connection) {
+async function importMeasureUnits() {
   const file = path.join(usdaDir, "measure_unit.csv");
   const rows = await readCSV(file);
+  const columns = ["id", "name"];
   const values = rows.map(unit => [safeInt(unit.id), unit.name]);
-
-  await connection.beginTransaction();
-  try {
-    await batchInsert(connection,
-      `INSERT IGNORE INTO Measure_Unit (id, name) VALUES ?`,
-      values);
-    await connection.commit();
-    console.log(`Imported ${rows.length} measure units.`);
-  } catch (err) {
-    await connection.rollback();
-    throw err;
-  }
+  await batchInsert("Measure_Unit", columns, values);
+  console.log(`Imported ${rows.length} measure units.`);
 }
 
-async function importFoodCalorieConversionFactors(connection: mysql.Connection) {
+async function importFoodCalorieConversionFactors() {
   const file = path.join(usdaDir, "food_calorie_conversion_factor.csv");
   const rows = await readCSV(file);
+  const columns = [
+    "food_nutrient_conversion_factor_id",
+    "protein_value",
+    "fat_value",
+    "carbohydrate_value"
+  ];
   const values = rows.map(r => [
     safeInt(r.food_nutrient_conversion_factor_id),
     safeFloat(r.protein_value),
     safeFloat(r.fat_value),
     safeFloat(r.carbohydrate_value)
   ]);
-
-  await connection.beginTransaction();
-  try {
-    await batchInsert(connection,
-      `INSERT IGNORE INTO Food_Calorie_Conversion_Factor (food_nutrient_conversion_factor_id, protein_value, fat_value, carbohydrate_value) VALUES ?`,
-      values);
-    await connection.commit();
-    console.log(`Imported ${rows.length} calorie conversion factors.`);
-  } catch (err) {
-    await connection.rollback();
-    throw err;
-  }
+  await batchInsert("Food_Calorie_Conversion_Factor", columns, values);
+  console.log(`Imported ${rows.length} calorie conversion factors.`);
 }
 
-async function importFoodProteinConversionFactors(connection: mysql.Connection) {
+async function importFoodProteinConversionFactors() {
   const file = path.join(usdaDir, "food_protein_conversion_factor.csv");
   const rows = await readCSV(file);
+  const columns = [
+    "food_nutrient_conversion_factor_id",
+    "value"
+  ];
   const values = rows.map(r => [
     safeInt(r.food_nutrient_conversion_factor_id),
     safeFloat(r.value)
   ]);
-
-  await connection.beginTransaction();
-  try {
-    await batchInsert(connection,
-      `INSERT IGNORE INTO Food_Protein_Conversion_Factor (food_nutrient_conversion_factor_id, value) VALUES ?`,
-      values);
-    await connection.commit();
-    console.log(`Imported ${rows.length} protein conversion factors.`);
-  } catch (err) {
-    await connection.rollback();
-    throw err;
-  }
+  await batchInsert("Food_Protein_Conversion_Factor", columns, values);
+  console.log(`Imported ${rows.length} protein conversion factors.`);
 }
 
-async function importFoodNutrientConversionFactors(connection: mysql.Connection) {
+async function importFoodNutrientConversionFactors() {
   const file = path.join(usdaDir, "food_nutrient_conversion_factor.csv");
   const rows = await readCSV(file);
+  const columns = ["id", "fdc_id"];
   const values = rows.map(r => [safeInt(r.id), safeInt(r.fdc_id)]);
-
-  await connection.beginTransaction();
-  try {
-    await batchInsert(connection,
-      `INSERT IGNORE INTO Food_Nutrient_Conversion_Factor (id, fdc_id) VALUES ?`,
-      values);
-    await connection.commit();
-    console.log(`Imported ${rows.length} nutrient conversion factors.`);
-  } catch (err) {
-    await connection.rollback();
-    throw err;
-  }
+  await batchInsert("Food_Nutrient_Conversion_Factor", columns, values);
+  console.log(`Imported ${rows.length} nutrient conversion factors.`);
 }
 
 async function main() {
-  const connection = await mysql.createConnection(dbConfig);
   try {
-    await importFoods(connection);
-    await importNutrients(connection);
-    await importFoodNutrients(connection);
-    await importPortions(connection);
-    await importMeasureUnits(connection);
-    await importFoodCalorieConversionFactors(connection);
-    await importFoodProteinConversionFactors(connection);
-    await importFoodNutrientConversionFactors(connection);
+    await importFoods();
+    await importNutrients();
+    await importFoodNutrients();
+    await importPortions();
+    await importMeasureUnits();
+    await importFoodCalorieConversionFactors();
+    await importFoodProteinConversionFactors();
+    await importFoodNutrientConversionFactors();
     console.log("USDA import complete.");
   } catch (err) {
     console.error("Import failed:", err);
   } finally {
-    await connection.end();
     process.exit(0);
   }
 }
