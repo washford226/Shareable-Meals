@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from "react";
 import { View, Text, FlatList } from "react-native";
-import { supabase } from "./utils_supabase";
+//import { supabase } from "./utils_supabase";
 import { Redirect } from "expo-router";
 
 export default function Index() {
   // If you want to redirect to login, uncomment the next line and remove the rest of the component.
-  // return <Redirect href="../(auth)/login" />;
-
+  return <Redirect href="../(auth)/login" />;
+  /*
   type Todo = { id: number; title: string }; // Adjust fields as needed
   const [todos, setTodos] = useState<Todo[]>([]);
 
@@ -56,4 +56,5 @@ export default function Index() {
       />
     </View>
   );
+  */
 }

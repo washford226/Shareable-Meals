@@ -47,7 +47,7 @@ const SignUpScreen: React.FC = () => {
       setCheckingUsername(true);
       try {
         const { data, error } = await supabase
-          .from("profiles")
+          .from("users")
           .select("username")
           .eq("username", username)
           .single();
@@ -160,7 +160,7 @@ const SignUpScreen: React.FC = () => {
       }
 
       // 3. Insert user profile in 'profiles' table
-      const { error: profileError } = await supabase.from("profiles").upsert([
+      const { error: profileError } = await supabase.from("users").upsert([
         {
           id: userId,
           username,

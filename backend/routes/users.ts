@@ -9,6 +9,7 @@ import { Request, Response } from 'express';
 import axios from 'axios';
 import { calculateAndStoreMealNutrition } from './usda_linking';
 import { createClient } from '@supabase/supabase-js';
+import { profile } from 'console';
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage() });
@@ -150,7 +151,7 @@ router.get('/check-username', async (req: Request, res: Response) => {
 
   try {
     const { data, error } = await supabase
-      .from("profiles")
+      .from("users")
       .select("id")
       .eq("username", username)
       .single();
@@ -184,7 +185,7 @@ router.post('/signup', upload.single('profile_picture'), async (req: Request, re
   try {
     // Check if username or email exists
     const { data: existingUser, error: existingError } = await supabase
-      .from("profiles")
+      .from("users")
       .select("id")
       .or(`username.eq.${username},email.eq.${email}`)
       .maybeSingle();
@@ -218,10 +219,12 @@ router.post('/signup', upload.single('profile_picture'), async (req: Request, re
       if (uploadError) throw uploadError;
       const { data: urlData } = supabase.storage.from("profile-pictures").getPublicUrl(fileName);
       profilePictureUrl = urlData.publicUrl;
+    } else {
+      profilePictureUrl = null; // No profile picture uploaded
     }
 
     // Insert profile row
-    const { error: profileError } = await supabase.from("profiles").insert([{
+    const { error: profileError } = await supabase.from("users").insert([{
       id: userId,
       username,
       email,
@@ -272,7 +275,7 @@ router.post('/signup', upload.single('profile_picture'), async (req: Request, re
       }
 
       // Calculate nutrition for this meal after ingredients inserted
-      await calculateAndStoreMealNutrition(mealData.id);
+      //await calculateAndStoreMealNutrition(mealData.id);
     }
 
     res.status(200).send('User signed up successfully with AI-generated meals added');
@@ -367,7 +370,7 @@ router.put('/user/:username', authMiddleware, async (req: Request, res: Response
 
   try {
     const { error } = await supabase
-      .from("profiles")
+      .from("users")
       .update(updates)
       .eq("username", username);
 
@@ -385,9 +388,9 @@ router.delete('/userdelete', authMiddleware, async (req: Request, res: Response)
   const user = (req as any).user;
 
   try {
-    // Delete from profiles table
+    // Delete from users table
     const { error: profileError } = await supabase
-      .from("profiles")
+      .from("users")
       .delete()
       .eq("id", user.id);
 
@@ -410,7 +413,7 @@ router.get('/user', authMiddleware, async (req: Request, res: Response) => {
 
   try {
     const { data, error } = await supabase
-      .from("profiles")
+      .from("users")
       .select("*")
       .eq("id", user.id)
       .single();
@@ -458,7 +461,7 @@ router.post('/upload-profile-picture', authMiddleware, upload.single('profile_pi
     const profilePictureUrl = urlData.publicUrl;
 
     const { error } = await supabase
-      .from("profiles")
+      .from("users")
       .update({ profile_picture: profilePictureUrl })
       .eq("id", user.id);
 
@@ -548,9 +551,9 @@ router.put('/user/:username/email', authMiddleware, async (req: Request, res: Re
     const { error: updateError } = await supabase.auth.admin.updateUserById(user.id, { email });
     if (updateError) throw updateError;
 
-    // Update email in profiles table as well
+    // Update email in users table as well
     const { error: profileError } = await supabase
-      .from("profiles")
+      .from("users")
       .update({ email })
       .eq("id", user.id);
 

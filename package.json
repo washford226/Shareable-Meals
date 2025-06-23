@@ -27,7 +27,7 @@
     "@react-navigation/native-stack": "^7.3.10",
     "@react-navigation/stack": "^7.3.2",
     "@shadcn/ui": "^0.0.4",
-    "@supabase/supabase-js": "^2.49.8",
+    "@supabase/supabase-js": "^2.50.0",
     "@types/bcrypt": "^5.0.2",
     "@types/joi": "^17.2.3",
     "@types/multer": "^1.4.12",
