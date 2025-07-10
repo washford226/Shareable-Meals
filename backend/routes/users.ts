@@ -286,24 +286,26 @@ router.post('/signup', upload.single('profile_picture'), async (req: Request, re
 });
 
 // Login user
-router.post('/login', async (req: Request, res: Response) => {
+router.post('/login', (req: Request, res: Response) => {
   const { email, password } = req.body;
 
-  try {
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+  (async () => {
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
 
-    if (error || !data.session) {
-      return res.status(400).send('Invalid email or password');
+      if (error || !data.session) {
+        return res.status(400).send('Invalid email or password');
+      }
+
+      res.status(200).json({ message: 'User logged in successfully', token: data.session.access_token });
+    } catch (err) {
+      console.error('Error logging in:', err);
+      res.status(500).send('Error logging in');
     }
-
-    res.status(200).json({ message: 'User logged in successfully', token: data.session.access_token });
-  } catch (err) {
-    console.error('Error logging in:', err);
-    res.status(500).send('Error logging in');
-  }
+  })();
 });
 
 // Forgot Password
@@ -419,7 +421,8 @@ router.get('/user', authMiddleware, async (req: Request, res: Response) => {
       .single();
 
     if (error || !data) {
-      return res.status(404).send('User not found');
+      res.status(404).send('User not found');
+      return;
     }
 
     res.status(200).json(data);

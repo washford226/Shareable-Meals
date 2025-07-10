@@ -204,10 +204,21 @@ router.get('/meal-plan/:id', authMiddleware, async (req: Request, res: Response)
     const mealPlan = data;
 
     // Convert the picture BLOB to Base64 for frontend display if needed
-    if (mealPlan?.meals?.picture && Buffer.isBuffer(mealPlan.meals.picture)) {
-      mealPlan.meals.picture = `data:image/jpeg;base64,${mealPlan.meals.picture.toString('base64')}`;
-    } else if (mealPlan?.meals && !mealPlan.meals.picture) {
-      mealPlan.meals.picture = null;
+    if (Array.isArray(mealPlan?.meals)) {
+      mealPlan.meals = mealPlan.meals.map((meal: any) => {
+        if (meal.picture && Buffer.isBuffer(meal.picture)) {
+          return {
+            ...meal,
+            picture: `data:image/jpeg;base64,${meal.picture.toString('base64')}`
+          };
+        } else if (!meal.picture) {
+          return {
+            ...meal,
+            picture: null
+          };
+        }
+        return meal;
+      });
     }
 
     res.status(200).json(mealPlan);
