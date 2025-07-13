@@ -3,7 +3,6 @@ import {
   View,
   Text,
   TextInput,
-  Button,
   StyleSheet,
   Alert,
   Image,
@@ -11,14 +10,13 @@ import {
   Platform,
   ScrollView,
   Switch,
+  ActivityIndicator,
 } from "react-native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as ImagePicker from "expo-image-picker";
 import { useTheme } from "../../../context/ThemeContext";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import RNPickerSelect from "react-native-picker-select";
-
-const BASE_URL = Platform.OS === "android" ? "http://10.0.2.2:5000" : "http://localhost:5000";
+import { supabase } from "app/utils_supabase";
 
 const dietaryOptions = [
   { label: "None", value: "" },
@@ -40,7 +38,19 @@ const cuisineOptions = [
   { label: "Mediterranean", value: "Mediterranean" },
   { label: "Thai", value: "Thai" },
   { label: "French", value: "French" },
-  // Add more as needed
+];
+
+const unitOptions = [
+  { label: "g", value: "g" },
+  { label: "kg", value: "kg" },
+  { label: "oz", value: "oz" },
+  { label: "lb", value: "lb" },
+  { label: "cup", value: "cup" },
+  { label: "tbsp", value: "tbsp" },
+  { label: "tsp", value: "tsp" },
+  { label: "ml", value: "ml" },
+  { label: "l", value: "l" },
+  { label: "piece", value: "piece" },
 ];
 
 const CreateMealScreen = () => {
@@ -58,24 +68,16 @@ const CreateMealScreen = () => {
   const [mealDietaryRestriction, setMealDietaryRestriction] = useState("");
   const [mealCuisine, setMealCuisine] = useState("");
   const [mealServings, setMealServings] = useState("1");
-  const unitOptions = [
-  { label: "g", value: "g" },
-  { label: "kg", value: "kg" },
-  { label: "oz", value: "oz" },
-  { label: "lb", value: "lb" },
-  { label: "cup", value: "cup" },
-  { label: "tbsp", value: "tbsp" },
-  { label: "tsp", value: "tsp" },
-  { label: "ml", value: "ml" },
-  { label: "l", value: "l" },
-  { label: "piece", value: "piece" },
-  // Add more as needed
-];
+  const [calories, setCalories] = useState("");
+  const [protein, setProtein] = useState("");
+  const [carbohydrates, setCarbohydrates] = useState("");
+  const [fat, setFat] = useState("");
+  const [loading, setLoading] = useState(false);
 
   const pickMealImage = async () => {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
+        mediaTypes: ["images"],
         allowsEditing: true,
         aspect: [3, 3],
         quality: 1,
@@ -112,6 +114,39 @@ const CreateMealScreen = () => {
     setIngredients(newIngredients);
   };
 
+  // Upload image to Supabase Storage and return the public URL
+  const uploadImageToSupabase = async (uri: string) => {
+    try {
+      const response = await fetch(uri);
+      const blob = await response.blob();
+      const fileExt = uri.split(".").pop();
+      const fileName = `meal_${Date.now()}.${fileExt}`;
+      const filePath = `meal-pictures/${fileName}`;
+
+      const { data, error } = await supabase.storage
+        .from("meal-pictures")
+        .upload(fileName, blob, {
+          cacheControl: "3600",
+          upsert: false,
+        });
+
+      if (error) {
+        throw error;
+      }
+
+      // Get public URL
+      const { data: publicUrlData } = supabase.storage
+        .from("meal-pictures")
+        .getPublicUrl(fileName);
+
+      return publicUrlData?.publicUrl || null;
+    } catch (error) {
+      console.error("Image upload error:", error);
+      Alert.alert("Error", "Failed to upload image.");
+      return null;
+    }
+  };
+
   const handleAddMeal = async () => {
     if (
       !mealName ||
@@ -122,45 +157,44 @@ const CreateMealScreen = () => {
       return;
     }
 
-    const formData = new FormData();
-    formData.append("name", mealName);
-    formData.append("description", mealDescription);
-    formData.append("ingredients", JSON.stringify(ingredients));
-    formData.append("instructions", mealInstructions);
-    formData.append("recipeLink", mealRecipeLink);
-    formData.append("visibility", mealVisibility ? "1" : "0");
-    formData.append("day", selectedDay || "");
-    formData.append("dietary_restrictions", mealDietaryRestriction);
-    formData.append("servings", mealServings);
-    formData.append("cuisine", mealCuisine);
-
-    if (mealPicture) {
-      const uriParts = mealPicture.split(".");
-      const fileType = uriParts[uriParts.length - 1];
-      formData.append("picture", {
-        uri: mealPicture,
-        name: `meal_picture.${fileType}`,
-        type: `image/${fileType}`,
-      } as any);
-    }
+    setLoading(true);
 
     try {
-      const token = await AsyncStorage.getItem("token");
-      if (!token) {
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+      if (userError || !userData?.user) {
         Alert.alert("Error", "User not authenticated. Please log in again.");
+        setLoading(false);
         return;
       }
+      const userId = userData.user.id;
 
-      const response = await fetch(`${BASE_URL}/meal/meals`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
+      let pictureUrl = null;
+      if (mealPicture) {
+        pictureUrl = await uploadImageToSupabase(mealPicture);
+      }
+
+      const { error } = await supabase.from("meals").insert([
+        {
+          user_id: userId,
+          name: mealName,
+          description: mealDescription,
+          ingredients,
+          instructions: mealInstructions,
+          recipeLink: mealRecipeLink,
+          visibility: mealVisibility,
+          dietary_restrictions: mealDietaryRestriction,
+          servings: mealServings ? parseInt(mealServings) : 1,
+          cuisine: mealCuisine,
+          calories: calories ? parseInt(calories) : null,
+          protein: protein ? parseInt(protein) : null,
+          carbohydrates: carbohydrates ? parseInt(carbohydrates) : null,
+          fat: fat ? parseInt(fat) : null,
+          picture: pictureUrl,
         },
-        body: formData,
-      });
+      ]);
 
-      if (!response.ok) {
-        throw new Error("Failed to add meal to the database.");
+      if (error) {
+        throw error;
       }
 
       Alert.alert("Success", "Meal added successfully!");
@@ -168,6 +202,8 @@ const CreateMealScreen = () => {
     } catch (error) {
       console.error("Error adding meal:", error);
       Alert.alert("Error", "Failed to add the meal to the database.");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -212,47 +248,47 @@ const CreateMealScreen = () => {
             keyboardType="numeric"
           />
           <RNPickerSelect
-  onValueChange={value => updateIngredient(idx, "unit", value)}
-  items={unitOptions}
-  value={ingredient.unit}
-  placeholder={{ label: "Unit", value: "" }}
-  style={{
-    inputIOS: {
-      color: ingredient.unit ? theme.text : theme.placeholder,
-      height: 50, // Match your .input height
-      paddingHorizontal: 10,
-      borderWidth: 1,
-      borderColor: theme.border,
-      borderRadius: 8,
-      backgroundColor: theme.card,
-      paddingRight: 30,
-      flex: 1,
-      marginRight: 5,
-    },
-    inputAndroid: {
-      color: ingredient.unit ? theme.text : theme.placeholder,
-      height: 50, // Match your .input height
-      paddingHorizontal: 10,
-      borderWidth: 1,
-      borderColor: theme.border,
-      borderRadius: 8,
-      backgroundColor: theme.card,
-      paddingRight: 30,
-      flex: 1,
-      marginRight: 5,
-      marginTop: -13, // Remove top margin for Android
-    },
-    iconContainer: {
-      top: 16,
-      right: 12,
-    },
-    placeholder: {
-      color: theme.placeholder,
-    },
-  }}
-  useNativeAndroidPickerStyle={false}
-  Icon={() => <Text style={{ fontSize: 16, color: theme.text }}>▼</Text>}
-/>
+            onValueChange={value => updateIngredient(idx, "unit", value)}
+            items={unitOptions}
+            value={ingredient.unit}
+            placeholder={{ label: "Unit", value: "" }}
+            style={{
+              inputIOS: {
+                color: ingredient.unit ? theme.text : theme.placeholder,
+                height: 50,
+                paddingHorizontal: 10,
+                borderWidth: 1,
+                borderColor: theme.border,
+                borderRadius: 8,
+                backgroundColor: theme.card,
+                paddingRight: 30,
+                flex: 1,
+                marginRight: 5,
+              },
+              inputAndroid: {
+                color: ingredient.unit ? theme.text : theme.placeholder,
+                height: 50,
+                paddingHorizontal: 10,
+                borderWidth: 1,
+                borderColor: theme.border,
+                borderRadius: 8,
+                backgroundColor: theme.card,
+                paddingRight: 30,
+                flex: 1,
+                marginRight: 5,
+                marginTop: -13,
+              },
+              iconContainer: {
+                top: 16,
+                right: 12,
+              },
+              placeholder: {
+                color: theme.placeholder,
+              },
+            }}
+            useNativeAndroidPickerStyle={false}
+            Icon={() => <Text style={{ fontSize: 16, color: theme.text }}>▼</Text>}
+          />
           <TouchableOpacity onPress={() => removeIngredient(idx)}>
             <Text style={{ color: theme.danger, fontWeight: "bold", fontSize: 18 }}>✕</Text>
           </TouchableOpacity>
@@ -307,6 +343,39 @@ const CreateMealScreen = () => {
 
       <TextInput
         style={[styles.input, { backgroundColor: theme.card, borderColor: theme.border, color: theme.text }]}
+        placeholder="Calories"
+        placeholderTextColor={theme.placeholder}
+        value={calories}
+        onChangeText={setCalories}
+        keyboardType="numeric"
+      />
+      <TextInput
+        style={[styles.input, { backgroundColor: theme.card, borderColor: theme.border, color: theme.text }]}
+        placeholder="Protein (g)"
+        placeholderTextColor={theme.placeholder}
+        value={protein}
+        onChangeText={setProtein}
+        keyboardType="numeric"
+      />
+      <TextInput
+        style={[styles.input, { backgroundColor: theme.card, borderColor: theme.border, color: theme.text }]}
+        placeholder="Carbohydrates (g)"
+        placeholderTextColor={theme.placeholder}
+        value={carbohydrates}
+        onChangeText={setCarbohydrates}
+        keyboardType="numeric"
+      />
+      <TextInput
+        style={[styles.input, { backgroundColor: theme.card, borderColor: theme.border, color: theme.text }]}
+        placeholder="Fat (g)"
+        placeholderTextColor={theme.placeholder}
+        value={fat}
+        onChangeText={setFat}
+        keyboardType="numeric"
+      />
+
+      <TextInput
+        style={[styles.input, { backgroundColor: theme.card, borderColor: theme.border, color: theme.text }]}
         placeholder="Recipe Link"
         placeholderTextColor={theme.placeholder}
         value={mealRecipeLink}
@@ -330,12 +399,23 @@ const CreateMealScreen = () => {
       {mealPicture && <Image source={{ uri: mealPicture }} style={styles.mealPicture} />}
 
       <View style={styles.buttonContainer}>
-        <View style={styles.button}>
-          <Button title="Create Meal" onPress={handleAddMeal} color={theme.primary} />
-        </View>
-        <View style={styles.button}>
-          <Button title="Cancel" onPress={() => router.back()} color={theme.danger} />
-        </View>
+        <TouchableOpacity
+          style={[styles.createButton, { backgroundColor: theme.primary }]}
+          onPress={handleAddMeal}
+          disabled={loading}
+        >
+          {loading ? (
+            <ActivityIndicator color={theme.buttonText} />
+          ) : (
+            <Text style={[styles.createButtonText, { color: theme.buttonText }]}>Create Meal</Text>
+          )}
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.cancelButton, { backgroundColor: theme.danger }]}
+          onPress={() => router.back()}
+        >
+          <Text style={[styles.createButtonText, { color: theme.buttonText }]}>Cancel</Text>
+        </TouchableOpacity>
       </View>
     </ScrollView>
   );
@@ -397,9 +477,23 @@ const styles = StyleSheet.create({
     width: "100%",
     marginTop: 20,
   },
-  button: {
+  createButton: {
     flex: 1,
     marginHorizontal: 5,
+    padding: 12,
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  cancelButton: {
+    flex: 1,
+    marginHorizontal: 5,
+    padding: 12,
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  createButtonText: {
+    fontSize: 16,
+    fontWeight: "bold",
   },
 });
 

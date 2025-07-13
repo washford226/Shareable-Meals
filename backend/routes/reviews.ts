@@ -1,46 +1,80 @@
 import { Router, Request, Response } from 'express';
-import authMiddleware from '../authMiddleware'; // Adjust the path as needed
+import authMiddleware from '../authMiddleware';
+import { createClient } from '@supabase/supabase-js';
+
+// Initialize Supabase client for backend (use service role key for full access)
+const supabase = createClient(
+  process.env.SUPABASE_URL || "",
+  process.env.SUPABASE_SERVICE_ROLE_KEY || ""
+);
 
 const router = Router();
 
-//make a review
-router.post('/reviews', authMiddleware, (req: Request, res: Response) => {
-    const { meal_id, rating, comment } = req.body;
-    const user_id = req.user?.id ?? (() => { throw new Error('User is not authenticated'); })(); // Ensure user is defined
-    const db = (req as any).db; // Retrieve the db instance from the request object
-  
-    const query = `
-      INSERT INTO Reviews (meal_id, user_id, rating, comment)
-      VALUES (?, ?, ?, ?)
-    `;
-  
-    db.query(query, [meal_id, user_id, rating, comment])
-      .then(() => res.status(201).send('Review created successfully'))
-      .catch((err: Error) => {
-        console.error('Error creating review:', err);
-        res.status(500).send('Error creating review');
-      });
-  });
-  
-  // Get reviews for a meal
-  router.get('/reviews', authMiddleware, (req: Request, res: Response) => {
-    const { meal_id } = req.query;
-    const db = (req as any).db; // Retrieve the db instance from the request object
-  
-    const query = `
-      SELECT r.review_id AS id, r.rating, r.comment, r.created_at, u.username AS userName
-      FROM Reviews r
-      INNER JOIN users u ON r.user_id = u.id
-      WHERE r.meal_id = ?
-      ORDER BY r.created_at DESC
-    `;
-  
-    db.query(query, [meal_id])
-      .then(([rows]: [any[], any]) => res.status(200).json(rows))
-      .catch((err: Error) => {
-        console.error('Error fetching reviews:', err);
-        res.status(500).send('Error fetching reviews');
-      });
-  });
+// Create a review
+router.post('/reviews', authMiddleware, async (req: Request, res: Response) => {
+  const { meal_id, rating, comment } = req.body;
+  const user_id = (req as any).user?.id;
+
+  if (!user_id) {
+    res.status(401).json({ message: 'User is not authenticated' });
+    return;
+  }
+  if (!meal_id || !rating) {
+    res.status(400).json({ message: 'Meal ID and rating are required' });
+    return;
+  }
+
+  try {
+    const { error } = await supabase
+      .from("reviews")
+      .insert([{ meal_id, user_id, rating, comment }]);
+
+    if (error) throw error;
+
+    res.status(201).json({ message: 'Review created successfully' });
+  } catch (err) {
+    console.error('Error creating review:', err);
+    res.status(500).json({ message: 'Error creating review' });
+  }
+});
+
+// Get reviews for a meal
+router.get('/reviews', authMiddleware, async (req: Request, res: Response) => {
+  const { meal_id } = req.query;
+
+  if (!meal_id) {
+    res.status(400).json({ message: 'Meal ID is required' });
+    return;
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from("reviews")
+      .select(`
+        review_id AS id,
+        rating,
+        comment,
+        created_at,
+        profiles:user_id (
+          username
+        )
+      `)
+      .eq("meal_id", meal_id)
+      .order("created_at", { ascending: false });
+
+    if (error) throw error;
+
+    // Format username for frontend compatibility
+    const formatted = (data || []).map((r: any) => ({
+      ...r,
+      userName: r.profiles?.username || "Anonymous"
+    }));
+
+    res.status(200).json(formatted);
+  } catch (err) {
+    console.error('Error fetching reviews:', err);
+    res.status(500).json({ message: 'Error fetching reviews' });
+  }
+});
 
 export default router;

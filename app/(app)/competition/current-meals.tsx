@@ -7,14 +7,10 @@ import {
   StyleSheet,
   Alert,
   ActivityIndicator,
-  Platform,
 } from "react-native";
-import axios from "axios";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import { useTheme } from "../../../context/ThemeContext";
-
-const BASE_URL = Platform.OS === "android" ? "http://10.0.2.2:5000" : "http://localhost:5000";
+import { supabase } from "app/utils_supabase";
 
 const CurrentMeals = () => {
   interface Meal {
@@ -34,41 +30,30 @@ const CurrentMeals = () => {
   const [loading, setLoading] = useState(true);
   const [competitionId, setCompetitionId] = useState<number | null>(null);
   const [competitionTheme, setCompetitionTheme] = useState<string | null>(null);
-  const [voting, setVoting] = useState(false); // State to track voting
+  const [voting, setVoting] = useState(false);
   const router = useRouter();
   const { theme } = useTheme();
 
-  // Fetch the latest competition
+  // Fetch the latest competition from Supabase
   const fetchLatestCompetition = async () => {
     try {
-      const token = await AsyncStorage.getItem("token");
-      if (!token) {
-        Alert.alert("Error", "User not authenticated. Please log in.");
-        setLoading(false);
-        return;
-      }
+      setLoading(true);
+      const { data, error } = await supabase
+        .from("competitions")
+        .select("*")
+        .order("competition_id", { ascending: false })
+        .limit(1)
+        .single();
 
-      const response = await axios.get(`${BASE_URL}/comp/competitions`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-      const competitions: Competition[] = response.data;
-
-      if (competitions.length === 0) {
+      if (error || !data) {
         Alert.alert("No Competitions", "There are no active competitions.");
         setLoading(false);
         return;
       }
 
-      // Get the competition with the highest ID
-      const latestCompetition = competitions.reduce((prev, current) =>
-        prev.competition_id > current.competition_id ? prev : current
-      );
-
-      setCompetitionId(latestCompetition.competition_id);
-      setCompetitionTheme(latestCompetition.theme);
-      fetchMeals(latestCompetition.competition_id, token); // Fetch meals for the latest competition
+      setCompetitionId(data.competition_id);
+      setCompetitionTheme(data.theme);
+      fetchMeals(data.competition_id);
     } catch (error) {
       console.error("Error fetching competitions:", error);
       Alert.alert("Error", "Failed to fetch competitions. Please try again later.");
@@ -76,15 +61,18 @@ const CurrentMeals = () => {
     }
   };
 
-  // Fetch meals for the given competition
-  const fetchMeals = async (competitionId: number, token: string) => {
+  // Fetch meals for the given competition from Supabase
+  const fetchMeals = async (competitionId: number) => {
     try {
-      const response = await axios.get(`${BASE_URL}/comp/competitions/${competitionId}/meals`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-      setMeals(response.data);
+      const { data, error } = await supabase
+        .from("competition_meals_view") // Use a view or join to get meal name and votes
+        .select("meal_id, name, votes")
+        .eq("competition_id", competitionId);
+
+      if (error) {
+        throw error;
+      }
+      setMeals(data || []);
     } catch (error) {
       console.error("Error fetching meals:", error);
       Alert.alert("Error", "Failed to fetch meals. Please try again later.");
@@ -97,35 +85,51 @@ const CurrentMeals = () => {
   const handleVote = async (mealId: number) => {
     if (!competitionId) return;
 
-    setVoting(true); // Disable voting while processing
+    setVoting(true);
     try {
-      const token = await AsyncStorage.getItem("token");
-      if (!token) {
+      // Get current user
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+      if (userError || !userData?.user) {
         Alert.alert("Error", "User not authenticated. Please log in.");
         setVoting(false);
         return;
       }
+      const userId = userData.user.id;
 
-      await axios.post(
-        `${BASE_URL}/comp/competitions/${competitionId}/vote`,
-        { meal_id: mealId },
+      // Check if user has already voted in this competition
+      const { data: existingVote } = await supabase
+        .from("competition_votes")
+        .select("*")
+        .eq("competition_id", competitionId)
+        .eq("user_id", userId)
+        .maybeSingle();
+
+      if (existingVote) {
+        Alert.alert("Error", "You have already voted in this competition.");
+        setVoting(false);
+        return;
+      }
+
+      // Insert vote
+      const { error } = await supabase.from("competition_votes").insert([
         {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
+          competition_id: competitionId,
+          meal_id: mealId,
+          user_id: userId,
+        },
+      ]);
+
+      if (error) {
+        throw error;
+      }
+
       Alert.alert("Success", "Your vote has been cast!");
-      fetchMeals(competitionId, token); // Refresh the list to update vote counts
+      fetchMeals(competitionId); // Refresh the list to update vote counts
     } catch (error) {
       console.error("Error voting for meal:", error);
-      if (axios.isAxiosError(error)) {
-        Alert.alert("Error", error.response?.data?.error || "Failed to cast your vote. Please try again.");
-      } else {
-        Alert.alert("Error", "An unexpected error occurred. Please try again later.");
-      }
+      Alert.alert("Error", "Failed to cast your vote. Please try again.");
     } finally {
-      setVoting(false); // Re-enable voting
+      setVoting(false);
     }
   };
 
@@ -156,7 +160,7 @@ const CurrentMeals = () => {
       {/* Back Button */}
       <TouchableOpacity
         style={[styles.backButton, { backgroundColor: theme.primary }]}
-        onPress={() => router.push("/other-meals/other-meals")} // Navigate back to the other-meals screen
+        onPress={() => router.push("/other-meals/other-meals")}
       >
         <Text style={[styles.backButtonText, { color: theme.buttonText }]}>Back</Text>
       </TouchableOpacity>
@@ -171,7 +175,7 @@ const CurrentMeals = () => {
       {/* Add Meal Button */}
       <TouchableOpacity
         style={[styles.addMealButton, { backgroundColor: theme.primary }]}
-        onPress={() => router.push("/competition/add-meal")} // Navigate to the Add Meal screen
+        onPress={() => router.push("/competition/add-meal")}
       >
         <Text style={[styles.addMealButtonText, { color: theme.buttonText }]}>Add Meal</Text>
       </TouchableOpacity>
@@ -189,7 +193,7 @@ const CurrentMeals = () => {
             <TouchableOpacity
               style={[styles.voteButton, { backgroundColor: theme.primary }]}
               onPress={() => handleVote(item.meal_id)}
-              disabled={voting} // Disable button while voting
+              disabled={voting}
             >
               <Text style={[styles.voteButtonText, { color: theme.buttonText }]}>
                 {voting ? "Voting..." : "Vote"}

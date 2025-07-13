@@ -1,49 +1,46 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity, Alert, Image, Switch, StyleSheet, Platform } from 'react-native';
-import axios from 'axios';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useTheme } from '../../../context/ThemeContext'; // Import the ThemeContext
+import { View, Text, TouchableOpacity, Alert, Image, Switch, StyleSheet } from 'react-native';
+import { useTheme } from '../../../context/ThemeContext';
 import BottomNav from 'components/bottomNav';
 import { useRouter } from 'expo-router';
-
-const BASE_URL = Platform.OS === 'android' ? 'http://10.0.2.2:5000' : 'http://localhost:5000';
+import { supabase } from 'app/utils_supabase';
 
 const AccountScreen: React.FC = () => {
   const [username, setUsername] = useState<string>('');
   const [caloriesGoal, setCaloriesGoal] = useState<number | null>(null);
   const [dietaryRestrictions, setDietaryRestrictions] = useState<string>('');
-  const [allergies, setAllergies] = useState<string>(''); // State for allergies
+  const [allergies, setAllergies] = useState<string>('');
   const [profilePicture, setProfilePicture] = useState<string | null>(null);
-  const [email, setEmail] = useState<string>(''); // State for email
+  const [email, setEmail] = useState<string>('');
 
-  const { theme, toggleTheme } = useTheme(); // Access theme and toggleTheme
+  const { theme, toggleTheme } = useTheme();
   const router = useRouter();
 
   useEffect(() => {
     const fetchUserData = async () => {
       try {
-        const token = await AsyncStorage.getItem('token');
-        if (!token) {
-          throw new Error('No token found');
+        // Get the current user
+        const { data: userData, error: userError } = await supabase.auth.getUser();
+        if (userError || !userData?.user) {
+          throw new Error('No user found');
         }
+        const userId = userData.user.id;
 
-        const response = await axios.get(`${BASE_URL}/users/user`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
+        // Fetch user profile from 'users' table
+        const { data, error } = await supabase
+          .from('users')
+          .select('*')
+          .eq('id', userId)
+          .single();
 
-        setUsername(response.data.username);
-        setCaloriesGoal(response.data.calories_goal);
-        setDietaryRestrictions(response.data.dietary_restrictions);
-        setEmail(response.data.email); // Set the email from the response
-        setAllergies(response.data.allergies); // Set the allergies from the response
+        if (error) throw error;
 
-        if (response.data.profile_picture) {
-          setProfilePicture(response.data.profile_picture);
-        } else {
-          setProfilePicture(null);
-        }
+        setUsername(data.username ?? '');
+        setCaloriesGoal(data.calories_goal ?? null);
+        setDietaryRestrictions(data.dietary_restrictions ?? '');
+        setEmail(data.email ?? '');
+        setAllergies(data.allergies ?? '');
+        setProfilePicture(data.profile_picture ?? null);
       } catch (error) {
         console.error('Error fetching user data:', error);
       }
@@ -51,11 +48,10 @@ const AccountScreen: React.FC = () => {
 
     fetchUserData();
   }, []);
-  
 
   const handleLogout = async () => {
     try {
-      await AsyncStorage.removeItem('token');
+      await supabase.auth.signOut();
       router.replace('/login');
     } catch (error) {
       console.error('Error during logout:', error);
@@ -63,43 +59,39 @@ const AccountScreen: React.FC = () => {
   };
 
   const handleDeleteAccount = async () => {
-  Alert.alert(
-    "Confirm Deletion",
-    "Are you sure you want to delete your account? This action cannot be undone.",
-    [
-      {
-        text: "Cancel",
-        style: "cancel", // Makes the button appear as a cancel action
-      },
-      {
-        text: "Delete",
-        style: "destructive", // Highlights the button as a destructive action
-        onPress: async () => {
-          try {
-            const token = await AsyncStorage.getItem("token");
-            if (!token) {
-              throw new Error("No token found");
-            }
-
-            const response = await axios.delete(`${BASE_URL}/users/userdelete`, {
-              headers: {
-                Authorization: `Bearer ${token}`,
-              },
-            });
-
-            if (response.status === 200) {
-              Alert.alert("Success", "Account deleted successfully");
-              handleLogout(); // Log out the user after account deletion
-            }
-          } catch (error) {
-            console.error("Error deleting account:", error);
-            Alert.alert("Error", "Failed to delete account");
-          }
+    Alert.alert(
+      "Confirm Deletion",
+      "Are you sure you want to delete your account? This action cannot be undone.",
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
         },
-      },
-    ]
-  );
-};
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              // Delete user from Supabase Auth
+              const { error: deleteError } = await supabase.auth.admin.deleteUser(
+                (await supabase.auth.getUser()).data.user.id
+              );
+              if (deleteError) throw deleteError;
+
+              // Optionally, delete user profile from 'users' table
+              await supabase.from('users').delete().eq('id', (await supabase.auth.getUser()).data.user.id);
+
+              Alert.alert("Success", "Account deleted successfully");
+              handleLogout();
+            } catch (error) {
+              console.error("Error deleting account:", error);
+              Alert.alert("Error", "Failed to delete account");
+            }
+          },
+        },
+      ]
+    );
+  };
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
@@ -133,10 +125,10 @@ const AccountScreen: React.FC = () => {
         <Text style={[styles.leftAlignText, { color: theme.text, fontSize: 18 }]}>Dietary Restrictions: {dietaryRestrictions}</Text>
       </View>
 
+      {/* Allergies */}
       <View style={[styles.borderRow, { backgroundColor: theme.button, borderColor: theme.border, borderWidth: 1, borderRadius: 8, padding: 15 }]}>
         <Text style={[styles.leftAlignText, { color: theme.text, fontSize: 18 }]}>Allergies: {allergies}</Text>
       </View>
-
 
       <View style={styles.row}>
         <Text style={[styles.title, { color: theme.text }]}>Themes</Text>
@@ -148,18 +140,18 @@ const AccountScreen: React.FC = () => {
           {theme.background === '#121212' ? 'Dark Mode' : 'Light Mode'}
         </Text>
         <Switch
-          value={theme.background === '#121212'} // Correctly reflects the current theme
-          onValueChange={toggleTheme} // Toggles the theme
+          value={theme.background === '#121212'}
+          onValueChange={toggleTheme}
           thumbColor={theme.primary}
           trackColor={{ false: theme.border, true: theme.primary }}
-          style={styles.switch} // Apply custom switch style
+          style={styles.switch}
         />
       </View>
 
       {/* Edit User Information Button */}
       <TouchableOpacity
         style={[styles.editButton, { backgroundColor: theme.button, borderColor: theme.border, borderWidth: 1, borderRadius: 10 }]}
-        onPress={() => router.push('./edit-user')} // Navigate to the edit user screen
+        onPress={() => router.push('./edit-user')}
       >
         <Text style={[styles.editButtonText, { color: theme.text, alignSelf: 'flex-start' }]}>
           Edit Information
@@ -197,11 +189,11 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   switch: {
-    transform: [{ scaleX: 1.5 }, { scaleY: 1.5 }], // Make the switch bigger
+    transform: [{ scaleX: 1.5 }, { scaleY: 1.5 }],
   },
   borderRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between', // Space between text and switch
+    justifyContent: 'space-between',
     alignItems: 'center',
     width: '100%',
     marginBottom: 15,

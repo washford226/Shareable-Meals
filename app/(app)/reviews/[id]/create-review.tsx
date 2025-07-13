@@ -1,6 +1,5 @@
 import React, { useState } from "react";
 import {
-  Platform,
   View,
   Text,
   TextInput,
@@ -9,13 +8,10 @@ import {
   Alert,
   ActivityIndicator,
 } from "react-native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import axios from "axios";
 import StarRating from "react-native-star-rating-widget";
 import { useTheme } from "../../../../context/ThemeContext";
 import { useLocalSearchParams, useRouter } from "expo-router";
-
-const BASE_URL = Platform.OS === "android" ? "http://10.0.2.2:5000" : "http://localhost:5000";
+import { supabase } from "app/utils_supabase";
 
 const CreateReview = () => {
   const [rating, setRating] = useState<number>(0);
@@ -40,25 +36,26 @@ const CreateReview = () => {
     setLoading(true);
 
     try {
-      const token = await AsyncStorage.getItem("token");
-      if (!token) {
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+      if (userError || !userData?.user) {
         Alert.alert("Error", "User not authenticated. Please log in.");
+        setLoading(false);
         return;
       }
+      const userId = userData.user.id;
 
-      await axios.post(
-        `${BASE_URL}/reviews/reviews`,
+      const { error } = await supabase.from("reviews").insert([
         {
           meal_id: mealId,
+          user_id: userId,
           rating,
           comment,
         },
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
+      ]);
+
+      if (error) {
+        throw error;
+      }
 
       Alert.alert("Success", "Your review has been submitted!");
       router.back(); // Navigate back after submission

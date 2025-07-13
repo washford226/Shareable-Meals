@@ -13,14 +13,13 @@ import {
   Image,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import axios from "axios";
 import { Meal } from "../../../types/types";
 import { useTheme } from "../../../context/ThemeContext";
-import { jwtDecode } from "jwt-decode"; 
 import { useRouter } from "expo-router";  // Import Expo Router hook
 import BottomNav from "components/bottomNav";
 import Icon from "react-native-vector-icons/FontAwesome"
 import RNPickerSelect from "react-native-picker-select";
+import { supabase } from "app/utils_supabase";
 
 interface MyMealsProps {
   onCreateMeal: () => void;
@@ -90,39 +89,33 @@ const [tempCuisineFilter, setTempCuisineFilter] = useState<string>(cuisineFilter
   const { theme } = useTheme();
   const router = useRouter(); // Initialize router
 
+  const getCurrentUserId = async () => {
+  const { data, error } = await supabase.auth.getUser();
+  if (error || !data?.user) return null;
+  return data.user.id;
+};
+
   const toggleFavorite = async (mealId: number) => {
-    try {
-      const token = await AsyncStorage.getItem("token");
-      if (!token) {
-        Alert.alert("Error", "User not authenticated. Please log in.");
-        return;
-      }
+  try {
+    const { data, error } = await supabase
+      .from("meals")
+      .update({ favorite: true }) // or false, toggle as needed
+      .eq("id", mealId);
 
-      // Call the favorite route
-      const response = await axios.put(`${BASE_URL}/meal/meals/${mealId}/favorite`, null, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+    if (error) throw error;
 
-      if (response.status === 200) {
-        // Update the local state to reflect the new favorite status
-        setMeals((prevMeals) =>
-          prevMeals.map((meal) =>
-            meal.id === mealId ? { ...meal, favorite: response.data.favorite } : meal
-          )
-        );
-      }
-    } catch (error) {
-      console.error("Error toggling favorite status:", error);
-      Alert.alert("Error", "Failed to update favorite status. Please try again.");
-    }
-  };
+    // Update local state as needed
+  } catch (error) {
+    console.error("Error toggling favorite status:", error);
+    Alert.alert("Error", "Failed to update favorite status. Please try again.");
+  }
+};
 
-  useEffect(() => {
-  const restoreFilters = async () => {
-    const token = await AsyncStorage.getItem("token");
-    if (!token) return;
-
-    const userId = await getUserIdFromToken();
+useEffect(() => {
+  const restoreFiltersAndFetchMeals = async () => {
+    // Restore filters from AsyncStorage
+    const user = await supabase.auth.getUser();
+    const userId = user.data?.user?.id;
     if (!userId) return;
 
     const savedFilters = await AsyncStorage.getItem(`filters_MyMeals_${userId}`);
@@ -130,7 +123,6 @@ const [tempCuisineFilter, setTempCuisineFilter] = useState<string>(cuisineFilter
     const savedDietary = await AsyncStorage.getItem(`dietaryRestrictionFilter_MyMeals_${userId}`);
     const savedAi = await AsyncStorage.getItem(`aiFilter_MyMeals_${userId}`);
     const savedCuisine = await AsyncStorage.getItem(`cuisineFilter_MyMeals_${userId}`);
-    if (savedCuisine !== null) setCuisineFilter(savedCuisine);
 
     if (savedFilters) {
       const parsedFilters = JSON.parse(savedFilters);
@@ -140,45 +132,48 @@ const [tempCuisineFilter, setTempCuisineFilter] = useState<string>(cuisineFilter
     if (savedSearchQuery) setSearchQuery(savedSearchQuery);
     if (savedDietary !== null) setDietaryRestrictionFilter(savedDietary);
     if (savedAi !== null) setAiFilter(savedAi);
+    if (savedCuisine !== null) setCuisineFilter(savedCuisine);
 
     setFiltersLoaded(true);
   };
 
-  restoreFilters();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  restoreFiltersAndFetchMeals();
 }, []);
 
   useEffect(() => {
   if (!filtersLoaded) return;
 
   const fetchMyMeals = async () => {
-    setLoading(true);
-    try {
-      const token = await AsyncStorage.getItem("token");
-      if (!token) {
-        Alert.alert("Error", "User not authenticated. Please log in.");
-        return;
-      }
-
-      const params: any = {};
-      if (dietaryRestrictionFilter) params.dietary_restrictions = dietaryRestrictionFilter;
-      if (aiFilter === "ai") params.created_by_ai = "true";
-      if (aiFilter === "not_ai") params.created_by_ai = "false";
-      if (cuisineFilter) params.cuisine = cuisineFilter;
-
-      const response = await axios.get(`${BASE_URL}/meal/my-meals`, {
-        headers: { Authorization: `Bearer ${token}` },
-        params,
-      });
-
-      setMeals(response.data);
-    } catch (error) {
-      console.error("Error fetching meals:", error);
-      Alert.alert("Error", "Failed to fetch meals. Please try again later.");
-    } finally {
-      setLoading(false);
+  setLoading(true);
+  try {
+    const userId = await getCurrentUserId();
+    if (!userId) {
+      Alert.alert("Error", "User not authenticated. Please log in.");
+      return;
     }
-  };
+
+    let query = supabase
+      .from("meals")
+      .select("*")
+      .eq("user_id", userId);
+
+    if (dietaryRestrictionFilter) query = query.eq("dietary_restrictions", dietaryRestrictionFilter);
+    if (aiFilter === "ai") query = query.eq("created_by_ai", true);
+    if (aiFilter === "not_ai") query = query.eq("created_by_ai", false);
+    if (cuisineFilter) query = query.eq("cuisine", cuisineFilter);
+
+    const { data, error } = await query;
+
+    if (error) throw error;
+
+    setMeals(data || []);
+  } catch (error) {
+    console.error("Error fetching meals:", error);
+    Alert.alert("Error", "Failed to fetch meals. Please try again later.");
+  } finally {
+    setLoading(false);
+  }
+};
 
   fetchMyMeals();
 }, [filtersLoaded, dietaryRestrictionFilter, aiFilter, cuisineFilter]);
@@ -220,34 +215,21 @@ const [tempCuisineFilter, setTempCuisineFilter] = useState<string>(cuisineFilter
   };
 
   const handleSearchChange = async (text: string) => {
-    setSearchQuery(text); 
-    try {
-      const userId = await getUserIdFromToken(); 
-      if (!userId) {
-        Alert.alert("Error", "User not authenticated. Please log in.");
-        return;
-      }
-  
-      await AsyncStorage.setItem(`searchQuery_MyMeals_${userId}`, text); 
-    } catch (error) {
-      console.error("Error saving search query:", error);
+  setSearchQuery(text);
+  try {
+    const { data, error } = await supabase.auth.getUser();
+    const userId = data?.user?.id;
+    if (!userId) {
+      Alert.alert("Error", "User not authenticated. Please log in.");
+      return;
     }
-  };
+    await AsyncStorage.setItem(`searchQuery_MyMeals_${userId}`, text);
+  } catch (error) {
+    console.error("Error saving search query:", error);
+  }
+};
 
-  const getUserIdFromToken = async (): Promise<number | null> => {
-    try {
-      const token = await AsyncStorage.getItem("token");
-      if (!token) {
-        return null;
-      }
 
-      const decodedToken = jwtDecode<{ id: number }>(token); 
-      return decodedToken.id;
-    } catch (error) {
-      console.error("Error decoding token:", error);
-      return null;
-    }
-  };
 
   const clearFilters = async () => {
   const defaultFilters = [
@@ -265,8 +247,10 @@ const [tempCuisineFilter, setTempCuisineFilter] = useState<string>(cuisineFilter
   setCuisineFilter("");
   setTempCuisineFilter("");
   setSearchQuery("");
-  // Optionally clear from AsyncStorage as well
-  const userId = await getUserIdFromToken();
+
+  // Use Supabase to get the user ID
+  const { data, error } = await supabase.auth.getUser();
+  const userId = data?.user?.id;
   if (userId) {
     await AsyncStorage.removeItem(`filters_MyMeals_${userId}`);
     await AsyncStorage.removeItem(`searchQuery_MyMeals_${userId}`);
@@ -279,7 +263,8 @@ const [tempCuisineFilter, setTempCuisineFilter] = useState<string>(cuisineFilter
 
 const applyFilters = async () => {
   try {
-    const userId = await getUserIdFromToken(); 
+    const { data, error } = await supabase.auth.getUser();
+    const userId = data?.user?.id;
     if (!userId) {
       Alert.alert("Error", "User not authenticated. Please log in.");
       return;
@@ -296,15 +281,17 @@ const applyFilters = async () => {
       return;
     }
 
-    setFilters(tempFilters); 
-    setDietaryRestrictionFilter(tempDietaryRestrictionFilter); 
+    setFilters(tempFilters);
+    setDietaryRestrictionFilter(tempDietaryRestrictionFilter);
     setAiFilter(tempAiFilter);
     setCuisineFilter(tempCuisineFilter);
-    await AsyncStorage.setItem(`cuisineFilter_MyMeals_${userId}`, tempCuisineFilter);
-    await AsyncStorage.setItem(`filters_MyMeals_${userId}`, JSON.stringify(tempFilters)); 
+
+    await AsyncStorage.setItem(`filters_MyMeals_${userId}`, JSON.stringify(tempFilters));
     await AsyncStorage.setItem(`aiFilter_MyMeals_${userId}`, tempAiFilter);
     await AsyncStorage.setItem(`dietaryRestrictionFilter_MyMeals_${userId}`, tempDietaryRestrictionFilter);
-    setIsFilterModalVisible(false); 
+    await AsyncStorage.setItem(`cuisineFilter_MyMeals_${userId}`, tempCuisineFilter);
+
+    setIsFilterModalVisible(false);
   } catch (error) {
     console.error("Error saving filters:", error);
   }
@@ -315,6 +302,7 @@ const applyFilters = async () => {
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       <ActivityIndicator size="large" color={theme.primary} />
       <Text style={[styles.loadingText, { color: theme.text }]}>Loading your meals...</Text>
+      <BottomNav />
     </View>
   );
 }

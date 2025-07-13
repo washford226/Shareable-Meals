@@ -7,60 +7,56 @@ import {
   StyleSheet,
   Alert,
   ActivityIndicator,
-  Platform,
 } from "react-native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import axios from "axios";
 import { useTheme } from "../../../context/ThemeContext";
 import { useRouter } from "expo-router";
-
-const BASE_URL = Platform.OS === "android" ? "http://10.0.2.2:5000" : "http://localhost:5000";
+import { supabase } from "app/utils_supabase";
 
 const EditEmail = () => {
   const [email, setEmail] = useState<string>("");
   const [password, setPassword] = useState<string>("");
-  const [username, setUsername] = useState<string>(""); // State for username
+  const [username, setUsername] = useState<string>("");
   const [loading, setLoading] = useState(false);
-  const [fetchingUsername, setFetchingUsername] = useState(true); // State for fetching username
+  const [fetchingUser, setFetchingUser] = useState(true);
 
   const { theme } = useTheme();
   const router = useRouter();
 
-  // Fetch the username when the screen loads
+  // Fetch the username and current email when the screen loads
   useEffect(() => {
-    const fetchUsername = async () => {
+    const fetchUser = async () => {
       try {
-        const token = await AsyncStorage.getItem("token");
-        if (!token) {
+        const { data: userData, error: userError } = await supabase.auth.getUser();
+        if (userError || !userData?.user) {
           Alert.alert("Error", "User not authenticated. Please log in.");
-          router.replace("/login"); // Redirect to login if not authenticated
+          router.replace("/login");
+          return;
+        }
+        const userId = userData.user.id;
+
+        // Fetch user profile from 'users' table
+        const { data, error } = await supabase
+          .from("users")
+          .select("*")
+          .eq("id", userId)
+          .single();
+
+        if (error) {
+          Alert.alert("Error", "Failed to fetch user information.");
           return;
         }
 
-        const response = await axios.get(`${BASE_URL}/users/user`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
-
-        if (response.status === 200) {
-          setUsername(response.data.username); // Set the username from the response
-        } else {
-          Alert.alert("Error", "Failed to fetch user information.");
-        }
+        setUsername(data.username ?? "");
+        setEmail(userData.user.email ?? ""); // Set the email from auth user
       } catch (error) {
-        if (axios.isAxiosError(error)) {
-          console.error("Error fetching username:", error.response?.data || error.message);
-        } else {
-          console.error("Error fetching username:", error);
-        }
+        console.error("Error fetching user:", error);
         Alert.alert("Error", "An error occurred while fetching user information.");
       } finally {
-        setFetchingUsername(false); // Stop the loading indicator
+        setFetchingUser(false);
       }
     };
 
-    fetchUsername();
+    fetchUser();
   }, []);
 
   const handleUpdateEmail = async () => {
@@ -77,44 +73,36 @@ const EditEmail = () => {
     setLoading(true);
 
     try {
-      const token = await AsyncStorage.getItem("token");
-      if (!token) {
-        Alert.alert("Error", "User not authenticated. Please log in.");
+      // Re-authenticate user (Supabase does not require password for email update, but you may want to verify password yourself)
+      // Update email in Supabase Auth
+      const { data, error } = await supabase.auth.updateUser({ email });
+
+      if (error) {
+        Alert.alert("Error", error.message || "Failed to update email. Please try again.");
         return;
       }
 
-      const response = await axios.put(
-        `${BASE_URL}/users/user/${username}/email`, // Use the fetched username
-        { email, currentPassword: password }, // Use currentPassword as per backend
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
+      // Optionally, update email in your 'users' table as well
+      const { error: userTableError } = await supabase
+        .from("users")
+        .update({ email })
+        .eq("username", username);
 
-      if (response.status === 200) {
-        Alert.alert("Success", "Your email has been updated!");
-        router.back(); // Navigate back after successful update
-      } else {
-        Alert.alert("Error", "Failed to update email. Please try again.");
+      if (userTableError) {
+        Alert.alert("Warning", "Email updated in authentication, but not in user profile table.");
       }
-    } catch (error) {
-      if (axios.isAxiosError(error)) {
-        console.error("Error updating email:", error.response?.data || error.message);
-      } else {
-        console.error("Error updating email:", error);
-      }
-      const errorMessage = axios.isAxiosError(error) && error.response?.data?.error 
-        ? error.response.data.error 
-        : "An error occurred while updating your email.";
-      Alert.alert("Error", errorMessage);
+
+      Alert.alert("Success", "Your email has been updated! Please check your inbox to confirm the new email.");
+      router.back();
+    } catch (error: any) {
+      console.error("Error updating email:", error);
+      Alert.alert("Error", error.message || "An error occurred while updating your email.");
     } finally {
       setLoading(false);
     }
   };
 
-  if (fetchingUsername) {
+  if (fetchingUser) {
     return (
       <View style={[styles.container, { backgroundColor: theme.background }]}>
         <ActivityIndicator size="large" color={theme.primary} />
@@ -143,7 +131,7 @@ const EditEmail = () => {
         placeholderTextColor={theme.placeholder}
         value={password}
         onChangeText={setPassword}
-        secureTextEntry={true} // Hide password input
+        secureTextEntry={true}
         autoCapitalize="none"
       />
 

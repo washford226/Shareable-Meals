@@ -7,41 +7,45 @@ import {
   StyleSheet,
   Alert,
   ActivityIndicator,
-  Platform,
 } from "react-native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import axios from "axios";
 import { useRouter } from "expo-router";
 import { useTheme } from "../../../context/ThemeContext";
-
-const BASE_URL = Platform.OS === "android" ? "http://10.0.2.2:5000" : "http://localhost:5000";
+import { supabase } from "app/utils_supabase";
 
 const AddMeal = () => {
   interface Meal {
-    id: number; // Updated to match the backend response
+    id: number;
     name: string;
     favorite: boolean;
   }
 
   const [meals, setMeals] = useState<Meal[]>([]);
   const [loading, setLoading] = useState(true);
+  const [addingMeal, setAddingMeal] = useState(false);
   const router = useRouter();
   const { theme } = useTheme();
 
-  // Fetch user's meals
+  // Fetch user's meals from Supabase
   const fetchUserMeals = async () => {
     try {
-      const token = await AsyncStorage.getItem("token");
-      if (!token) {
+      setLoading(true);
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+      if (userError || !userData?.user) {
         Alert.alert("Error", "User not authenticated. Please log in.");
         setLoading(false);
         return;
       }
+      const userId = userData.user.id;
 
-      const response = await axios.get(`${BASE_URL}/meal/my-meals`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      setMeals(response.data);
+      const { data, error } = await supabase
+        .from("meals")
+        .select("id, name, favorite")
+        .eq("user_id", userId);
+
+      if (error) {
+        throw error;
+      }
+      setMeals(data || []);
     } catch (error) {
       console.error("Error fetching user meals:", error);
       Alert.alert("Error", "Failed to fetch your meals. Please try again later.");
@@ -51,35 +55,35 @@ const AddMeal = () => {
   };
 
   // Handle adding a meal to the competition
- const [addingMeal, setAddingMeal] = useState(false);
+  const handleAddMeal = async (mealId: number) => {
+    setAddingMeal(true);
+    try {
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+      if (userError || !userData?.user) {
+        Alert.alert("Error", "User not authenticated. Please log in.");
+        setAddingMeal(false);
+        return;
+      }
+      const userId = userData.user.id;
 
-const handleAddMeal = async (mealId: number) => {
-  setAddingMeal(true);
-  try {
-    const token = await AsyncStorage.getItem("token");
-    if (!token) {
-      Alert.alert("Error", "User not authenticated. Please log in.");
-      return;
-    }
+      // Insert into 'competition_meals' (or your competition meals table)
+      const { error } = await supabase
+        .from("competition_meals")
+        .insert([{ meal_id: mealId, user_id: userId }]);
 
-    await axios.post(
-      `${BASE_URL}/comp/competitions/current/meals`,
-      { meal_id: mealId },
-      { headers: { Authorization: `Bearer ${token}` } }
-    );
-    Alert.alert("Success", "Meal added to the competition!");
-    router.push("/competition/current-meals");
-  } catch (error) {
-    if (axios.isAxiosError(error)) {
-      console.error("Error adding meal to competition:", error.response?.data || error.message);
-    } else {
+      if (error) {
+        throw error;
+      }
+
+      Alert.alert("Success", "Meal added to the competition!");
+      router.push("/competition/current-meals");
+    } catch (error) {
       console.error("Error adding meal to competition:", error);
+      Alert.alert("Error", "Failed to add your meal to the competition. Please try again later.");
+    } finally {
+      setAddingMeal(false);
     }
-    Alert.alert("Error", "Failed to add your meal to the competition. Please try again later.");
-  } finally {
-    setAddingMeal(false);
-  }
-};
+  };
 
   useEffect(() => {
     fetchUserMeals();
@@ -98,7 +102,7 @@ const handleAddMeal = async (mealId: number) => {
       {/* Back Button */}
       <TouchableOpacity
         style={[styles.backButton, { backgroundColor: theme.primary }]}
-        onPress={() => router.back()} // Navigate back to the previous screen
+        onPress={() => router.back()}
       >
         <Text style={[styles.backButtonText, { color: theme.buttonText }]}>Back</Text>
       </TouchableOpacity>
@@ -107,10 +111,10 @@ const handleAddMeal = async (mealId: number) => {
 
       <FlatList
         data={meals}
-        keyExtractor={(item, index) => item.id?.toString() || index.toString()} // Updated to use `id`
+        keyExtractor={(item, index) => item.id?.toString() || index.toString()}
         renderItem={({ item }) => {
           if (!item.id) {
-            console.warn("Invalid meal object:", item); // Debugging log
+            console.warn("Invalid meal object:", item);
             return null;
           }
           return (
@@ -118,9 +122,12 @@ const handleAddMeal = async (mealId: number) => {
               <Text style={[styles.mealName, { color: theme.text }]}>{item.name}</Text>
               <TouchableOpacity
                 style={[styles.addButton, { backgroundColor: theme.primary }]}
-                onPress={() => handleAddMeal(item.id)} // Updated to use `id`
+                onPress={() => handleAddMeal(item.id)}
+                disabled={addingMeal}
               >
-                <Text style={[styles.addButtonText, { color: theme.buttonText }]}>Add to Competition</Text>
+                <Text style={[styles.addButtonText, { color: theme.buttonText }]}>
+                  {addingMeal ? "Adding..." : "Add to Competition"}
+                </Text>
               </TouchableOpacity>
             </View>
           );

@@ -1,14 +1,15 @@
 import { Router } from 'express';
-import meal from './meals'; // Import the meal route
-import reviews from './reviews'; // Import the reviews route
-import users from './users'; // Import the users route
-import mealplan from './mealplan'; // Import the meal plan route
-import report from './report'; // Import the report route
-import AI from './AI'; // Import the AI route
-import urlmeals from './urlmeals'; // Import the URL meals route
-import pantry from './pantry'; // Import the pantry route
-import comp from './competition'; // Import the competition route
+import meal from './meals'; // Meal routes (should use Supabase in meals.ts)
+import reviews from './reviews'; // Review routes (should use Supabase in reviews.ts)
+import users from './users'; // User routes (should use Supabase in users.ts)
+import mealplan from './mealplan'; // Meal plan routes (should use Supabase in mealplan.ts)
+import report from './report'; // Report routes (should use Supabase in report.ts)
+import AI from './AI'; // AI routes (should use Supabase in AI.ts)
+import urlmeals from './urlmeals'; // URL meals routes (should use Supabase in urlmeals.ts)
+import pantry from './pantry'; // Pantry routes (should use Supabase in pantry.ts)
+import comp from './competition'; // Competition routes (should use Supabase in competition.ts)
 
+// All imported route files should be updated to use Supabase as their database layer.
 
 const router = Router();
 
@@ -30,10 +31,13 @@ router.use('/report', report);
 // Routes for AI-related operations
 router.use('/AI', AI);
 
-router.use('/urlmeals', urlmeals); // Routes for URL meals
+// Routes for URL meals
+router.use('/urlmeals', urlmeals);
 
-router.use('/pantry', pantry); // Routes for pantry items
+// Routes for pantry items
+router.use('/pantry', pantry);
 
-router.use('/comp', comp); // Routes for competitions
+// Routes for competitions
+router.use('/comp', comp);
 
 export default router;

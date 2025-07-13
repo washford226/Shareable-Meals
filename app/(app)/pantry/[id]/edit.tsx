@@ -6,15 +6,11 @@ import {
   TouchableOpacity,
   StyleSheet,
   Alert,
-  Platform,
 } from "react-native";
-import axios from "axios";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { useTheme } from "../../../../context/ThemeContext";
-
-const BASE_URL = Platform.OS === "android" ? "http://10.0.2.2:5000" : "http://localhost:5000";
+import { supabase } from "app/utils_supabase";
 
 const EditPantryItem = () => {
   const { theme } = useTheme();
@@ -27,27 +23,46 @@ const EditPantryItem = () => {
   const [expirationDate, setExpirationDate] = useState<Date | null>(null);
   const [showDatePicker, setShowDatePicker] = useState(false);
 
+  // Fetch pantry item from Supabase
   useEffect(() => {
     const fetchPantryItem = async () => {
       try {
-        const token = await AsyncStorage.getItem("token");
-        const response = await axios.get(`${BASE_URL}/pantry/pantry/${id}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        const item = response.data;
-        setFood(item.food);
-        setQuantity(item.quantity?.toString() || "");
-        setUnit(item.unit || "");
-        setExpirationDate(item.expiration_date ? new Date(item.expiration_date) : null);
+        const { data: userData, error: userError } = await supabase.auth.getUser();
+        if (userError || !userData?.user) {
+          Alert.alert("Error", "User not authenticated. Please log in.");
+          router.push("/pantry/pantry");
+          return;
+        }
+        const userId = userData.user.id;
+
+        const { data, error } = await supabase
+          .from("pantry")
+          .select("*")
+          .eq("id", id)
+          .eq("user_id", userId)
+          .single();
+
+        if (error || !data) {
+          Alert.alert("Error", "Failed to fetch pantry item.");
+          router.push("/pantry/pantry");
+          return;
+        }
+        setFood(data.food || "");
+        setQuantity(data.quantity?.toString() || "");
+        setUnit(data.unit || "");
+        setExpirationDate(data.expiration_date ? new Date(data.expiration_date) : null);
       } catch (error) {
         console.error("Error fetching pantry item:", error);
         Alert.alert("Error", "Failed to fetch pantry item.");
+        router.push("/pantry/pantry");
       }
     };
 
-    fetchPantryItem();
+    if (id) fetchPantryItem();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
+  // Update pantry item in Supabase
   const handleUpdateItem = async () => {
     if (!food) {
       Alert.alert("Error", "Food name is required.");
@@ -55,21 +70,30 @@ const EditPantryItem = () => {
     }
 
     try {
-      const token = await AsyncStorage.getItem("token");
-      await axios.put(
-        `${BASE_URL}/pantry/pantry/${id}`,
-        {
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+      if (userError || !userData?.user) {
+        Alert.alert("Error", "User not authenticated. Please log in.");
+        return;
+      }
+      const userId = userData.user.id;
+
+      const { error } = await supabase
+        .from("pantry")
+        .update({
           food,
           quantity: quantity ? parseFloat(quantity) : null,
           unit,
           expiration_date: expirationDate ? expirationDate.toISOString().split("T")[0] : null,
-        },
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
-      );
+        })
+        .eq("id", id)
+        .eq("user_id", userId);
+
+      if (error) {
+        throw error;
+      }
+
       Alert.alert("Success", "Pantry item updated successfully.");
-      router.push("/pantry/pantry"); // Navigate back to the pantry list
+      router.push("/pantry/pantry");
     } catch (error) {
       console.error("Error updating pantry item:", error);
       Alert.alert("Error", "Failed to update pantry item.");

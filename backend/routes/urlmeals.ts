@@ -1,11 +1,21 @@
 import { Router, Request, Response } from "express";
 import axios from "axios";
 import * as cheerio from "cheerio";
+import { createClient } from "@supabase/supabase-js";
+import authMiddleware from "../authMiddleware";
+
+// Initialize Supabase client for backend (use service role key for full access)
+const supabase = createClient(
+  process.env.SUPABASE_URL || "",
+  process.env.SUPABASE_SERVICE_ROLE_KEY || ""
+);
 
 const router = Router();
 
-router.post("/fetch-recipe", async (req: Request, res: Response) => {
-  const { url } = req.body;
+// Fetch and parse a recipe from a URL, and optionally save to Supabase
+router.post("/fetch-recipe", authMiddleware, async (req: any, res: Response) => {
+  const { url, save } = req.body;
+  const user = req.user;
 
   if (!url) {
     res.status(400).json({ error: "URL is required." });
@@ -38,7 +48,7 @@ router.post("/fetch-recipe", async (req: Request, res: Response) => {
     let instructions: string[] = [];
     let servings: string | undefined;
 
-    // ✅ Parse ALL JSON-LD script blocks
+    // Parse ALL JSON-LD script blocks
     $('script[type="application/ld+json"]').each((_, el) => {
       const ldJsonRaw = $(el).html();
       if (!ldJsonRaw) return;
@@ -83,7 +93,7 @@ router.post("/fetch-recipe", async (req: Request, res: Response) => {
       }
     });
 
-    // ✅ Fallback: known HTML selectors (may improve coverage on some sites)
+    // Fallback: known HTML selectors
     if (ingredients.length === 0) {
       $("li.ingredient, span.ingredient, .recipe-ingredients__item, ul.ingredients li").each((_, el) => {
         const text = $(el).text().trim();
@@ -119,12 +129,41 @@ router.post("/fetch-recipe", async (req: Request, res: Response) => {
 
     const unique = (arr: string[]) => [...new Set(arr.map((s) => s.trim()).filter(Boolean))];
 
+    // If save=true, insert the meal into Supabase
+    let savedMeal = null;
+    if (save && user) {
+      try {
+        const { data, error } = await supabase
+          .from("meals")
+          .insert([{
+            name: name?.trim() || "Untitled Recipe",
+            description: description?.trim() || "",
+            ingredients: unique(ingredients),
+            instructions: unique(instructions).join(" "),
+            servings: servings || "1",
+            user_id: user.id,
+            recipeLink: url,
+            visibility: false,
+            created_by: "URL Import"
+          }])
+          .select()
+          .single();
+
+        if (error) throw error;
+        savedMeal = data;
+      } catch (err) {
+        console.error("Error saving meal to Supabase:", err);
+        // Don't fail the whole request if save fails, just don't return savedMeal
+      }
+    }
+
     res.status(200).json({
       name: name?.trim() || "Untitled Recipe",
       description: description?.trim(),
       ingredients: unique(ingredients),
       instructions: unique(instructions).join(" "),
-      servings: servings || "1", // Default to 1 if not found
+      servings: servings || "1",
+      savedMeal,
     });
   } catch (error) {
     console.error("Error fetching recipe:", error);

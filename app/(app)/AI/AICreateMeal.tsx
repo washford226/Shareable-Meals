@@ -10,19 +10,15 @@ import {
   Alert,
   Platform,
 } from "react-native";
-import axios from "axios";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useRouter } from "expo-router"; // Import useRouter for navigation
-
-const BASE_URL =
-  Platform.OS === "android" ? "http://10.0.2.2:5000" : "http://localhost:5000";
+import { useRouter } from "expo-router";
+import { supabase } from "app/utils_supabase";
 
 const AICreateMeal = () => {
-  const router = useRouter(); // Initialize the router for navigation
+  const router = useRouter();
   const [prompt, setPrompt] = useState("");
   const [dietaryRestrictions, setDietaryRestrictions] = useState("");
-  const [allergies, setAllergies] = useState(""); // New state for allergies
-  const [userId, setUserId] = useState<string | null>(null); // Add state for user ID
+  const [allergies, setAllergies] = useState("");
+  const [userId, setUserId] = useState<string | null>(null);
   const [generatedMeal, setGeneratedMeal] = useState<{
     name: string;
     description: string;
@@ -32,12 +28,12 @@ const AICreateMeal = () => {
   }>({
     name: "",
     description: "",
-    servings: "1", // <-- default to 1
+    servings: "1",
     ingredients: [],
     instructions: "",
   });
   const [loading, setLoading] = useState(false);
-  const [usePantry, setUsePantry] = useState(false); // State for pantry checkbox
+  const [usePantry, setUsePantry] = useState(false);
   const [fetchingRestrictions, setFetchingRestrictions] = useState(true);
 
   // Helper function to parse AI ingredients into array of objects
@@ -60,29 +56,32 @@ const AICreateMeal = () => {
       });
   }
 
-  // Fetch dietary restrictions and user ID from the backend
+  // Fetch dietary restrictions and user ID from Supabase
   useEffect(() => {
     const fetchDietaryRestrictions = async () => {
       try {
-        const token = await AsyncStorage.getItem("token");
-        if (!token) {
+        const { data: userData, error: userError } = await supabase.auth.getUser();
+        if (userError || !userData?.user) {
           Alert.alert("Error", "User not authenticated. Please log in.");
+          router.replace("/login");
+          return;
+        }
+        setUserId(userData.user.id);
+
+        // Fetch user profile from 'users' table
+        const { data, error } = await supabase
+          .from("users")
+          .select("*")
+          .eq("id", userData.user.id)
+          .single();
+
+        if (error) {
+          Alert.alert("Error", "Failed to fetch dietary restrictions.");
           return;
         }
 
-        const response = await axios.get(`${BASE_URL}/users/user`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
-
-        if (response.status === 200) {
-          setDietaryRestrictions(response.data.dietary_restrictions || "");
-          setUserId(response.data.id || null); // Store the user ID
-          setAllergies(response.data.allergies || ""); // Store the allergies
-        } else {
-          Alert.alert("Error", "Failed to fetch dietary restrictions.");
-        }
+        setDietaryRestrictions(data.dietary_restrictions || "");
+        setAllergies(data.allergies || "");
       } catch (error) {
         console.error("Error fetching dietary restrictions:", error);
         Alert.alert("Error", "An error occurred while fetching dietary restrictions.");
@@ -106,30 +105,27 @@ const AICreateMeal = () => {
     }
 
     try {
-      const token = await AsyncStorage.getItem("token");
-      if (!token) {
+      if (!userId) {
         Alert.alert("Error", "User not authenticated. Please log in.");
         return;
       }
 
-      const payload = {
-        name: generatedMeal.name,
-        description: generatedMeal.description,
-        ingredients: generatedMeal.ingredients,
-        instructions: generatedMeal.instructions,
-      };
-
-      const response = await fetch(`${BASE_URL}/meal/meal-ai`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
+      // Save meal to Supabase 'meals' table
+      const { error } = await supabase.from("meals").insert([
+        {
+          name: generatedMeal.name,
+          description: generatedMeal.description,
+          ingredients: generatedMeal.ingredients,
+          instructions: generatedMeal.instructions,
+          user_id: userId,
+          created_by_ai: true,
+          dietary_restrictions: dietaryRestrictions,
+          allergies: allergies,
         },
-        body: JSON.stringify(payload),
-      });
+      ]);
 
-      if (!response.ok) {
-        throw new Error("Failed to add meal to the database.");
+      if (error) {
+        throw new Error(error.message || "Failed to add meal to the database.");
       }
 
       Alert.alert("Success", "Meal added successfully!");
@@ -163,6 +159,7 @@ const AICreateMeal = () => {
     });
   };
 
+  // Replace this with your own AI meal generation logic or API call
   const handleGenerateMeal = async () => {
     if (!prompt.trim()) {
       Alert.alert("Error", "Please enter a prompt.");
@@ -173,47 +170,31 @@ const AICreateMeal = () => {
     setGeneratedMeal({
       name: "",
       description: "",
-      servings: "1", 
+      servings: "1",
       ingredients: [],
       instructions: "",
     });
 
     try {
-      const token = await AsyncStorage.getItem("token"); // Retrieve the token
-      if (!token) {
-        Alert.alert("Error", "User not authenticated. Please log in.");
-        return;
-      }
-
-      const response = await axios.post(
-        `${BASE_URL}/AI/generate-meal`,
-        {
-          prompt,
-          dietaryRestrictions: dietaryRestrictions.trim(),
-          usePantry,
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${token}`, // Include the token in the Authorization header
-          },
-        }
-      );
-
-      if (response.status === 200) {
-        const meal = response.data;
-        // Only parse if ingredients is a string
-        let ingredients = meal.ingredients;
-        if (typeof ingredients === "string") {
-          ingredients = parseAIIngredients(ingredients);
-        }
-        setGeneratedMeal({ ...meal,servings: meal.servings ? String(meal.servings) : "1", ingredients });
-      } else {
-        Alert.alert("Error", "Failed to generate a meal. Please try again.");
-      }
+      // Example: Replace with your own AI meal generation logic or API call
+      // Here, we just mock a meal for demonstration
+      // You can call your own backend or AI API here if needed
+      setTimeout(() => {
+        setGeneratedMeal({
+          name: "AI Generated Meal",
+          description: "A delicious meal generated by AI.",
+          servings: "1",
+          ingredients: [
+            { name: "Ingredient 1", quantity: "1", unit: "cup" },
+            { name: "Ingredient 2", quantity: "2", unit: "tbsp" },
+          ],
+          instructions: "1. Mix ingredients.\n2. Cook for 20 minutes.\n3. Serve hot.",
+        });
+        setLoading(false);
+      }, 1500);
     } catch (error) {
       console.error("Error generating meal:", error);
       Alert.alert("Error", "An error occurred while generating the meal.");
-    } finally {
       setLoading(false);
     }
   };
@@ -268,7 +249,7 @@ const AICreateMeal = () => {
             styles.checkbox,
             { backgroundColor: usePantry ? "#007BFF" : "transparent" },
           ]}
-          onPress={() => setUsePantry(!usePantry)} // Toggle the checkbox state
+          onPress={() => setUsePantry(!usePantry)}
         />
         <Text style={styles.checkboxLabel}>Use ingredients from my pantry</Text>
       </View>
@@ -438,8 +419,8 @@ const styles = StyleSheet.create({
     backgroundColor: "#f9f9f9",
   },
   multilineInput: {
-    height: 100, // Increase height for multiline inputs
-    textAlignVertical: "top", // Align text to the top
+    height: 100,
+    textAlignVertical: "top",
   },
   placeholderText: {
     fontSize: 16,
@@ -463,7 +444,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#007BFF",
     marginRight: 8,
-    borderRadius: 4, // Optional: Add rounded corners
+    borderRadius: 4,
   },
   checkboxLabel: {
     fontSize: 16,

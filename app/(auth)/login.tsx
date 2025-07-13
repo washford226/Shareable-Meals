@@ -1,32 +1,40 @@
 import React, { useState } from "react";
-import { View, Text, TextInput, StyleSheet, Alert, TouchableOpacity, Image, Platform } from "react-native";
+import { View, Text, TextInput, StyleSheet, Alert, TouchableOpacity, Image } from "react-native";
 import { useRouter } from "expo-router";
-import axios from "axios";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { supabase } from "app/utils_supabase";
 
 const logo = require("../../assets/images/logo-transparent-png.png"); // Update if needed
 
 const LoginScreen = () => {
   const router = useRouter();
 
-  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState(""); // Supabase uses email for login
   const [password, setPassword] = useState("");
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   const handleLogin = async () => {
+    if (!email || !password) {
+      Alert.alert("Error", "Please enter your email and password.");
+      return;
+    }
+    setLoading(true);
     try {
-      const response = await axios.post(
-        `${Platform.OS === "android" ? "http://10.0.2.2:5000" : "http://localhost:5000"}/users/login`,
-        { username, password }
-      );
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
 
-      if (response.status === 200) {
-        const { token } = response.data;
-        await AsyncStorage.setItem("token", token);
-        router.replace("../meal-plan/calendar"); // Adjusted to use a relative path
+      if (error) {
+        Alert.alert("Error", error.message || "Invalid email or password.");
+      } else {
+        router.replace("../meal-plan/calendar");
       }
     } catch (error) {
-      Alert.alert("Error", "Invalid username or password.");
+      console.error("Login error:", error);
+      Alert.alert("Error", "An unexpected error occurred. Please try again.");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -38,10 +46,13 @@ const LoginScreen = () => {
       <View style={styles.inputContainer}>
         <TextInput
           style={styles.input}
-          placeholder="Username"
-          value={username}
-          onChangeText={setUsername}
+          placeholder="Email"
+          value={email}
+          onChangeText={setEmail}
           textAlign="left"
+          autoCapitalize="none"
+          keyboardType="email-address"
+          autoCorrect={false}
         />
       </View>
 
@@ -62,19 +73,19 @@ const LoginScreen = () => {
         </TouchableOpacity>
       </View>
 
-      <TouchableOpacity style={styles.button} onPress={handleLogin}>
-        <Text style={styles.buttonText}>Login</Text>
+      <TouchableOpacity style={styles.button} onPress={handleLogin} disabled={loading}>
+        <Text style={styles.buttonText}>{loading ? "Logging in..." : "Login"}</Text>
       </TouchableOpacity>
 
       <TouchableOpacity
         style={styles.button}
-        onPress={() => router.push("../(auth)/signup")} // Assuming you have a SignUpScreen
+        onPress={() => router.push("../(auth)/signup")}
       >
         <Text style={styles.buttonText}>Create Account</Text>
       </TouchableOpacity>
 
       <TouchableOpacity onPress={() => router.push("../(auth)/forgot-password")}>
-        <Text style={styles.forgotPasswordText}>Forgot username or password?</Text>
+        <Text style={styles.forgotPasswordText}>Forgot password?</Text>
       </TouchableOpacity>
     </View>
   );

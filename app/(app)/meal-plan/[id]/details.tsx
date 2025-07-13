@@ -5,20 +5,15 @@ import {
   StyleSheet,
   TouchableOpacity,
   Alert,
-  Platform,
   FlatList,
   ActivityIndicator,
   Image,
   Linking,
-  ScrollView,
 } from "react-native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import axios from "axios";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Meal } from "../../../../types/types";
 import { useTheme } from "../../../../context/ThemeContext";
-
-const BASE_URL = Platform.OS === "android" ? "http://10.0.2.2:5000" : "http://localhost:5000";
+import { supabase } from "app/utils_supabase";
 
 const MealPlanDetails = () => {
   const { id } = useLocalSearchParams();
@@ -31,11 +26,39 @@ const MealPlanDetails = () => {
   useEffect(() => {
     const fetchMeal = async () => {
       try {
-        const token = await AsyncStorage.getItem("token");
-        const response = await axios.get(`${BASE_URL}/mealplan/meal-plan/${id}`, {
-          headers: { Authorization: `Bearer ${token}` },
+        // id is the meal_plan row id
+        const { data, error } = await supabase
+          .from("meal_plan")
+          .select(
+            `
+            meal_plan_id: id,
+            meal:meals (
+              id,
+              name,
+              description,
+              ingredients,
+              instructions,
+              picture,
+              recipeLink,
+              calories,
+              protein,
+              carbohydrates,
+              fat
+            )
+          `
+          )
+          .eq("id", id)
+          .single();
+
+        if (error || !data || !data.meal) {
+          throw error || new Error("Meal not found");
+        }
+
+        // Flatten meal data for easier rendering
+        setMeal({
+          ...data.meal[0],
+          meal_plan_id: data.meal_plan_id,
         });
-        setMeal(response.data);
       } catch (error) {
         console.error("Failed to fetch meal:", error);
         Alert.alert("Error", "Could not fetch meal details.");
@@ -58,15 +81,17 @@ const MealPlanDetails = () => {
           style: "destructive",
           onPress: async () => {
             try {
-              const token = await AsyncStorage.getItem("token");
-              if (!token || !meal) {
-                Alert.alert("Error", "You are not logged in or meal not loaded.");
+              if (!meal) {
+                Alert.alert("Error", "Meal not loaded.");
                 return;
               }
 
-              await axios.delete(`${BASE_URL}/mealplan/meal-plan/${meal.meal_plan_id}`, {
-                headers: { Authorization: `Bearer ${token}` },
-              });
+              const { error } = await supabase
+                .from("meal_plan")
+                .delete()
+                .eq("id", meal.meal_plan_id);
+
+              if (error) throw error;
 
               Alert.alert("Success", "Meal deleted successfully.");
               router.back();

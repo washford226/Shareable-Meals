@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   ScrollView,
@@ -9,18 +9,16 @@ import {
   Alert,
   Modal,
   Image,
-  Linking } from "react-native";
+  Linking,
+} from "react-native";
 import { useTheme } from "../../../../context/ThemeContext";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import axios from "axios";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Picker } from "@react-native-picker/picker";
 import { format } from "date-fns";
 import { Meal } from "../../../../types/types";
 import QRCode from "react-native-qrcode-svg";
 import DateTimePicker from "@react-native-community/datetimepicker";
-
-const BASE_URL = Platform.OS === "android" ? "http://10.0.2.2:5000" : "http://localhost:5000";
+import { Picker } from "@react-native-picker/picker";
+import { supabase } from "app/utils_supabase";
 
 const MyMealInfo = () => {
   const { theme } = useTheme();
@@ -34,54 +32,76 @@ const MyMealInfo = () => {
   const [loading, setLoading] = useState(false);
   const [isQRModalVisible, setIsQRModalVisible] = useState(false);
 
+  // Fetch meal from Supabase
   const fetchMeal = async () => {
     try {
-      const token = await AsyncStorage.getItem("token");
-      const response = await axios.get(`${BASE_URL}/meal/meals/${id}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (response.status === 200) {
-        setMeal(response.data);
+      setLoading(true);
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+      if (userError || !userData?.user) {
+        Alert.alert("Error", "User not authenticated. Please log in.");
+        router.back();
+        return;
       }
+      const userId = userData.user.id;
+
+      const { data, error } = await supabase
+        .from("meals")
+        .select("*")
+        .eq("id", id)
+        .eq("user_id", userId)
+        .single();
+
+      if (error || !data) {
+        Alert.alert("Error", "Meal not found.");
+        router.back();
+        return;
+      }
+      setMeal(data);
     } catch (error) {
       console.error("Error fetching meal:", error);
+      Alert.alert("Error", "Could not fetch meal.");
+    } finally {
+      setLoading(false);
     }
   };
 
+  // Add meal to meal plan in Supabase
   const handleAddToMealPlan = async () => {
     if (!selectedDate) {
       Alert.alert("Error", "Please select a date.");
       return;
     }
-
     try {
-      const token = await AsyncStorage.getItem("token");
-      if (!token) {
+      setLoading(true);
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+      if (userError || !userData?.user) {
         Alert.alert("Error", "User not authenticated. Please log in.");
         return;
       }
+      const userId = userData.user.id;
 
-      const response = await axios.post(
-        `${BASE_URL}/mealplan/meal-plan`,
+      const { error } = await supabase.from("meal_plan").insert([
         {
+          user_id: userId,
           meal_id: id,
           date: selectedDate,
           meal_type: mealType,
         },
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
-      );
+      ]);
 
-      if (response.status === 201) {
-        Alert.alert("Success", "Meal added to the meal plan!");
-        setIsModalVisible(false);
-        setSelectedDate("");
-        setMealType("Breakfast");
+      if (error) {
+        throw error;
       }
+
+      Alert.alert("Success", "Meal added to the meal plan!");
+      setIsModalVisible(false);
+      setSelectedDate("");
+      setMealType("Breakfast");
     } catch (error) {
       console.error("Error adding meal to meal plan:", error);
       Alert.alert("Error", "Failed to add meal to the meal plan. Please try again later.");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -90,38 +110,54 @@ const MyMealInfo = () => {
     setSelectedDate(formattedDate);
   };
 
+  // Delete meal from Supabase
   const handleDeleteMeal = async () => {
     try {
-      const token = await AsyncStorage.getItem("token");
-      if (!token) {
+      setLoading(true);
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+      if (userError || !userData?.user) {
         Alert.alert("Error", "User not authenticated. Please log in.");
         return;
       }
+      const userId = userData.user.id;
 
-      const response = await axios.delete(`${BASE_URL}/meal/meals/${id}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const { error } = await supabase
+        .from("meals")
+        .delete()
+        .eq("id", id)
+        .eq("user_id", userId);
 
-      if (response.status === 200) {
-        Alert.alert("Success", "Meal deleted successfully!");
-        router.back();
-      } else {
-        Alert.alert("Error", "Failed to delete the meal. Please try again.");
+      if (error) {
+        throw error;
       }
+
+      Alert.alert("Success", "Meal deleted successfully!");
+      router.back();
     } catch (error) {
       console.error("Error deleting meal:", error);
       Alert.alert("Error", "An error occurred while deleting the meal.");
+    } finally {
+      setLoading(false);
     }
   };
 
-  React.useEffect(() => {
+  useEffect(() => {
     fetchMeal();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+
+  if (loading && !meal) {
+    return (
+      <View style={[styles.container, { backgroundColor: theme.background }]}>
+        <Text style={{ color: theme.text }}>Loading...</Text>
+      </View>
+    );
+  }
 
   if (!meal) {
     return (
       <View style={[styles.container, { backgroundColor: theme.background }]}>
-        <Text style={{ color: theme.text }}>Loading...</Text>
+        <Text style={{ color: theme.text }}>Meal not found.</Text>
       </View>
     );
   }
@@ -179,19 +215,19 @@ const MyMealInfo = () => {
         )}
         {/* Ingredients */}
         <Text style={[styles.sectionTitle, { color: theme.text }]}>Ingredients</Text>
-          {Array.isArray(meal.ingredients) ? (
-            meal.ingredients.length > 0 ? (
-              meal.ingredients.map((ing: any, idx: number) => (
-                <Text key={idx} style={[styles.details, { color: theme.text }]}>
-                  {ing.quantity} {ing.unit} {ing.name}
-                </Text>
-              ))
-            ) : (
-              <Text style={[styles.details, { color: theme.text }]}>No ingredients listed.</Text>
-            )
+        {Array.isArray(meal.ingredients) ? (
+          meal.ingredients.length > 0 ? (
+            meal.ingredients.map((ing: any, idx: number) => (
+              <Text key={idx} style={[styles.details, { color: theme.text }]}>
+                {ing.quantity} {ing.unit} {ing.name}
+              </Text>
+            ))
           ) : (
-            <Text style={[styles.details, { color: theme.text }]}>{meal.ingredients}</Text>
-          )}
+            <Text style={[styles.details, { color: theme.text }]}>No ingredients listed.</Text>
+          )
+        ) : (
+          <Text style={[styles.details, { color: theme.text }]}>{meal.ingredients}</Text>
+        )}
 
         {/* Nutrition Info */}
         <Text style={[styles.sectionTitle, { color: theme.text }]}>Nutrition Info</Text>
@@ -220,7 +256,7 @@ const MyMealInfo = () => {
 
         <TouchableOpacity
           style={[styles.button, { backgroundColor: theme.button }]}
-          onPress={() => router.push(`/my-meals/${id}/edit`)} // Navigate to the edit screen
+          onPress={() => router.push(`/my-meals/${id}/edit`)}
         >
           <Text style={[styles.buttonText, { color: theme.buttonText }]}>Edit Meal</Text>
         </TouchableOpacity>
@@ -253,7 +289,7 @@ const MyMealInfo = () => {
           <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
             <Text style={[styles.modalTitle, { color: theme.text }]}>Scan to Save Meal</Text>
             <QRCode
-              value={`${BASE_URL}/meal/meals/${id}`} // Shareable URL or meal ID
+              value={id ? `meal:${id}` : ""}
               size={200}
               color={theme.text}
               backgroundColor={theme.card}

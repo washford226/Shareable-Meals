@@ -1,48 +1,47 @@
 import { Router, Request, Response } from "express";
-
-// Extend the Request interface to include the 'db' property
-declare global {
-  namespace Express {
-    interface Request {
-      db?: any; // Replace 'any' with the actual type of your database connection if known
-    }
-  }
-}
 import authMiddleware from "../authMiddleware";
 import axios from "axios";
+import { createClient } from "@supabase/supabase-js";
+
+// Initialize Supabase client for backend (use service role key for full access)
+const supabase = createClient(
+  process.env.SUPABASE_URL || "",
+  process.env.SUPABASE_SERVICE_ROLE_KEY || ""
+);
 
 const router = Router();
 
 router.post("/generate-meal", authMiddleware, async (req: Request, res: Response): Promise<void> => {
   const { prompt, dietaryRestrictions, allergies, usePantry } = req.body;
   const user = req.user;
-  const db = req.db;
 
   if (!prompt) {
     res.status(400).json({ error: "Prompt is required to generate a meal." });
     return;
   }
 
-  let pantryItems = [];
+  let pantryItems: string[] = [];
 
-  // Fetch pantry items if `usePantry` is true
+  // Fetch pantry items from Supabase if `usePantry` is true
   if (usePantry) {
-    if (!db) {
-      res.status(500).json({ error: "Database connection is not available." });
+    if (!user) {
+      res.status(401).json({ error: "User is not authenticated." });
       return;
     }
 
     try {
-      if (!user) {
-        res.status(401).json({ error: "User is not authenticated." });
+      const { data, error } = await supabase
+        .from("pantry")
+        .select("food, quantity, unit")
+        .eq("user_id", user.id);
+
+      if (error) {
+        console.error("Error fetching pantry items from Supabase:", error);
+        res.status(500).json({ error: "Failed to fetch pantry items." });
         return;
       }
 
-      const [rows] = await db.query(
-        "SELECT food, quantity, unit FROM Pantry WHERE user_id = ?",
-        [user.id]
-      );
-      pantryItems = rows.map(
+      pantryItems = (data || []).map(
         (item: any) => `${item.food} (${item.quantity || ""} ${item.unit || ""})`
       );
     } catch (error) {
@@ -54,12 +53,12 @@ router.post("/generate-meal", authMiddleware, async (req: Request, res: Response
 
   // Construct the AI prompt
   const fullPrompt = `Create a meal based on the following prompt: ${prompt}. ${
-  dietaryRestrictions ? `Dietary restrictions: ${dietaryRestrictions}.` : ""
-} ${allergies ? `Avoid the following allergens: ${allergies}.` : ""} ${
-  usePantry && pantryItems.length > 0
-    ? `Use only these ingredients: ${pantryItems.join(", ")}.`
-    : ""
-} Please provide the output in the following format:
+    dietaryRestrictions ? `Dietary restrictions: ${dietaryRestrictions}.` : ""
+  } ${allergies ? `Avoid the following allergens: ${allergies}.` : ""} ${
+    usePantry && pantryItems.length > 0
+      ? `Use only these ingredients: ${pantryItems.join(", ")}.`
+      : ""
+  } Please provide the output in the following format:
 - Name: [Meal Name]
 - Description: [Meal Description]
 - Servings: [Number of servings]
@@ -124,7 +123,7 @@ function parseMealResponse(rawText: string) {
 
   const nameMatch = rawText.match(/- Name:\s*(.+)/i);
   const descriptionMatch = rawText.match(/- Description:\s*(.+)/i);
-  const servingsMatch = rawText.match(/- Servings:\s*(.+)/i); // <-- Add this line
+  const servingsMatch = rawText.match(/- Servings:\s*(.+)/i);
   const ingredientsMatch = rawText.match(/- Ingredients:\s*([\s\S]*?)(?=- Instructions:|$)/i);
   const instructionsMatch = rawText.match(/- Instructions:\s*([\s\S]*)/i);
 
@@ -150,8 +149,6 @@ function parseMealResponse(rawText: string) {
 
     meal.ingredients = ingredientLines.map(line => {
       // Try to match "name quantity unit" or "name unit quantity"
-      // We'll use a simple regex: (name) (quantity) (unit)
-      // Example: "beef sirloin 1 lb"
       const match = line.match(/^(.+?)\s+([\d\/\.]+)\s*([a-zA-Z]+)?$/);
       if (match) {
         return {

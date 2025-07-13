@@ -6,15 +6,11 @@ import {
   TouchableOpacity,
   StyleSheet,
   Alert,
-  Platform,
 } from "react-native";
-import axios from "axios";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useTheme } from "../../../context/ThemeContext";
 import { useRouter } from "expo-router";
-
-const BASE_URL = Platform.OS === "android" ? "http://10.0.2.2:5000" : "http://localhost:5000";
+import { supabase } from "app/utils_supabase";
 
 const AddPantryItem = () => {
   const { theme } = useTheme();
@@ -33,21 +29,29 @@ const AddPantryItem = () => {
     }
 
     try {
-      const token = await AsyncStorage.getItem("token");
-      await axios.post(
-        `${BASE_URL}/pantry/pantry`,
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+      if (userError || !userData?.user) {
+        Alert.alert("Error", "User not authenticated. Please log in.");
+        return;
+      }
+      const userId = userData.user.id;
+
+      const { error } = await supabase.from("pantry").insert([
         {
-          food, // Updated field name
-          quantity: quantity ? parseFloat(quantity) : null, // Handle optional quantity
+          user_id: userId,
+          food,
+          quantity: quantity ? parseFloat(quantity) : null,
           unit,
           expiration_date: expirationDate ? expirationDate.toISOString().split("T")[0] : null,
         },
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
-      );
+      ]);
+
+      if (error) {
+        throw error;
+      }
+
       Alert.alert("Success", "Pantry item added successfully.");
-      router.push("/pantry/pantry"); // Navigate back to the pantry list
+      router.push("/pantry/pantry");
     } catch (error) {
       console.error("Error adding pantry item:", error);
       Alert.alert("Error", "Failed to add pantry item.");

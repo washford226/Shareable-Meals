@@ -10,15 +10,14 @@ import {
   Modal,
   Image } from "react-native";
 import { format, startOfWeek, addDays } from "date-fns";
-import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import { Meal } from "../../../types/types";
 import { useTheme } from "../../../context/ThemeContext";
 import  BottomNav from "../../../components/bottomNav"; //B may be uppercase maybe
 import { Dimensions } from "react-native";
+import { supabase } from "../../utils_supabase";
 
-const BASE_URL = Platform.OS === "android" ? "http://10.0.2.2:5000" : "http://localhost:5000";
 const SCREEN_WIDTH = Dimensions.get("window").width;
 const SCREEN_HEIGHT = Dimensions.get("window").height;
 
@@ -34,25 +33,37 @@ const MealPlanCalendar: React.FC = () => {
 
   const startOfCurrentWeek = startOfWeek(today, { weekStartsOn: 0 });
 
+  const getCurrentUserId = async () => {
+  const { data, error } = await supabase.auth.getUser();
+  if (error || !data?.user) return null;
+  return data.user.id;
+};
+
   const fetchMealsForDate = async (date: string) => {
-    try {
-      const token = await AsyncStorage.getItem("token");
-      if (!token) {
-        Alert.alert("Error", "You are not logged in. Please log in to view your meals.");
-        return [];
-      }
+  try {
+    const userId = await getCurrentUserId();
+    if (!userId) {
+      Alert.alert("Error", "You are not logged in. Please log in to view your meals.");
+      return [];
+    }
 
-      const response = await axios.get(`${BASE_URL}/mealplan/meal-plan`, {
-        params: { date },
-        headers: { Authorization: `Bearer ${token}` },
-      });
+    const { data, error } = await supabase
+      .from("meal_plan")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("date", date);
 
-      return Array.isArray(response.data) ? response.data : [];
-    } catch (error) {
+    if (error) {
       console.error(`Error fetching meals for date (${date}):`, error);
       return [];
     }
-  };
+
+    return Array.isArray(data) ? data : [];
+  } catch (error) {
+    console.error(`Error fetching meals for date (${date}):`, error);
+    return [];
+  }
+};
 
   const fetchMealsForWeek = async (weekStartDate: Date) => {
     const newMeals: { [key: string]: Meal[] } = {};
@@ -66,29 +77,32 @@ const MealPlanCalendar: React.FC = () => {
   };
 
   const deleteAllMealsForDate = async (date: string) => {
-    try {
-      const token = await AsyncStorage.getItem("token");
-      if (!token) {
-        Alert.alert("Error", "You are not logged in.");
-        return;
-      }
-
-      await axios.delete(`${BASE_URL}/mealplan/meal-plan-clear`, {
-        headers: { Authorization: `Bearer ${token}` },
-        data: { date },
-      });
-
-      Alert.alert("Success", `All meals for ${date} have been deleted.`);
-      setMeals((prevMeals) => {
-        const updatedMeals = { ...prevMeals };
-        delete updatedMeals[date];
-        return updatedMeals;
-      });
-    } catch (error) {
-      console.error("Error deleting meals for date:", error);
-      Alert.alert("Error", "Failed to delete meals. Try again.");
+  try {
+    const userId = await getCurrentUserId();
+    if (!userId) {
+      Alert.alert("Error", "You are not logged in.");
+      return;
     }
-  };
+
+    const { error } = await supabase
+      .from("meal_plan")
+      .delete()
+      .eq("user_id", userId)
+      .eq("date", date);
+
+    if (error) throw error;
+
+    Alert.alert("Success", `All meals for ${date} have been deleted.`);
+    setMeals((prevMeals) => {
+      const updatedMeals = { ...prevMeals };
+      delete updatedMeals[date];
+      return updatedMeals;
+    });
+  } catch (error) {
+    console.error("Error deleting meals for date:", error);
+    Alert.alert("Error", "Failed to delete meals. Try again.");
+  }
+};
 
   useEffect(() => {
     fetchMealsForWeek(startOfCurrentWeek);

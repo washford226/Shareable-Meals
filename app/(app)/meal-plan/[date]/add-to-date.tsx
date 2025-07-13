@@ -6,63 +6,70 @@ import {
   FlatList,
   TouchableOpacity,
   Alert,
-  Platform,
   Modal,
 } from "react-native";
-import axios from "axios";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Meal } from "../../../../types/types";
 import { useTheme } from "../../../../context/ThemeContext";
 import { useRouter, useLocalSearchParams } from "expo-router";
-
-const BASE_URL =
-  Platform.OS === "android" ? "http://10.0.2.2:5000" : "http://localhost:5000";
+import { supabase } from "app/utils_supabase";
 
 const AddMealToDate = () => {
   const { theme } = useTheme();
   const router = useRouter();
-  const { date } = useLocalSearchParams(); // ✅ receives `[date]` param from folder name
+  const { date } = useLocalSearchParams(); // receives `[date]` param from folder name
 
   const [meals, setMeals] = useState<Meal[]>([]);
   const [selectedMeal, setSelectedMeal] = useState<Meal | null>(null);
   const [isModalVisible, setIsModalVisible] = useState(false);
 
+  // Fetch user's meals from Supabase
   const fetchMeals = async () => {
     try {
-      const token = await AsyncStorage.getItem("token");
-      if (!token) {
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+      if (userError || !userData?.user) {
         Alert.alert("Error", "Please log in to view meals.");
         return;
       }
+      const userId = userData.user.id;
 
-      const response = await axios.get(`${BASE_URL}/meal/my-meals`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const { data, error } = await supabase
+        .from("meals")
+        .select("*")
+        .eq("user_id", userId);
 
-      if (Array.isArray(response.data)) {
-        setMeals(response.data);
-      } else {
-        console.warn("Unexpected meals format:", response.data);
+      if (error) {
+        throw error;
       }
+      setMeals(data || []);
     } catch (error) {
       console.error("Fetch error:", error);
       Alert.alert("Error", "Could not load meals.");
     }
   };
 
+  // Add meal to meal plan for the selected date
   const addMealToDate = async (mealId: number, mealType: string) => {
     try {
-      const token = await AsyncStorage.getItem("token");
-      if (!token) {
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+      if (userError || !userData?.user) {
         Alert.alert("Error", "Please log in to add meals.");
         return;
       }
+      const userId = userData.user.id;
 
-      await axios.post(
-        `${BASE_URL}/mealplan/meal-plan`,
-        { date, meal_id: mealId, meal_type: mealType },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      // Insert into meal_plan table (adjust table/column names as needed)
+      const { error } = await supabase.from("meal_plan").insert([
+        {
+          user_id: userId,
+          date: date,
+          meal_id: mealId,
+          meal_type: mealType,
+        },
+      ]);
+
+      if (error) {
+        throw error;
+      }
 
       Alert.alert("Success", "Meal added to your plan.");
       setIsModalVisible(false);
