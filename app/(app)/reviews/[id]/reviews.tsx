@@ -11,7 +11,7 @@ import {
 import StarRating from "react-native-star-rating-widget";
 import { useTheme } from "../../../../context/ThemeContext";
 import { useRouter, useLocalSearchParams } from "expo-router";
-import { supabase } from "app/utils_supabase";
+import { supabase } from "utils/supabase";
 
 interface Review {
   id: string;
@@ -19,7 +19,7 @@ interface Review {
   rating: number;
   comment: string;
   created_at: string;
-  profiles?: { username?: string };
+  userName?: string;
 }
 
 const ViewReviews = () => {
@@ -39,16 +39,38 @@ const ViewReviews = () => {
 
     try {
       setLoading(true);
-      // Fetch reviews and join with profiles for username
-      const { data, error } = await supabase
+      // 1. Fetch reviews for the meal
+      const { data: reviewsData, error: reviewsError } = await supabase
         .from("reviews")
-        .select("*, profiles:user_id(username)")
+        .select("*")
         .eq("meal_id", mealId)
         .order("created_at", { ascending: false });
 
-      if (error) throw error;
+      if (reviewsError) throw reviewsError;
 
-      setReviews(data || []);
+      // 2. Fetch all user_profiles for those user_ids
+      const userIds = Array.from(new Set((reviewsData || []).map(review => review.user_id)));
+      let userIdToUsername: Record<string, string> = {};
+      if (userIds.length > 0) {
+        const { data: profilesData, error: profilesError } = await supabase
+          .from("user_profiles")
+          .select("id,username")
+          .in("id", userIds);
+
+        if (!profilesError && profilesData) {
+          profilesData.forEach(profile => {
+            userIdToUsername[profile.id] = profile.username;
+          });
+        }
+      }
+
+      // 3. Combine reviews and usernames
+      const reviewsWithUsernames = (reviewsData || []).map(review => ({
+        ...review,
+        userName: userIdToUsername[review.user_id] || "Anonymous",
+      }));
+
+      setReviews(reviewsWithUsernames);
     } catch (error) {
       console.error("Error fetching reviews:", error);
       Alert.alert("Error", "Failed to fetch reviews. Please try again later.");
@@ -96,7 +118,7 @@ const ViewReviews = () => {
         renderItem={({ item }) => (
           <View style={[styles.reviewItem, { backgroundColor: theme.card, borderColor: theme.border }]}>
             <Text style={[styles.userName, { color: theme.text }]}>
-              {item.profiles?.username || "Anonymous"}
+              {item.userName || "Anonymous"}
             </Text>
             <StarRating
               rating={item.rating}

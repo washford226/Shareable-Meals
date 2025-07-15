@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { View, Text, TextInput, StyleSheet, Alert, TouchableOpacity, Image } from "react-native";
 import { useRouter } from "expo-router";
-import { supabase } from "app/utils_supabase";
+import { supabase } from "utils/supabase";
 
 const logo = require("../../assets/images/logo-transparent-png.png"); // Update if needed
 

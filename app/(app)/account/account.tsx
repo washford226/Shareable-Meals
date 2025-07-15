@@ -3,7 +3,7 @@ import { View, Text, TouchableOpacity, Alert, Image, Switch, StyleSheet } from '
 import { useTheme } from '../../../context/ThemeContext';
 import BottomNav from 'components/bottomNav';
 import { useRouter } from 'expo-router';
-import { supabase } from 'app/utils_supabase';
+import { supabase } from 'utils/supabase';
 
 const AccountScreen: React.FC = () => {
   const [username, setUsername] = useState<string>('');
@@ -26,9 +26,9 @@ const AccountScreen: React.FC = () => {
         }
         const userId = userData.user.id;
 
-        // Fetch user profile from 'users' table
+        // Fetch user profile from 'user_profiles' table
         const { data, error } = await supabase
-          .from('users')
+          .from('user_profiles')
           .select('*')
           .eq('id', userId)
           .single();
@@ -73,13 +73,17 @@ const AccountScreen: React.FC = () => {
           onPress: async () => {
             try {
               // Delete user from Supabase Auth
-              const { error: deleteError } = await supabase.auth.admin.deleteUser(
-                (await supabase.auth.getUser()).data.user.id
-              );
+              const { data: userData, error: userError } = await supabase.auth.getUser();
+              if (userError || !userData?.user) {
+                throw new Error('No user found');
+              }
+              const userId = userData.user.id;
+
+              const { error: deleteError } = await supabase.auth.admin.deleteUser(userId);
               if (deleteError) throw deleteError;
 
-              // Optionally, delete user profile from 'users' table
-              await supabase.from('users').delete().eq('id', (await supabase.auth.getUser()).data.user.id);
+              // Optionally, delete user profile from 'user_profiles' table
+              await supabase.from('user_profiles').delete().eq('id', userId);
 
               Alert.alert("Success", "Account deleted successfully");
               handleLogout();

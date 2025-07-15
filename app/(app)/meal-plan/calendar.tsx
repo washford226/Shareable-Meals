@@ -16,7 +16,7 @@ import { Meal } from "../../../types/types";
 import { useTheme } from "../../../context/ThemeContext";
 import  BottomNav from "../../../components/bottomNav"; //B may be uppercase maybe
 import { Dimensions } from "react-native";
-import { supabase } from "../../utils_supabase";
+import { supabase } from "utils/supabase";
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
 const SCREEN_HEIGHT = Dimensions.get("window").height;

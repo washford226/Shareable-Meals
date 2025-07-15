@@ -10,7 +10,7 @@ import {
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { useTheme } from "../../../../context/ThemeContext";
-import { supabase } from "app/utils_supabase";
+import { supabase } from "utils/supabase";
 
 const EditPantryItem = () => {
   const { theme } = useTheme();

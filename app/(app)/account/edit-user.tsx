@@ -4,7 +4,7 @@ import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import RNPickerSelect from 'react-native-picker-select';
 import { useTheme } from '../../../context/ThemeContext';
-import { supabase } from 'app/utils_supabase';
+import { supabase } from 'utils/supabase';
 
 const dietaryOptions = [
   { label: 'None', value: 'None' },

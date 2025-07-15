@@ -9,6 +9,12 @@
     "paths": {
       "@/*": [
         "app/*"   // <-- correctly points to your "app" folder
+      ],
+      "app/*": [
+        "./app/*"
+      ],
+      "utils/*": [
+        "./utils/*"
       ]
     }
   },

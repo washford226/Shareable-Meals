@@ -18,7 +18,7 @@ import { Meal } from "../../../../types/types";
 import QRCode from "react-native-qrcode-svg";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { Picker } from "@react-native-picker/picker";
-import { supabase } from "app/utils_supabase";
+import { supabase } from "utils/supabase";
 
 const MyMealInfo = () => {
   const { theme } = useTheme();

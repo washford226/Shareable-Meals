@@ -10,7 +10,7 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 import { useTheme } from "../../../context/ThemeContext";
-import { supabase } from "app/utils_supabase";
+import { supabase } from "utils/supabase";
 
 const AddMeal = () => {
   interface Meal {

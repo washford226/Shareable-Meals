@@ -16,7 +16,7 @@ import * as ImagePicker from "expo-image-picker";
 import { useTheme } from "../../../context/ThemeContext";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import RNPickerSelect from "react-native-picker-select";
-import { supabase } from "app/utils_supabase";
+import { supabase } from "utils/supabase";
 
 const dietaryOptions = [
   { label: "None", value: "" },
@@ -26,6 +26,7 @@ const dietaryOptions = [
   { label: "Keto", value: "Keto" },
   { label: "Paleo", value: "Paleo" },
 ];
+
 
 const cuisineOptions = [
   { label: "None", value: "" },
@@ -148,64 +149,86 @@ const CreateMealScreen = () => {
   };
 
   const handleAddMeal = async () => {
-    if (
-      !mealName ||
-      !mealDescription ||
-      ingredients.some(i => !i.name || !i.quantity || !i.unit)
-    ) {
-      Alert.alert("Error", "Please fill in all required fields and ingredients.");
+  if (
+    !mealName ||
+    !mealDescription ||
+    ingredients.some(i => !i.name || !i.quantity || !i.unit)
+  ) {
+    Alert.alert("Error", "Please fill in all required fields and ingredients.");
+    return;
+  }
+
+  setLoading(true);
+
+  try {
+    const { data: userData, error: userError } = await supabase.auth.getUser();
+    if (userError || !userData?.user) {
+      Alert.alert("Error", "User not authenticated. Please log in again.");
+      setLoading(false);
       return;
     }
+    const userId = userData.user.id;
 
-    setLoading(true);
-
-    try {
-      const { data: userData, error: userError } = await supabase.auth.getUser();
-      if (userError || !userData?.user) {
-        Alert.alert("Error", "User not authenticated. Please log in again.");
-        setLoading(false);
-        return;
-      }
-      const userId = userData.user.id;
-
-      let pictureUrl = null;
-      if (mealPicture) {
-        pictureUrl = await uploadImageToSupabase(mealPicture);
-      }
-
-      const { error } = await supabase.from("meals").insert([
-        {
-          user_id: userId,
-          name: mealName,
-          description: mealDescription,
-          ingredients,
-          instructions: mealInstructions,
-          recipeLink: mealRecipeLink,
-          visibility: mealVisibility,
-          dietary_restrictions: mealDietaryRestriction,
-          servings: mealServings ? parseInt(mealServings) : 1,
-          cuisine: mealCuisine,
-          calories: calories ? parseInt(calories) : null,
-          protein: protein ? parseInt(protein) : null,
-          carbohydrates: carbohydrates ? parseInt(carbohydrates) : null,
-          fat: fat ? parseInt(fat) : null,
-          picture: pictureUrl,
-        },
-      ]);
-
-      if (error) {
-        throw error;
-      }
-
-      Alert.alert("Success", "Meal added successfully!");
-      router.push("/(app)/my-meals/meals");
-    } catch (error) {
-      console.error("Error adding meal:", error);
-      Alert.alert("Error", "Failed to add the meal to the database.");
-    } finally {
-      setLoading(false);
+    let pictureUrl = null;
+    if (mealPicture) {
+      pictureUrl = await uploadImageToSupabase(mealPicture);
     }
-  };
+
+    // 1. Insert the meal (without ingredients)
+    const { data: mealData, error: mealError } = await supabase.from("meals").insert([
+      {
+        user_id: userId,
+        name: mealName,
+        description: mealDescription,
+        instructions: mealInstructions,
+        recipeLink: mealRecipeLink,
+        visibility: mealVisibility,
+        dietary_restrictions: mealDietaryRestriction,
+        servings: mealServings ? parseInt(mealServings) : 1,
+        cuisine: mealCuisine,
+        calories: calories ? parseInt(calories) : null,
+        protein: protein ? parseInt(protein) : null,
+        carbohydrates: carbohydrates ? parseInt(carbohydrates) : null,
+        fat: fat ? parseInt(fat) : null,
+        picture: pictureUrl,
+      },
+    ]).select("id").single();
+
+    if (mealError) {
+      throw mealError;
+    }
+
+    const mealId = mealData?.id;
+    if (!mealId) {
+      throw new Error("Failed to get new meal ID.");
+    }
+
+    // 2. Insert ingredients, each with the new meal's ID
+    const ingredientRows = ingredients.map(ingredient => ({
+      meal_id: mealId,
+      raw_name: ingredient.name,
+      //food_id: ingredient.food_id ?? null, // If you ever add food_id support
+      quantity: ingredient.quantity ? parseFloat(ingredient.quantity) : 1.0,
+      unit: ingredient.unit || null,
+    }));
+
+    const { error: ingredientsError } = await supabase
+      .from("meal_ingredients")
+      .insert(ingredientRows);
+
+    if (ingredientsError) {
+      throw ingredientsError;
+    }
+
+    Alert.alert("Success", "Meal added successfully!");
+    router.push("/(app)/my-meals/meals");
+  } catch (error) {
+    console.error("Error adding meal:", error);
+    Alert.alert("Error", "Failed to add the meal to the database.");
+  } finally {
+    setLoading(false);
+  }
+};
 
   return (
     <ScrollView contentContainerStyle={[styles.container, { backgroundColor: theme.background }]}>

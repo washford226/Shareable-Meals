@@ -19,7 +19,7 @@ import { useRouter } from "expo-router";  // Import Expo Router hook
 import BottomNav from "components/bottomNav";
 import Icon from "react-native-vector-icons/FontAwesome"
 import RNPickerSelect from "react-native-picker-select";
-import { supabase } from "app/utils_supabase";
+import { supabase } from "utils/supabase";
 
 interface MyMealsProps {
   onCreateMeal: () => void;

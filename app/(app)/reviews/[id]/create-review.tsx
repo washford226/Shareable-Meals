@@ -11,7 +11,7 @@ import {
 import StarRating from "react-native-star-rating-widget";
 import { useTheme } from "../../../../context/ThemeContext";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { supabase } from "app/utils_supabase";
+import { supabase } from "utils/supabase";
 
 const CreateReview = () => {
   const [rating, setRating] = useState<number>(0);

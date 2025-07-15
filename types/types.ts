@@ -7,7 +7,6 @@ export interface Meal {
   carbohydrates: number;
   fat: number;
   userName: string;
-  ingredients: string | string[]; // Allow ingredients to be a string or an array
   visibility: boolean; // Indicates if the meal is public or private
   averageRating: number;
   reviewCount?: number;

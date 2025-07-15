@@ -3,7 +3,7 @@ import { View, Text, TextInput, StyleSheet, Alert, TouchableOpacity, Image, Acti
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
 import RNPickerSelect from "react-native-picker-select";
-import { supabase } from "app/utils_supabase";
+import { supabase } from "utils/supabase";
 
 const SignUpScreen: React.FC = () => {
   const router = useRouter();
@@ -47,7 +47,7 @@ const SignUpScreen: React.FC = () => {
       setCheckingUsername(true);
       try {
         const { data, error } = await supabase
-          .from("users")
+          .from("user_profiles")
           .select("username")
           .eq("username", username)
           .single();
@@ -159,8 +159,8 @@ const SignUpScreen: React.FC = () => {
         profilePictureUrl = await uploadProfilePicture(userId, profilePicture);
       }
 
-      // 3. Insert user profile in 'profiles' table
-      const { error: profileError } = await supabase.from("users").upsert([
+      // 3. Insert user profile in 'user_profiles' table
+      const { error: profileError } = await supabase.from("user_profiles").upsert([
         {
           id: userId,
           username,

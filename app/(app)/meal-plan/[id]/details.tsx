@@ -13,7 +13,7 @@ import {
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Meal } from "../../../../types/types";
 import { useTheme } from "../../../../context/ThemeContext";
-import { supabase } from "app/utils_supabase";
+import { supabase } from "utils/supabase";
 
 const MealPlanDetails = () => {
   const { id } = useLocalSearchParams();

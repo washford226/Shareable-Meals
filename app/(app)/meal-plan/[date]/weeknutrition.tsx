@@ -10,7 +10,7 @@ import {
 import { useLocalSearchParams, useRouter } from "expo-router";
 import NutritionNav from "../../../../components/nutritionNav";
 import { format, subDays } from "date-fns";
-import { supabase } from "app/utils_supabase";
+import { supabase } from "utils/supabase";
 
 type MacroKey = "calories" | "protein" | "carbs" | "fat";
 const macroLabels = ["Calories", "Protein", "Carbs", "Fat"];

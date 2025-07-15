@@ -10,7 +10,7 @@ import {
 } from "react-native";
 import { useTheme } from "../../../context/ThemeContext";
 import { useRouter } from "expo-router";
-import { supabase } from "app/utils_supabase";
+import { supabase } from "utils/supabase";
 
 const EditPassword = () => {
   const [currentPassword, setCurrentPassword] = useState<string>("");

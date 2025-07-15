@@ -17,7 +17,7 @@ import Icon from "react-native-vector-icons/FontAwesome";
 import { useRouter } from "expo-router";
 import BottomNav from "components/bottomNav";
 import RNPickerSelect from "react-native-picker-select";
-import { supabase } from "app/utils_supabase";
+import { supabase } from "utils/supabase";
 
 const aiOptions = [
   { label: "All", value: "" },
@@ -81,60 +81,59 @@ const OtherMeals: React.FC = () => {
     cuisineFilter !== "" ||
     filters.some(f => f.greaterThan !== "" || f.lessThan !== "");
 
+  
+
   // Fetch all public meals from Supabase
   const fetchMeals = async () => {
-    setLoading(true);
-    try {
-      let query = supabase
-        .from("meals")
-        .select(
-          `
-          *,
-          profiles:user_id (
-            username
-          ),
-          reviews:reviews (
-            rating
-          )
-        `
-        )
-        .eq("visibility", true);
+  setLoading(true);
+  try {
+    // 1. Fetch all public meals
+    let query = supabase
+      .from("meals")
+      .select("*")
+      .eq("visibility", true);
 
-      if (dietaryRestrictionFilter) query = query.eq("dietary_restrictions", dietaryRestrictionFilter);
-      if (aiFilter === "ai") query = query.eq("created_by_ai", true);
-      if (aiFilter === "not_ai") query = query.eq("created_by_ai", false);
-      if (cuisineFilter) query = query.eq("cuisine", cuisineFilter);
+    if (dietaryRestrictionFilter) query = query.eq("dietary_restrictions", dietaryRestrictionFilter);
+    if (aiFilter === "ai") query = query.eq("created_by_ai", true);
+    if (aiFilter === "not_ai") query = query.eq("created_by_ai", false);
+    if (cuisineFilter) query = query.eq("cuisine", cuisineFilter);
 
-      const { data, error } = await query;
+    const { data: mealsData, error: mealsError } = await query;
+    if (mealsError) throw mealsError;
 
-      if (error) throw error;
+    // 2. Fetch all user_profiles for those user_ids
+    const userIds = Array.from(new Set((mealsData || []).map(meal => meal.user_id)));
+    let userIdToUsername: Record<string, string> = {};
+    if (userIds.length > 0) {
+      const { data: profilesData, error: profilesError } = await supabase
+        .from("user_profiles")
+        .select("id,username")
+        .in("id", userIds);
 
-      // Calculate average rating and review count
-      const mealsWithRatings = (data || []).map((meal: any) => {
-        let averageRating = 0;
-        let reviewCount = 0;
-        if (Array.isArray(meal.reviews) && meal.reviews.length > 0) {
-          reviewCount = meal.reviews.length;
-          averageRating =
-            meal.reviews.reduce((sum: number, r: any) => sum + (r.rating || 0), 0) / reviewCount;
-        }
-        return {
-          ...meal,
-          userName: meal.profiles?.username || "Unknown",
-          averageRating,
-          reviewCount,
-        };
+      if (profilesError) throw profilesError;
+
+      (profilesData || []).forEach(profile => {
+        userIdToUsername[profile.id] = profile.username;
       });
-
-      setMeals(mealsWithRatings);
-      setFilteredMeals(mealsWithRatings);
-    } catch (error) {
-      console.error("Error fetching meals:", error);
-      Alert.alert("Error", "Failed to fetch meals. Please try again later.");
-    } finally {
-      setLoading(false);
     }
-  };
+
+    // 3. Combine meals and usernames
+    const mealsWithUsernames = (mealsData || []).map(meal => ({
+      ...meal,
+      userName: userIdToUsername[meal.user_id] || "Unknown",
+      averageRating: 0,
+      reviewCount: 0,
+    }));
+
+    setMeals(mealsWithUsernames);
+    setFilteredMeals(mealsWithUsernames);
+  } catch (error) {
+    console.error("Error fetching meals:", error);
+    Alert.alert("Error", "Failed to fetch meals. Please try again later.");
+  } finally {
+    setLoading(false);
+  }
+};
 
   useEffect(() => {
     fetchMeals();

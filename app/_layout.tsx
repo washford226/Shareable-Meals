@@ -1,4 +1,5 @@
 // app/_layout.tsx
+import "../polyfills"; // Import polyfills first
 import React from "react";
 import { Stack } from "expo-router";
 import { ThemeProvider } from "../context/ThemeContext";

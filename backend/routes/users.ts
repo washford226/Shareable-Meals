@@ -1,10 +1,6 @@
 import { Router } from 'express';
-import bcrypt from 'bcrypt';
-import jwt from 'jsonwebtoken';
 import multer from 'multer';
-import nodemailer from 'nodemailer';
 import authMiddleware from '../authMiddleware';
-import crypto from 'crypto';
 import { Request, Response } from 'express';
 import axios from 'axios';
 import { calculateAndStoreMealNutrition } from './usda_linking';
@@ -151,7 +147,7 @@ router.get('/check-username', async (req: Request, res: Response) => {
 
   try {
     const { data, error } = await supabase
-      .from("users")
+      .from("user_profiles")
       .select("id")
       .eq("username", username)
       .single();
@@ -185,7 +181,7 @@ router.post('/signup', upload.single('profile_picture'), async (req: Request, re
   try {
     // Check if username or email exists
     const { data: existingUser, error: existingError } = await supabase
-      .from("users")
+      .from("user_profiles")
       .select("id")
       .or(`username.eq.${username},email.eq.${email}`)
       .maybeSingle();
@@ -220,11 +216,11 @@ router.post('/signup', upload.single('profile_picture'), async (req: Request, re
       const { data: urlData } = supabase.storage.from("profile-pictures").getPublicUrl(fileName);
       profilePictureUrl = urlData.publicUrl;
     } else {
-      profilePictureUrl = null; // No profile picture uploaded
+      profilePictureUrl = null;
     }
 
     // Insert profile row
-    const { error: profileError } = await supabase.from("users").insert([{
+    const { error: profileError } = await supabase.from("user_profiles").insert([{
       id: userId,
       username,
       email,
@@ -267,7 +263,7 @@ router.post('/signup', upload.single('profile_picture'), async (req: Request, re
         // Optionally, implement best food match logic here if needed
         await supabase.from("meal_ingredients").insert([{
           meal_id: mealData.id,
-          food_id: null, // Set to null or implement food matching logic
+          food_id: null,
           quantity: Number(ing.quantity),
           unit: ing.unit,
           raw_name: ing.raw_name
@@ -284,54 +280,6 @@ router.post('/signup', upload.single('profile_picture'), async (req: Request, re
     res.status(500).send('Error during signup');
   }
 });
-
-// Login user
-router.post('/login', (req: Request, res: Response) => {
-  const { email, password } = req.body;
-
-  (async () => {
-    try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-
-      if (error || !data.session) {
-        return res.status(400).send('Invalid email or password');
-      }
-
-      res.status(200).json({ message: 'User logged in successfully', token: data.session.access_token });
-    } catch (err) {
-      console.error('Error logging in:', err);
-      res.status(500).send('Error logging in');
-    }
-  })();
-});
-
-// Forgot Password
-router.post('/forgot-password', async (req: Request, res: Response): Promise<void> => {
-  const { email } = req.body;
-
-  if (!email) {
-    res.status(400).json({ error: 'Email is required' });
-    return;
-  }
-
-  try {
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: process.env.PASSWORD_RESET_REDIRECT_URL || undefined,
-    });
-
-    if (error) throw error;
-
-    res.status(200).json({ message: 'Password reset link sent to your email' });
-  } catch (err) {
-    console.error('Error sending password reset email:', err);
-    res.status(500).json({ error: 'An error occurred while processing your request' });
-  }
-});
-
-// Reset password (handled by Supabase magic link, so not needed here)
 
 // Update user information
 router.put('/user/:username', authMiddleware, async (req: Request, res: Response): Promise<void> => {
@@ -372,7 +320,7 @@ router.put('/user/:username', authMiddleware, async (req: Request, res: Response
 
   try {
     const { error } = await supabase
-      .from("users")
+      .from("user_profiles")
       .update(updates)
       .eq("username", username);
 
@@ -390,9 +338,9 @@ router.delete('/userdelete', authMiddleware, async (req: Request, res: Response)
   const user = (req as any).user;
 
   try {
-    // Delete from users table
+    // Delete from user_profiles table
     const { error: profileError } = await supabase
-      .from("users")
+      .from("user_profiles")
       .delete()
       .eq("id", user.id);
 
@@ -415,7 +363,7 @@ router.get('/user', authMiddleware, async (req: Request, res: Response) => {
 
   try {
     const { data, error } = await supabase
-      .from("users")
+      .from("user_profiles")
       .select("*")
       .eq("id", user.id)
       .single();
@@ -464,7 +412,7 @@ router.post('/upload-profile-picture', authMiddleware, upload.single('profile_pi
     const profilePictureUrl = urlData.publicUrl;
 
     const { error } = await supabase
-      .from("users")
+      .from("user_profiles")
       .update({ profile_picture: profilePictureUrl })
       .eq("id", user.id);
 
@@ -554,9 +502,9 @@ router.put('/user/:username/email', authMiddleware, async (req: Request, res: Re
     const { error: updateError } = await supabase.auth.admin.updateUserById(user.id, { email });
     if (updateError) throw updateError;
 
-    // Update email in users table as well
+    // Update email in user_profiles table as well
     const { error: profileError } = await supabase
-      .from("users")
+      .from("user_profiles")
       .update({ email })
       .eq("id", user.id);
 

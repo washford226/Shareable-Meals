@@ -13,7 +13,7 @@ import {
 } from "react-native";
 import { useTheme } from "../../../../context/ThemeContext";
 import RNPickerSelect from "react-native-picker-select";
-import { supabase } from "app/utils_supabase";
+import { supabase } from "utils/supabase";
 
 export default function EditMealScreen() {
   const { id: mealId } = useLocalSearchParams<{ id: string }>();

@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { View, Text, TextInput, TouchableOpacity, Alert, StyleSheet, ScrollView } from "react-native";
 import { useRouter } from "expo-router";
-import { supabase } from "app/utils_supabase";
+import { supabase } from "utils/supabase";
 
 // Ingredient input row component
 const IngredientRow = ({ ingredient, onChange, onRemove }: any) => (
@@ -113,44 +113,69 @@ const URLCreateMealScreen: React.FC = () => {
 
   // Fetch recipe data from a backend API (user must provide their own endpoint)
   const handleFetchRecipe = async () => {
-    if (!recipeUrl || !recipeUrl.startsWith("http")) {
-      Alert.alert("Error", "Please enter a valid URL starting with http or https.");
+  if (!recipeUrl || !recipeUrl.startsWith("http")) {
+    Alert.alert("Error", "Please enter a valid URL starting with http or https.");
+    return;
+  }
+
+  try {
+    setLoading(true);
+
+    // Get current logged-in user to pass user_id (optional; you can pass null or omit)
+    const { data: userData, error: userError } = await supabase.auth.getUser();
+    if (userError || !userData?.user) {
+      Alert.alert("Error", "User not authenticated. Please log in.");
+      setLoading(false);
+      return;
+    }
+    const userId = userData.user.id;
+
+    // Call your Supabase Edge Function
+    const { data, error } = await supabase.functions.invoke('recipe-scraper', {
+      body: { url: recipeUrl, save: false, user_id: userId }
+    });
+
+    if (error || !data) {
+      Alert.alert("Error", "Failed to fetch recipe data from server.");
+      setLoading(false);
       return;
     }
 
-    try {
-      setLoading(true);
-      // Replace this with your own backend endpoint for URL parsing
-      const response = await fetch("https://api.spoonacular.com/recipes/extract?url=" + encodeURIComponent(recipeUrl) + "&apiKey=YOUR_SPOONACULAR_API_KEY");
-      const data = await response.json();
+    // Map response to your form state
+    setMealName(data.name || "");
+    setDescription(data.description || "");
+    setServings(data.servings || "1");
 
-      if (data && data.title) {
-        setMealName(data.title || "");
-        setDescription(data.summary ? data.summary.replace(/<[^>]+>/g, "") : "");
-        setServings(data.servings ? String(data.servings) : "1");
-        let parsedIngredients: { name: string; quantity: string; unit: string }[] = [];
-        if (Array.isArray(data.extendedIngredients)) {
-          parsedIngredients = data.extendedIngredients
-            .map((item: any) =>
-              item.originalString
-                ? parseIngredientLine(item.originalString)
-                : { name: item.name, quantity: String(item.amount), unit: item.unit }
-            )
-            .filter((i: any): i is { name: string; quantity: string; unit: string } => !!i && !!i.name);
-        }
-        setIngredients(parsedIngredients);
-        setInstructions(data.instructions || "");
-        Alert.alert("Success", "Recipe data fetched successfully!");
-      } else {
-        Alert.alert("Error", "Failed to fetch recipe data.");
+    // Parse ingredients array of strings into your ingredient objects with parseIngredientLine helper
+    let parsedIngredients: { name: string; quantity: string; unit: string }[] = [];
+    if (Array.isArray(data.ingredients)) {
+      interface ParsedIngredient {
+        name: string;
+        quantity: string;
+        unit: string;
       }
-    } catch (error) {
-      console.error("Error fetching recipe data:", error);
-      Alert.alert("Error", "An error occurred while fetching recipe data. Please try again.");
-    } finally {
-      setLoading(false);
+
+      parsedIngredients = (data.ingredients as string[])
+        .map((line: string): ParsedIngredient | null => parseIngredientLine(line))
+        .filter((i): i is ParsedIngredient => !!i && !!i.name);
     }
-  };
+    setIngredients(parsedIngredients);
+
+    // Instructions may be a string or array — normalize to string
+    if (Array.isArray(data.instructions)) {
+      setInstructions(data.instructions.join(" "));
+    } else {
+      setInstructions(data.instructions || "");
+    }
+
+    Alert.alert("Success", "Recipe data fetched successfully!");
+  } catch (error) {
+    console.error("Error fetching recipe data:", error);
+    Alert.alert("Error", "An error occurred while fetching recipe data. Please try again.");
+  } finally {
+    setLoading(false);
+  }
+};
 
   // Save meal to Supabase
   const handleSaveMeal = async () => {

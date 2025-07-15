@@ -14,7 +14,7 @@ import {
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useTheme } from "../../../../context/ThemeContext";
 import { Meal } from "../../../../types/types";
-import { supabase } from "app/utils_supabase";
+import { supabase } from "utils/supabase";
 
 const MealDetails = () => {
   const { id } = useLocalSearchParams();

@@ -11,7 +11,7 @@ import {
 import { Meal } from "../../../../types/types";
 import { useTheme } from "../../../../context/ThemeContext";
 import { useRouter, useLocalSearchParams } from "expo-router";
-import { supabase } from "app/utils_supabase";
+import { supabase } from "utils/supabase";
 
 const AddMealToDate = () => {
   const { theme } = useTheme();

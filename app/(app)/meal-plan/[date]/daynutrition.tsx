@@ -9,7 +9,7 @@ import {
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import NutritionNav from "../../../../components/nutritionNav";
-import { supabase } from "app/utils_supabase";
+import { supabase } from "utils/supabase";
 
 type MacroKey = "calories" | "protein" | "carbs" | "fat";
 
@@ -95,10 +95,10 @@ const NutritionScreen = () => {
       // Sum up macros
       const totals = (data || []).reduce(
         (acc, entry) => ({
-          calories: acc.calories + (entry.meal?.calories || 0),
-          protein: acc.protein + (entry.meal?.protein || 0),
-          carbs: acc.carbs + (entry.meal?.carbohydrates || 0),
-          fat: acc.fat + (entry.meal?.fat || 0),
+          calories: acc.calories + (entry.meal?.[0]?.calories || 0),
+          protein: acc.protein + (entry.meal?.[0]?.protein || 0),
+          carbs: acc.carbs + (entry.meal?.[0]?.carbohydrates || 0),
+          fat: acc.fat + (entry.meal?.[0]?.fat || 0),
         }),
         { calories: 0, protein: 0, carbs: 0, fat: 0 }
       );

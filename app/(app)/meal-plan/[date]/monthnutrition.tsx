@@ -10,7 +10,7 @@ import {
 import { useLocalSearchParams, useRouter } from "expo-router";
 import NutritionNav from "../../../../components/nutritionNav";
 import { format, subDays } from "date-fns";
-import { supabase } from "app/utils_supabase";
+import { supabase } from "utils/supabase";
 
 type MacroKey = "calories" | "protein" | "carbs" | "fat";
 const macroLabels = ["Calories", "Protein", "Carbs", "Fat"];
@@ -99,10 +99,10 @@ const MonthNutritionScreen = () => {
 
           const totals = (mealPlan || []).reduce(
             (acc, entry) => ({
-              calories: acc.calories + (entry.meal?.calories || 0),
-              protein: acc.protein + (entry.meal?.protein || 0),
-              carbs: acc.carbs + (entry.meal?.carbohydrates || 0),
-              fat: acc.fat + (entry.meal?.fat || 0),
+              calories: acc.calories + (entry.meal?.calories ?? 0),
+              protein: acc.protein + (entry.meal?.protein ?? 0),
+              carbs: acc.carbs + (entry.meal?.carbohydrates ?? 0),
+              fat: acc.fat + (entry.meal?.fat ?? 0),
             }),
             { calories: 0, protein: 0, carbs: 0, fat: 0 }
           );
