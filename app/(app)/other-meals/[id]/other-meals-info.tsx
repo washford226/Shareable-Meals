@@ -29,17 +29,34 @@ const MealDetails = () => {
   const fetchMealById = async (mealId: string) => {
     try {
       setLoading(true);
-      const { data, error } = await supabase
-        .from("meals")
-        .select("*")
-        .eq("id", mealId)
-        .single();
+      
+      // Fetch meal data and ingredients separately
+      const [{ data: mealData, error: mealError }, { data: ingredientsData, error: ingredientsError }] = await Promise.all([
+        supabase
+          .from("meals")
+          .select("*")
+          .eq("id", mealId)
+          .single(),
+        supabase
+          .from("meal_ingredients")
+          .select("raw_name, quantity, unit")
+          .eq("meal_id", mealId)
+      ]);
 
-      if (error || !data) {
+      if (mealError || !mealData) {
         Alert.alert("Error", "Failed to fetch meal details.");
         setMeal(null);
       } else {
-        setMeal(data);
+        // Combine meal data with ingredients
+        const mealWithIngredients = {
+          ...mealData,
+          ingredients: ingredientsData || []
+        };
+        setMeal(mealWithIngredients);
+      }
+
+      if (ingredientsError) {
+        console.warn("Error fetching ingredients:", ingredientsError);
       }
     } catch (error) {
       console.error("Error fetching meal:", error);
@@ -99,20 +116,61 @@ const MealDetails = () => {
       }
       const userId = userData.user.id;
 
-      // Copy all fields except id and user_id
-      const { id: _id, user_id: _user_id, ...mealData } = meal;
-      const { error } = await supabase.from("meals").insert([
+      // Copy meal without id and ingredients (we'll handle ingredients separately)
+      const { id: _id, ingredients: _ingredients, ...mealData } = meal;
+      
+      // 1. Insert the meal (without ingredients)
+      const { data: newMealData, error: mealError } = await supabase.from("meals").insert([
         {
           ...mealData,
           user_id: userId,
+          visibility: true, // Make copied meals public by default
         },
-      ]);
+      ]).select("id").single();
 
-      if (error) {
-        Alert.alert("Error", "Failed to copy meal.");
-      } else {
-        Alert.alert("Success", "Meal copied successfully!");
+      if (mealError) {
+        throw mealError;
       }
+
+      const newMealId = newMealData?.id;
+      if (!newMealId) {
+        throw new Error("Failed to get new meal ID.");
+      }
+
+      // 2. Copy ingredients if they exist
+      if (meal.ingredients && meal.ingredients.length > 0) {
+        const ingredientRows = meal.ingredients.map(ingredient => ({
+          meal_id: newMealId,
+          raw_name: ingredient.raw_name,
+          quantity: ingredient.quantity,
+          unit: ingredient.unit,
+        }));
+
+        const { error: ingredientsError } = await supabase
+          .from("meal_ingredients")
+          .insert(ingredientRows);
+
+        if (ingredientsError) {
+          throw ingredientsError;
+        }
+      }
+
+      // 3. Calculate nutrition data using the edge function
+      try {
+        const { error: nutritionError } = await supabase.functions.invoke('calculate-nutrition', {
+          body: { meal_id: newMealId }
+        });
+        
+        if (nutritionError) {
+          console.warn("Failed to calculate nutrition:", nutritionError);
+          // Don't fail the whole process if nutrition calculation fails
+        }
+      } catch (nutritionErr) {
+        console.warn("Nutrition calculation error:", nutritionErr);
+        // Continue even if nutrition calculation fails
+      }
+
+      Alert.alert("Success", "Meal copied successfully!");
     } catch (err) {
       console.error("Error copying meal:", err);
       Alert.alert("Error", "An error occurred while copying the meal.");
@@ -173,18 +231,18 @@ const MealDetails = () => {
 
         {/* Ingredients */}
         <Text style={[styles.sectionTitle, { color: theme.text }]}>Ingredients</Text>
-        {Array.isArray(meal.ingredients) ? (
+        {meal.ingredients && Array.isArray(meal.ingredients) ? (
           meal.ingredients.length > 0 ? (
-            meal.ingredients.map((ing: any, idx: number) => (
+            meal.ingredients.map((ing, idx: number) => (
               <Text key={idx} style={[styles.details, { color: theme.text }]}>
-                {ing.quantity} {ing.unit} {ing.name}
+                {ing.quantity} {ing.unit || ''} {ing.raw_name}
               </Text>
             ))
           ) : (
             <Text style={[styles.details, { color: theme.text }]}>No ingredients listed.</Text>
           )
         ) : (
-          <Text style={[styles.details, { color: theme.text }]}>{meal.ingredients}</Text>
+          <Text style={[styles.details, { color: theme.text }]}>No ingredients available.</Text>
         )}
 
         {/* Cuisine */}

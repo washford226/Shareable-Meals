@@ -42,7 +42,7 @@ const EditUserScreen: React.FC = () => {
         const userId = userData.user.id;
 
         const { data, error } = await supabase
-          .from('users')
+          .from('user_profiles')
           .select('*')
           .eq('id', userId)
           .single();
@@ -79,7 +79,7 @@ const EditUserScreen: React.FC = () => {
         return;
       }
       const userId = userData.user.id;
-      const { error } = await supabase.from('users').update(fields).eq('id', userId);
+      const { error } = await supabase.from('user_profiles').update(fields).eq('id', userId);
       if (error) {
         Alert.alert('Error', errorMsg);
       } else {
@@ -170,21 +170,25 @@ const EditUserScreen: React.FC = () => {
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
         aspect: [1, 1],
-        quality: 1,
+        quality: 0.8, // Reduce quality to manage file size
+        base64: true, // Get base64 for storing in database
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
         setLoading(true);
-        const uri = result.assets[0].uri;
-        // You should upload the image to Supabase Storage and save the public URL in the users table.
-        // For simplicity, we'll just save the local URI here.
-        // TODO: Replace this with actual upload logic if needed.
+        const asset = result.assets[0];
+        
+        // For now, we'll store the local URI. In production, you might want to:
+        // 1. Upload to Supabase Storage and store the public URL
+        // 2. Or convert to base64 and store in the bytea field
+        // 3. Or implement proper image storage service
+        
         await updateUserField(
-          { profile_picture: uri },
+          { profile_picture: asset.uri }, // Using URI for now
           'Profile picture updated successfully!',
           'Failed to update profile picture.'
         );
-        setProfilePicture(uri);
+        setProfilePicture(asset.uri);
       }
     } catch (error) {
       console.error('Error updating profile picture:', error);
@@ -337,13 +341,7 @@ const EditUserScreen: React.FC = () => {
           style={[styles.navigationButton, { backgroundColor: theme.primary }]}
           onPress={() => router.push('/account/edit-email')}
         >
-          <Text style={[styles.navigationButtonText, { color: theme.buttonText }]}>Edit Email</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.navigationButton, { backgroundColor: theme.primary }]}
-          onPress={() => router.push('/account/edit-password')}
-        >
-          <Text style={[styles.navigationButtonText, { color: theme.buttonText }]}>Edit Password</Text>
+          <Text style={[styles.navigationButtonText, { color: theme.buttonText }]}>Edit Email & Password</Text>
         </TouchableOpacity>
 
         {/* Back Button */}

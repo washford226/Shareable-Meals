@@ -220,6 +220,21 @@ const CreateMealScreen = () => {
       throw ingredientsError;
     }
 
+    // 3. Calculate nutrition data using the edge function
+    try {
+      const { error: nutritionError } = await supabase.functions.invoke('calculate-nutrition', {
+        body: { meal_id: mealId }
+      });
+      
+      if (nutritionError) {
+        console.warn("Failed to calculate nutrition:", nutritionError);
+        // Don't fail the whole process if nutrition calculation fails
+      }
+    } catch (nutritionErr) {
+      console.warn("Nutrition calculation error:", nutritionErr);
+      // Continue even if nutrition calculation fails
+    }
+
     Alert.alert("Success", "Meal added successfully!");
     router.push("/(app)/my-meals/meals");
   } catch (error) {

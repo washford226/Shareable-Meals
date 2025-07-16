@@ -27,38 +27,59 @@ const MealPlanDetails = () => {
     const fetchMeal = async () => {
       try {
         // id is the meal_plan row id
-        const { data, error } = await supabase
-          .from("meal_plan")
-          .select(
+        const [{ data: mealPlanData, error: mealPlanError }, { data: ingredientsData, error: ingredientsError }] = await Promise.all([
+          supabase
+            .from("meal_plan")
+            .select(
+              `
+              meal_plan_id,
+              meal:meals (
+                id,
+                name,
+                description,
+                instructions,
+                picture,
+                recipeLink,
+                calories,
+                protein,
+                carbohydrates,
+                fat
+              )
             `
-            meal_plan_id: id,
-            meal:meals (
-              id,
-              name,
-              description,
-              ingredients,
-              instructions,
-              picture,
-              recipeLink,
-              calories,
-              protein,
-              carbohydrates,
-              fat
             )
-          `
-          )
-          .eq("id", id)
-          .single();
+            .eq("meal_plan_id", id)
+            .single(),
+          // Get ingredients for the meal
+          supabase
+            .from("meal_plan")
+            .select("meal_id")
+            .eq("meal_plan_id", id)
+            .single()
+            .then(async ({ data: planData, error: planError }) => {
+              if (planError || !planData) return { data: null, error: planError };
+              
+              return supabase
+                .from("meal_ingredients")
+                .select("raw_name, quantity, unit")
+                .eq("meal_id", planData.meal_id);
+            })
+        ]);
 
-        if (error || !data || !data.meal) {
-          throw error || new Error("Meal not found");
+        if (mealPlanError || !mealPlanData || !mealPlanData.meal) {
+          throw mealPlanError || new Error("Meal not found");
+        }
+
+        if (ingredientsError) {
+          console.warn("Error fetching ingredients:", ingredientsError);
         }
 
         // Flatten meal data for easier rendering
+        const mealData = Array.isArray(mealPlanData.meal) ? mealPlanData.meal[0] : mealPlanData.meal;
         setMeal({
-          ...data.meal[0],
-          meal_plan_id: data.meal_plan_id,
-        });
+          ...mealData,
+          meal_plan_id: mealPlanData.meal_plan_id,
+          ingredients: ingredientsData || []
+        } as Meal);
       } catch (error) {
         console.error("Failed to fetch meal:", error);
         Alert.alert("Error", "Could not fetch meal details.");
@@ -121,10 +142,9 @@ const MealPlanDetails = () => {
     );
   }
 
-  const ingredients =
-    typeof meal.ingredients === "string"
-      ? meal.ingredients.split(",").map((ingredient) => ingredient.trim())
-      : meal.ingredients;
+  const ingredients = meal.ingredients && Array.isArray(meal.ingredients) 
+    ? meal.ingredients.map(ing => `${ing.quantity} ${ing.unit || ''} ${ing.raw_name}`.trim())
+    : [];
 
   const data = [
     { type: "picture", content: meal.picture },

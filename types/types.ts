@@ -21,4 +21,24 @@ export interface Meal {
   dietary_restrictions?: string; // Optional field for dietary restrictions
   servings?: number; // Optional field for number of servings
   cuisine?: string; // Optional field for cuisine type
+  ingredients?: MealIngredient[]; // Optional array of ingredients from meal_ingredients table
+}
+
+export interface MealIngredient {
+  raw_name: string;
+  quantity: number;
+  unit: string | null;
+}
+
+export interface UserProfile {
+  id: string;
+  username: string;
+  profile_picture?: Uint8Array | string | null; // bytea in database, could be base64 string or binary
+  calories_goal?: number | null;
+  protein_goal?: number | null;
+  carbohydrates_goal?: number | null;
+  fat_goal?: number | null;
+  dietary_restrictions?: string | null;
+  allergies?: string | null;
+  created_at?: string | null;
 }

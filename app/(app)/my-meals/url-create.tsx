@@ -194,21 +194,58 @@ const URLCreateMealScreen: React.FC = () => {
       }
       const userId = userData.user.id;
 
-      const { error } = await supabase.from("meals").insert([
+      // 1. Insert the meal (without ingredients)
+      const { data: mealData, error: mealError } = await supabase.from("meals").insert([
         {
           user_id: userId,
           name: mealName,
           description,
           servings: servings ? parseInt(servings) : 1,
-          ingredients,
           instructions,
           recipeLink: recipeUrl,
+          visibility: true, // Default to public for URL-created meals
           created_by: recipeUrl,
         },
-      ]);
+      ]).select("id").single();
 
-      if (error) {
-        throw error;
+      if (mealError) {
+        throw mealError;
+      }
+
+      const mealId = mealData?.id;
+      if (!mealId) {
+        throw new Error("Failed to get new meal ID.");
+      }
+
+      // 2. Insert ingredients, each with the new meal's ID
+      const ingredientRows = ingredients.map(ingredient => ({
+        meal_id: mealId,
+        raw_name: ingredient.name,
+        quantity: ingredient.quantity ? parseFloat(ingredient.quantity) : 1.0,
+        unit: ingredient.unit || null,
+      }));
+
+      const { error: ingredientsError } = await supabase
+        .from("meal_ingredients")
+        .insert(ingredientRows);
+
+      if (ingredientsError) {
+        throw ingredientsError;
+      }
+
+      // 3. Calculate nutrition data using the edge function
+      try {
+        const { error: nutritionError } = await supabase.functions.invoke('calculate-nutrition', {
+          body: { meal_id: mealId }
+        });
+        
+        if (nutritionError) {
+          console.warn("Failed to calculate nutrition:", nutritionError);
+          // Don't fail the whole process if nutrition calculation fails
+        }
+      } catch (nutritionErr) {
+        console.warn("Nutrition calculation error:", nutritionErr);
+        // Continue even if nutrition calculation fails
       }
 
       Alert.alert("Success", "Meal added successfully!", [

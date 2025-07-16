@@ -44,19 +44,37 @@ const MyMealInfo = () => {
       }
       const userId = userData.user.id;
 
-      const { data, error } = await supabase
-        .from("meals")
-        .select("*")
-        .eq("id", id)
-        .eq("user_id", userId)
-        .single();
+      // Fetch meal data and ingredients separately
+      const [{ data: mealData, error: mealError }, { data: ingredientsData, error: ingredientsError }] = await Promise.all([
+        supabase
+          .from("meals")
+          .select("*")
+          .eq("id", id)
+          .eq("user_id", userId)
+          .single(),
+        supabase
+          .from("meal_ingredients")
+          .select("raw_name, quantity, unit")
+          .eq("meal_id", id)
+      ]);
 
-      if (error || !data) {
+      if (mealError || !mealData) {
         Alert.alert("Error", "Meal not found.");
         router.back();
         return;
       }
-      setMeal(data);
+
+      if (ingredientsError) {
+        console.warn("Error fetching ingredients:", ingredientsError);
+      }
+
+      // Combine meal data with ingredients
+      const mealWithIngredients = {
+        ...mealData,
+        ingredients: ingredientsData || []
+      };
+
+      setMeal(mealWithIngredients);
     } catch (error) {
       console.error("Error fetching meal:", error);
       Alert.alert("Error", "Could not fetch meal.");
@@ -215,18 +233,18 @@ const MyMealInfo = () => {
         )}
         {/* Ingredients */}
         <Text style={[styles.sectionTitle, { color: theme.text }]}>Ingredients</Text>
-        {Array.isArray(meal.ingredients) ? (
+        {meal.ingredients && Array.isArray(meal.ingredients) ? (
           meal.ingredients.length > 0 ? (
-            meal.ingredients.map((ing: any, idx: number) => (
+            meal.ingredients.map((ing, idx: number) => (
               <Text key={idx} style={[styles.details, { color: theme.text }]}>
-                {ing.quantity} {ing.unit} {ing.name}
+                {ing.quantity} {ing.unit || ''} {ing.raw_name}
               </Text>
             ))
           ) : (
             <Text style={[styles.details, { color: theme.text }]}>No ingredients listed.</Text>
           )
         ) : (
-          <Text style={[styles.details, { color: theme.text }]}>{meal.ingredients}</Text>
+          <Text style={[styles.details, { color: theme.text }]}>No ingredients available.</Text>
         )}
 
         {/* Nutrition Info */}

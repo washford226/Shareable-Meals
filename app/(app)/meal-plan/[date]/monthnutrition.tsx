@@ -48,7 +48,7 @@ const MonthNutritionScreen = () => {
       const userId = userData.user.id;
 
       const { data, error } = await supabase
-        .from("users")
+        .from("user_profiles")
         .select("calories_goal, protein_goal, carbohydrates_goal, fat_goal")
         .eq("id", userId)
         .single();
@@ -98,12 +98,16 @@ const MonthNutritionScreen = () => {
           }
 
           const totals = (mealPlan || []).reduce(
-            (acc, entry) => ({
-              calories: acc.calories + (entry.meal?.calories ?? 0),
-              protein: acc.protein + (entry.meal?.protein ?? 0),
-              carbs: acc.carbs + (entry.meal?.carbohydrates ?? 0),
-              fat: acc.fat + (entry.meal?.fat ?? 0),
-            }),
+            (acc, entry) => {
+              // Handle the case where meal might be an array or a single object
+              const meal = Array.isArray(entry.meal) ? entry.meal[0] : entry.meal;
+              return {
+                calories: acc.calories + (meal?.calories ?? 0),
+                protein: acc.protein + (meal?.protein ?? 0),
+                carbs: acc.carbs + (meal?.carbohydrates ?? 0),
+                fat: acc.fat + (meal?.fat ?? 0),
+              };
+            },
             { calories: 0, protein: 0, carbs: 0, fat: 0 }
           );
           return { date: d, ...totals };
