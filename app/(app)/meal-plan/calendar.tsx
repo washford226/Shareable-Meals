@@ -27,6 +27,7 @@ const MealPlanCalendar: React.FC = () => {
   const { theme } = useTheme();
   const [daysToShow, setDaysToShow] = useState(7);
   const [meals, setMeals] = useState<{ [key: string]: Meal[] }>({});
+  const [loadingDates, setLoadingDates] = useState<{ [key: string]: boolean }>({});
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [isModalVisible, setIsModalVisible] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);
@@ -41,26 +42,83 @@ const MealPlanCalendar: React.FC = () => {
 
   const fetchMealsForDate = async (date: string) => {
   try {
+    // Set loading state for this date
+    setLoadingDates(prev => ({ ...prev, [date]: true }));
+    
     const userId = await getCurrentUserId();
     if (!userId) {
       Alert.alert("Error", "You are not logged in. Please log in to view your meals.");
+      setLoadingDates(prev => ({ ...prev, [date]: false }));
       return [];
     }
 
+    // Fetch meal plan entries with full meal details
     const { data, error } = await supabase
       .from("meal_plan")
-      .select("*")
+      .select(`
+        *,
+        meals (
+          id,
+          name,
+          description,
+          calories,
+          protein,
+          carbohydrates,
+          fat,
+          picture,
+          instructions,
+          recipeLink,
+          created_at,
+          created_by_ai,
+          favorite,
+          dietary_restrictions,
+          servings,
+          cuisine,
+          visibility,
+          created_by
+        )
+      `)
       .eq("user_id", userId)
       .eq("date", date);
 
     if (error) {
       console.error(`Error fetching meals for date (${date}):`, error);
+      setLoadingDates(prev => ({ ...prev, [date]: false }));
       return [];
     }
 
-    return Array.isArray(data) ? data : [];
+    // Transform the data to match the expected Meal interface
+    const transformedMeals = data?.map(entry => ({
+      id: entry.meals?.id || entry.meal_id,
+      name: entry.meals?.name || "Unknown Meal",
+      description: entry.meals?.description || "",
+      calories: entry.meals?.calories || 0,
+      protein: entry.meals?.protein || 0,
+      carbohydrates: entry.meals?.carbohydrates || 0,
+      fat: entry.meals?.fat || 0,
+      picture: entry.meals?.picture || null,
+      meal_type: entry.meal_type || "Other", // Get meal_type from meal_plan table
+      userName: entry.meals?.created_by || "",
+      visibility: entry.meals?.visibility || false,
+      averageRating: 0, // Not stored in database
+      reviewCount: 0, // Not stored in database
+      meal_plan_id: entry.meal_plan_id,
+      instructions: entry.meals?.instructions || "",
+      recipeLink: entry.meals?.recipeLink || "",
+      created_at: entry.meals?.created_at || "",
+      created_by_ai: entry.meals?.created_by_ai || false,
+      favorite: entry.meals?.favorite || false,
+      dietary_restrictions: entry.meals?.dietary_restrictions || "",
+      servings: entry.meals?.servings || 1,
+      cuisine: entry.meals?.cuisine || ""
+    })) || [];
+
+    // Clear loading state for this date
+    setLoadingDates(prev => ({ ...prev, [date]: false }));
+    return transformedMeals;
   } catch (error) {
     console.error(`Error fetching meals for date (${date}):`, error);
+    setLoadingDates(prev => ({ ...prev, [date]: false }));
     return [];
   }
 };
@@ -155,8 +213,8 @@ const MealPlanCalendar: React.FC = () => {
   };
 
   const handleMealSelect = (meal: Meal) => {
-    router.push(`/(app)/meal-plan/${meal.meal_plan_id}/details`);
-
+    // Navigate to the meal details using the meal ID, not meal_plan_id
+    router.push(`/(app)/my-meals/${meal.id}/info`);
   };
 
   const getMealButtonColor = (mealType: string) => {
@@ -166,8 +224,14 @@ const MealPlanCalendar: React.FC = () => {
 
   return (
     <View style={[styles.outerContainer, { backgroundColor: theme.background }]}>
-      {/* Pantry Button */}
+      {/* Header Buttons */}
       <View style={styles.headerContainer}>
+      <TouchableOpacity
+        style={[styles.groceryButton, { backgroundColor: theme.button }]}
+        onPress={() => router.push("./grocery-list")}
+      >
+        <Text style={[styles.groceryButtonText, { color: theme.buttonText }]}>Grocery List</Text>
+      </TouchableOpacity>
       <TouchableOpacity
         style={[styles.pantryButton, { backgroundColor: theme.primary }]}
         onPress={() => router.push("/pantry/pantry")} // Navigate to the Pantry screen
@@ -197,10 +261,14 @@ const MealPlanCalendar: React.FC = () => {
                 </TouchableOpacity>
                 <View style={styles.mealsContainer}>
                   <ScrollView>
-                  {meals[dateString]?.length > 0 ? (
+                  {loadingDates[dateString] ? (
+                    <View style={styles.loadingContainer}>
+                      <Text style={[styles.loadingText, { color: theme.text }]}>Loading meals...</Text>
+                    </View>
+                  ) : meals[dateString]?.length > 0 ? (
                     meals[dateString].map((meal, index) => (
                       <TouchableOpacity
-                        key={index}
+                        key={`${meal.id}-${index}`}
                         style={[
                           styles.mealButton,
                           { backgroundColor: getMealButtonColor(meal.meal_type) },
@@ -219,19 +287,24 @@ const MealPlanCalendar: React.FC = () => {
 
                           {/* Display the meal name and description */}
                           <View style={styles.mealTextContainer}>
-                            <Text style={[styles.mealText, { color: theme.mealText }]}>{meal.name}</Text>
-                            <Text style={[styles.mealDescription, { color: theme.subtext }]}>
-                              {meal.description}
+                            <Text style={[styles.mealText, { color: theme.mealText }]} numberOfLines={2}>
+                              {meal.name || "Unknown Meal"}
+                            </Text>
+                            <Text style={[styles.mealDescription, { color: theme.subtext }]} numberOfLines={3}>
+                              {meal.description || "No description available"}
+                            </Text>
+                            <Text style={[styles.mealTypeText, { color: theme.subtext }]}>
+                              {meal.meal_type || "Other"}
                             </Text>
                           </View>
                         </View>
                       </TouchableOpacity>
                     ))
-                  ) : (
+                  ) : meals[dateString] !== undefined ? (
                     <Text style={[styles.noMealText, { color: theme.subtext }]}>
                       No meals for this day
                     </Text>
-                  )}
+                  ) : null}
                   </ScrollView>
                 </View>
                 {/* Nutrition Block - always visible */}
@@ -265,7 +338,7 @@ const MealPlanCalendar: React.FC = () => {
                             <Text style={[styles.nutritionValue, { color: theme.text }]}>{totals.fat} g</Text>
                           </View>
                         </View>
-                        {meals[dateString]?.length === 0 && (
+                        {meals[dateString] !== undefined && meals[dateString]?.length === 0 && (
                           <Text style={[styles.noMealText, { color: theme.subtext, marginTop: 8 }]}>
                             No meals for this day
                           </Text>
@@ -332,8 +405,16 @@ const styles = StyleSheet.create({
   },
   headerContainer: {
   flexDirection: "row",
-  justifyContent: "flex-end", // Align the pantry button to the right
+  justifyContent: "space-between", // Space out buttons to opposite ends
   padding: 16,
+},
+groceryButton: {
+  padding: 12,
+  borderRadius: 8,
+},
+groceryButtonText: {
+  fontSize: 16,
+  fontWeight: "bold",
 },
 pantryButton: {
   padding: 12,
@@ -514,6 +595,12 @@ pantryButtonText: {
     textAlign: "center", 
     marginTop: 4 
   },
+  mealTypeText: {
+    fontSize: 10,
+    textAlign: "center",
+    marginTop: 2,
+    fontWeight: "bold",
+  },
   mealTextContainer: {
     flex: 1,
     justifyContent: "center",
@@ -525,6 +612,17 @@ pantryButtonText: {
     fontWeight: "bold",
     textAlign: "center",
     marginVertical: 4,
+  },
+  loadingContainer: {
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+    marginVertical: 16,
+  },
+  loadingText: {
+    fontSize: 14,
+    fontStyle: "italic",
+    textAlign: "center",
   },
 });
 

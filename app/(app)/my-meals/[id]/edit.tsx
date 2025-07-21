@@ -63,7 +63,7 @@ export default function EditMealScreen() {
       const { data: userData, error: userError } = await supabase.auth.getUser();
       if (userError || !userData?.user) {
         Alert.alert("Error", "User not authenticated. Please log in.");
-        router.back();
+        router.push(`/(app)/my-meals/${mealId}/info`);
         return;
       }
       const userId = userData.user.id;
@@ -77,7 +77,7 @@ export default function EditMealScreen() {
 
       if (error || !data) {
         Alert.alert("Error", "Failed to fetch meal details.");
-        router.back();
+        router.push(`/(app)/my-meals/${mealId}/info`);
         return;
       }
 
@@ -96,7 +96,7 @@ export default function EditMealScreen() {
     } catch (error) {
       console.error("Error fetching meal details:", error);
       Alert.alert("Error", "An error occurred while fetching meal details.");
-      router.back();
+      router.push(`/(app)/my-meals/${mealId}/info`);
     } finally {
       setLoading(false);
     }
@@ -155,7 +155,7 @@ export default function EditMealScreen() {
   useEffect(() => {
     if (!mealId) {
       Alert.alert("Error", "Meal ID is missing. Returning to the previous screen.");
-      router.back();
+      router.push("/(app)/my-meals/meals");
       return;
     }
     fetchMealDetails();

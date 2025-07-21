@@ -39,7 +39,7 @@ const MyMealInfo = () => {
       const { data: userData, error: userError } = await supabase.auth.getUser();
       if (userError || !userData?.user) {
         Alert.alert("Error", "User not authenticated. Please log in.");
-        router.back();
+        router.push("/(app)/my-meals/meals");
         return;
       }
       const userId = userData.user.id;
@@ -60,7 +60,7 @@ const MyMealInfo = () => {
 
       if (mealError || !mealData) {
         Alert.alert("Error", "Meal not found.");
-        router.back();
+        router.push("/(app)/my-meals/meals");
         return;
       }
 
@@ -150,7 +150,7 @@ const MyMealInfo = () => {
       }
 
       Alert.alert("Success", "Meal deleted successfully!");
-      router.back();
+      router.push("/(app)/my-meals/meals");
     } catch (error) {
       console.error("Error deleting meal:", error);
       Alert.alert("Error", "An error occurred while deleting the meal.");
@@ -295,7 +295,7 @@ const MyMealInfo = () => {
 
         <TouchableOpacity
           style={[styles.button, { backgroundColor: theme.button }]}
-          onPress={() => router.back()}
+          onPress={() => router.push("/(app)/my-meals/meals")}
         >
           <Text style={[styles.buttonText, { color: theme.buttonText }]}>Back</Text>
         </TouchableOpacity>

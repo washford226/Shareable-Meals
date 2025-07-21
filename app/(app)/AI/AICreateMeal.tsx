@@ -134,19 +134,26 @@ const AICreateMeal = () => {
       }
 
       // 2. Insert ingredients, each with the new meal's ID
-      const ingredientRows = generatedMeal.ingredients.map(ingredient => ({
-        meal_id: mealId,
-        raw_name: ingredient.name,
-        quantity: ingredient.quantity ? parseFloat(ingredient.quantity) : 1.0,
-        unit: ingredient.unit || null,
-      }));
+      // Filter out ingredients that don't have a name
+      const validIngredients = generatedMeal.ingredients.filter(ingredient => 
+        ingredient.name && ingredient.name.trim().length > 0
+      );
+      
+      if (validIngredients.length > 0) {
+        const ingredientRows = validIngredients.map(ingredient => ({
+          meal_id: mealId,
+          raw_name: ingredient.name.trim(),
+          quantity: ingredient.quantity ? parseFloat(ingredient.quantity) : 1.0,
+          unit: ingredient.unit || null,
+        }));
 
-      const { error: ingredientsError } = await supabase
-        .from("meal_ingredients")
-        .insert(ingredientRows);
+        const { error: ingredientsError } = await supabase
+          .from("meal_ingredients")
+          .insert(ingredientRows);
 
-      if (ingredientsError) {
-        throw ingredientsError;
+        if (ingredientsError) {
+          throw ingredientsError;
+        }
       }
 
       // 3. Calculate nutrition data using the edge function
