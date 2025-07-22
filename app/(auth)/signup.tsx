@@ -20,6 +20,12 @@ const SignUpScreen: React.FC = () => {
   const [allergies, setAllergies] = useState("");
   const [profilePicture, setProfilePicture] = useState<string | null>(null);
   const [isSigningUp, setIsSigningUp] = useState(false);
+  const [errors, setErrors] = useState({
+    username: "",
+    email: "",
+    password: "",
+    confirmPassword: "",
+  });
 
   const dietaryOptions = [
     { label: "None", value: "None" },
@@ -61,9 +67,47 @@ const SignUpScreen: React.FC = () => {
     return () => clearTimeout(delayDebounce);
   }, [username]);
 
+  // Validation functions
   const validateEmail = (email: string) => {
     const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     return re.test(email);
+  };
+
+  const validatePassword = (password: string) => {
+    return password.length >= 6;
+  };
+
+  const validateUsername = (username: string) => {
+    return username.trim().length >= 3 && /^[a-zA-Z0-9_]+$/.test(username.trim());
+  };
+
+  // Clear errors when user types
+  const handleUsernameChange = (text: string) => {
+    setUsername(text);
+    if (errors.username) {
+      setErrors(prev => ({ ...prev, username: "" }));
+    }
+  };
+
+  const handleEmailChange = (text: string) => {
+    setEmail(text);
+    if (errors.email) {
+      setErrors(prev => ({ ...prev, email: "" }));
+    }
+  };
+
+  const handlePasswordChange = (text: string) => {
+    setPassword(text);
+    if (errors.password) {
+      setErrors(prev => ({ ...prev, password: "" }));
+    }
+  };
+
+  const handleConfirmPasswordChange = (text: string) => {
+    setConfirmPassword(text);
+    if (errors.confirmPassword) {
+      setErrors(prev => ({ ...prev, confirmPassword: "" }));
+    }
   };
 
   // Pick image and upload to Supabase Storage
@@ -112,74 +156,119 @@ const SignUpScreen: React.FC = () => {
   };
 
   const handleSignUp = async () => {
+    // Reset errors
+    setErrors({ username: "", email: "", password: "", confirmPassword: "" });
+    
+    // Comprehensive validation
+    let hasErrors = false;
+    const newErrors = { username: "", email: "", password: "", confirmPassword: "" };
+
+    // Username validation
+    if (!username.trim()) {
+      newErrors.username = "Username is required";
+      hasErrors = true;
+    } else if (!validateUsername(username)) {
+      newErrors.username = "Username must be at least 3 characters and contain only letters, numbers, and underscores";
+      hasErrors = true;
+    } else if (isUsernameAvailable === false) {
+      newErrors.username = "This username is already taken";
+      hasErrors = true;
+    } else if (isUsernameAvailable === null && username.trim()) {
+      newErrors.username = "Please wait while we check username availability";
+      hasErrors = true;
+    }
+
+    // Email validation
+    if (!email.trim()) {
+      newErrors.email = "Email is required";
+      hasErrors = true;
+    } else if (!validateEmail(email.trim())) {
+      newErrors.email = "Please enter a valid email address";
+      hasErrors = true;
+    }
+
+    // Password validation
+    if (!password) {
+      newErrors.password = "Password is required";
+      hasErrors = true;
+    } else if (!validatePassword(password)) {
+      newErrors.password = "Password must be at least 6 characters long";
+      hasErrors = true;
+    }
+
+    // Confirm password validation
+    if (!confirmPassword) {
+      newErrors.confirmPassword = "Please confirm your password";
+      hasErrors = true;
+    } else if (password !== confirmPassword) {
+      newErrors.confirmPassword = "Passwords do not match";
+      hasErrors = true;
+    }
+
+    if (hasErrors) {
+      setErrors(newErrors);
+      return;
+    }
+
     setIsSigningUp(true);
-
-    if (!username || !email || !password || !confirmPassword) {
-      Alert.alert("Error", "All fields are required");
-      setIsSigningUp(false);
-      return;
-    }
-
-    if (isUsernameAvailable === false) {
-      Alert.alert("Error", "Username is already taken");
-      setIsSigningUp(false);
-      return;
-    }
-
-    if (password !== confirmPassword) {
-      Alert.alert("Error", "Passwords do not match");
-      setIsSigningUp(false);
-      return;
-    }
-
-    if (!validateEmail(email)) {
-      Alert.alert("Error", "Invalid email format");
-      setIsSigningUp(false);
-      return;
-    }
 
     try {
       // 1. Sign up user in Supabase Auth
       const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-        email,
+        email: email.trim().toLowerCase(),
         password,
       });
 
-      if (signUpError || !signUpData?.user) {
-        Alert.alert("Error", signUpError?.message || "Failed to sign up");
-        setIsSigningUp(false);
+      if (signUpError) {
+        // Handle specific Supabase errors
+        if (signUpError.message.includes('User already registered')) {
+          Alert.alert("Account Exists", "An account with this email already exists. Please try logging in instead.");
+        } else if (signUpError.message.includes('Password should be at least 6 characters')) {
+          Alert.alert("Weak Password", "Password must be at least 6 characters long.");
+        } else if (signUpError.message.includes('Invalid email')) {
+          Alert.alert("Invalid Email", "Please enter a valid email address.");
+        } else {
+          Alert.alert("Signup Error", signUpError.message || "Failed to create account. Please try again.");
+        }
         return;
       }
 
+      if (!signUpData?.user) {
+        Alert.alert("Error", "Failed to create account. Please try again.");
+        return;
+      }
       const userId = signUpData.user.id;
 
       // 2. Upload profile picture if provided
       let profilePictureUrl: string | null = null;
       if (profilePicture) {
         profilePictureUrl = await uploadProfilePicture(userId, profilePicture);
+        if (!profilePictureUrl) {
+          console.warn("Failed to upload profile picture, but continuing with signup");
+        }
       }
 
       // 3. Insert user profile in 'user_profiles' table
       const { error: profileError } = await supabase.from("user_profiles").upsert([
         {
           id: userId,
-          username,
+          username: username.trim(),
+          email: email.trim().toLowerCase(),
           calories_goal: caloriesGoal ? parseInt(caloriesGoal) : null,
-          dietary_restrictions: dietaryRestrictions,
-          allergies,
+          dietary_restrictions: dietaryRestrictions || null,
+          allergies: allergies || null,
           profile_picture: profilePictureUrl,
         },
       ]);
 
       if (profileError) {
-        Alert.alert("Error", profileError.message || "Failed to save profile.");
-        setIsSigningUp(false);
-        return;
+        console.error("Profile creation error:", profileError);
+        Alert.alert("Warning", "Account created but profile setup failed. You can complete your profile later in account settings.");
       }
 
       Alert.alert(
-        "Success",
-        "Account created! Please check your email to confirm your account.",
+        "Success", 
+        "Account created successfully! Please check your email to confirm your account before signing in.",
         [
           {
             text: "OK",
@@ -187,9 +276,11 @@ const SignUpScreen: React.FC = () => {
           },
         ]
       );
+
     } catch (error) {
-      Alert.alert("Error", "Failed to sign up");
-      console.error("Error signing up:", error);
+      console.error("Signup error:", error);
+      const errorMessage = error instanceof Error ? error.message : "An unexpected error occurred";
+      Alert.alert("Signup Failed", `Failed to create account: ${errorMessage}. Please try again.`);
     } finally {
       setIsSigningUp(false);
     }
@@ -198,52 +289,75 @@ const SignUpScreen: React.FC = () => {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Sign Up</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="Username"
-        value={username}
-        onChangeText={setUsername}
-        autoCapitalize="none"
-      />
+      
+      {/* Username Input */}
+      <View style={[styles.inputContainer, errors.username ? styles.inputError : null]}>
+        <TextInput
+          style={styles.input}
+          placeholder="Username"
+          value={username}
+          onChangeText={handleUsernameChange}
+          autoCapitalize="none"
+          editable={!isSigningUp}
+        />
+      </View>
+      {errors.username ? <Text style={styles.errorText}>{errors.username}</Text> : null}
       {checkingUsername && (
-        <Text style={{ color: "#007bff", marginBottom: 5 }}>Checking username...</Text>
+        <Text style={styles.infoText}>Checking username availability...</Text>
       )}
-      {isUsernameAvailable === false && (
-        <Text style={{ color: "red", marginBottom: 5 }}>Username is taken</Text>
+      {isUsernameAvailable === false && !errors.username && (
+        <Text style={styles.errorText}>Username is already taken</Text>
       )}
-      {isUsernameAvailable === true && (
-        <Text style={{ color: "green", marginBottom: 5 }}>Username is available</Text>
+      {isUsernameAvailable === true && !errors.username && (
+        <Text style={styles.successText}>Username is available</Text>
       )}
-      <TextInput
-        style={styles.input}
-        placeholder="Email"
-        value={email}
-        onChangeText={setEmail}
-        keyboardType="email-address"
-        autoCapitalize="none"
-      />
-      <View style={styles.passwordContainer}>
+
+      {/* Email Input */}
+      <View style={[styles.inputContainer, errors.email ? styles.inputError : null]}>
+        <TextInput
+          style={styles.input}
+          placeholder="Email"
+          value={email}
+          onChangeText={handleEmailChange}
+          keyboardType="email-address"
+          autoCapitalize="none"
+          editable={!isSigningUp}
+        />
+      </View>
+      {errors.email ? <Text style={styles.errorText}>{errors.email}</Text> : null}
+
+      {/* Password Input */}
+      <View style={[styles.passwordContainer, errors.password ? styles.inputError : null]}>
         <TextInput
           style={styles.passwordInput}
           placeholder="Password"
           value={password}
-          onChangeText={setPassword}
+          onChangeText={handlePasswordChange}
           secureTextEntry={!isPasswordVisible}
+          editable={!isSigningUp}
         />
         <TouchableOpacity
           style={styles.showPasswordButton}
           onPress={() => setIsPasswordVisible(!isPasswordVisible)}
+          disabled={isSigningUp}
         >
-          <Text>{isPasswordVisible ? "Hide" : "Show"}</Text>
+          <Text style={styles.showPasswordText}>{isPasswordVisible ? "Hide" : "Show"}</Text>
         </TouchableOpacity>
       </View>
-      <TextInput
-        style={styles.input}
-        placeholder="Confirm Password"
-        value={confirmPassword}
-        onChangeText={setConfirmPassword}
-        secureTextEntry={!isPasswordVisible}
-      />
+      {errors.password ? <Text style={styles.errorText}>{errors.password}</Text> : null}
+
+      {/* Confirm Password Input */}
+      <View style={[styles.inputContainer, errors.confirmPassword ? styles.inputError : null]}>
+        <TextInput
+          style={styles.input}
+          placeholder="Confirm Password"
+          value={confirmPassword}
+          onChangeText={handleConfirmPasswordChange}
+          secureTextEntry={!isPasswordVisible}
+          editable={!isSigningUp}
+        />
+      </View>
+      {errors.confirmPassword ? <Text style={styles.errorText}>{errors.confirmPassword}</Text> : null}
       <TextInput
         style={styles.input}
         placeholder="Calories Goal (optional)"
@@ -307,21 +421,24 @@ const styles = StyleSheet.create({
     padding: 20,
     width: "100%",
   },
-  pickerInput: {
-    width: "100%",
-    borderWidth: 1,
-    borderColor: "#ccc",
-    padding: 15,
-    marginBottom: 10,
-    borderRadius: 8,
-    backgroundColor: "#fff",
-    fontSize: 16,
-  },
   title: {
     fontSize: 24,
     fontWeight: "bold",
     textAlign: "center",
     marginBottom: 20,
+  },
+  inputContainer: {
+    width: "100%",
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: "#ccc",
+    borderRadius: 8,
+    backgroundColor: "#fff",
+    paddingHorizontal: 8,
+  },
+  inputError: {
+    borderColor: "#ff4444",
+    borderWidth: 2,
   },
   input: {
     width: "100%",
@@ -332,6 +449,24 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: "#fff",
   },
+  errorText: {
+    color: "#ff4444",
+    fontSize: 14,
+    marginBottom: 8,
+    marginLeft: 4,
+  },
+  infoText: {
+    color: "#007bff",
+    fontSize: 14,
+    marginBottom: 8,
+    marginLeft: 4,
+  },
+  successText: {
+    color: "#28a745",
+    fontSize: 14,
+    marginBottom: 8,
+    marginLeft: 4,
+  },
   passwordContainer: {
     flexDirection: "row",
     alignItems: "center",
@@ -340,7 +475,7 @@ const styles = StyleSheet.create({
     borderColor: "#ccc",
     borderRadius: 8,
     backgroundColor: "#fff",
-    marginBottom: 10,
+    marginBottom: 8,
     paddingHorizontal: 8,
   },
   passwordInput: {
@@ -350,6 +485,25 @@ const styles = StyleSheet.create({
   },
   showPasswordButton: {
     marginLeft: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+    backgroundColor: "#007bff",
+  },
+  showPasswordText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "bold",
+  },
+  pickerInput: {
+    width: "100%",
+    borderWidth: 1,
+    borderColor: "#ccc",
+    padding: 15,
+    marginBottom: 10,
+    borderRadius: 8,
+    backgroundColor: "#fff",
+    fontSize: 16,
   },
   uploadButton: {
     width: "100%",
@@ -379,6 +533,10 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: "center",
     marginBottom: 10,
+    minHeight: 48,
+  },
+  buttonDisabled: {
+    backgroundColor: "#cccccc",
   },
   buttonText: {
     color: "#fff",

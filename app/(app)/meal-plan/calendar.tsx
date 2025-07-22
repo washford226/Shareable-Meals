@@ -8,13 +8,16 @@ import {
   Platform,
   ScrollView,
   Modal,
-  Image } from "react-native";
+  Image,
+  ActivityIndicator,
+  RefreshControl
+} from "react-native";
 import { format, startOfWeek, addDays } from "date-fns";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import { Meal } from "../../../types/types";
 import { useTheme } from "../../../context/ThemeContext";
-import  BottomNav from "../../../components/bottomNav"; //B may be uppercase maybe
+import BottomNav from "../../../components/bottomNav";
 import { Dimensions } from "react-native";
 import { supabase } from "utils/supabase";
 
@@ -30,150 +33,255 @@ const MealPlanCalendar: React.FC = () => {
   const [loadingDates, setLoadingDates] = useState<{ [key: string]: boolean }>({});
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [isModalVisible, setIsModalVisible] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
   const scrollViewRef = useRef<ScrollView>(null);
 
   const startOfCurrentWeek = startOfWeek(today, { weekStartsOn: 0 });
 
-  const getCurrentUserId = async () => {
-  const { data, error } = await supabase.auth.getUser();
-  if (error || !data?.user) return null;
-  return data.user.id;
-};
+  const getCurrentUserId = async (): Promise<string | null> => {
+    try {
+      const { data, error } = await supabase.auth.getUser();
+      if (error) {
+        console.error("Error getting user:", error.message);
+        setError("Authentication error. Please log in again.");
+        return null;
+      }
+      if (!data?.user) {
+        setError("You are not logged in. Please log in to view your meals.");
+        return null;
+      }
+      return data.user.id;
+    } catch (error) {
+      console.error("Unexpected error getting user:", error);
+      setError("An unexpected error occurred. Please try again.");
+      return null;
+    }
+  };
 
-  const fetchMealsForDate = async (date: string) => {
-  try {
-    // Set loading state for this date
-    setLoadingDates(prev => ({ ...prev, [date]: true }));
-    
-    const userId = await getCurrentUserId();
-    if (!userId) {
-      Alert.alert("Error", "You are not logged in. Please log in to view your meals.");
+  const fetchMealsForDate = async (date: string, retryCount = 0): Promise<Meal[]> => {
+    try {
+      // Set loading state for this date
+      setLoadingDates(prev => ({ ...prev, [date]: true }));
+      
+      const userId = await getCurrentUserId();
+      if (!userId) {
+        setLoadingDates(prev => ({ ...prev, [date]: false }));
+        return [];
+      }
+
+      // Fetch meal plan entries with full meal details
+      const { data, error } = await supabase
+        .from("meal_plan")
+        .select(`
+          *,
+          meals (
+            id,
+            name,
+            description,
+            calories,
+            protein,
+            carbohydrates,
+            fat,
+            picture,
+            instructions,
+            recipeLink,
+            created_at,
+            created_by_ai,
+            favorite,
+            dietary_restrictions,
+            servings,
+            cuisine,
+            visibility,
+            created_by
+          )
+        `)
+        .eq("user_id", userId)
+        .eq("date", date);
+
+      if (error) {
+        console.error(`Error fetching meals for date (${date}):`, error.message);
+        
+        // Retry logic for network errors
+        if (retryCount < 2 && (error.message.includes('network') || error.message.includes('timeout'))) {
+          console.log(`Retrying fetch for ${date}, attempt ${retryCount + 1}`);
+          await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
+          return fetchMealsForDate(date, retryCount + 1);
+        }
+        
+        setError(`Failed to load meals for ${date}. Please try refreshing.`);
+        setLoadingDates(prev => ({ ...prev, [date]: false }));
+        return [];
+      }
+
+      // Transform the data to match the expected Meal interface
+      const transformedMeals = data?.map(entry => ({
+        id: entry.meals?.id || entry.meal_id,
+        name: entry.meals?.name || "Unknown Meal",
+        description: entry.meals?.description || "",
+        calories: entry.meals?.calories || 0,
+        protein: entry.meals?.protein || 0,
+        carbohydrates: entry.meals?.carbohydrates || 0,
+        fat: entry.meals?.fat || 0,
+        picture: entry.meals?.picture || null,
+        meal_type: entry.meal_type || "Other", // Get meal_type from meal_plan table
+        userName: entry.meals?.created_by || "",
+        visibility: entry.meals?.visibility || false,
+        averageRating: 0, // Not stored in database
+        reviewCount: 0, // Not stored in database
+        meal_plan_id: entry.meal_plan_id,
+        instructions: entry.meals?.instructions || "",
+        recipeLink: entry.meals?.recipeLink || "",
+        created_at: entry.meals?.created_at || "",
+        created_by_ai: entry.meals?.created_by_ai || false,
+        favorite: entry.meals?.favorite || false,
+        dietary_restrictions: entry.meals?.dietary_restrictions || "",
+        servings: entry.meals?.servings || 1,
+        cuisine: entry.meals?.cuisine || ""
+      })) || [];
+
+      // Clear loading state for this date
+      setLoadingDates(prev => ({ ...prev, [date]: false }));
+      setError(null); // Clear any previous errors
+      return transformedMeals;
+    } catch (error) {
+      console.error(`Unexpected error fetching meals for date (${date}):`, error);
+      
+      // Retry logic for unexpected errors
+      if (retryCount < 2) {
+        console.log(`Retrying fetch for ${date}, attempt ${retryCount + 1}`);
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        return fetchMealsForDate(date, retryCount + 1);
+      }
+      
+      setError(`An unexpected error occurred loading meals for ${date}.`);
       setLoadingDates(prev => ({ ...prev, [date]: false }));
       return [];
     }
+  };
 
-    // Fetch meal plan entries with full meal details
-    const { data, error } = await supabase
-      .from("meal_plan")
-      .select(`
-        *,
-        meals (
-          id,
-          name,
-          description,
-          calories,
-          protein,
-          carbohydrates,
-          fat,
-          picture,
-          instructions,
-          recipeLink,
-          created_at,
-          created_by_ai,
-          favorite,
-          dietary_restrictions,
-          servings,
-          cuisine,
-          visibility,
-          created_by
-        )
-      `)
-      .eq("user_id", userId)
-      .eq("date", date);
-
-    if (error) {
-      console.error(`Error fetching meals for date (${date}):`, error);
-      setLoadingDates(prev => ({ ...prev, [date]: false }));
-      return [];
+  const fetchMealsForWeek = async (weekStartDate: Date, isRefresh = false) => {
+    try {
+      if (isRefresh) {
+        setIsRefreshing(true);
+      } else {
+        setIsInitialLoading(true);
+      }
+      
+      const newMeals: { [key: string]: Meal[] } = {};
+      const fetchPromises = [];
+      
+      for (let i = 0; i < daysToShow; i++) {
+        const currentDate = addDays(weekStartDate, i);
+        const currentDateString = format(currentDate, "yyyy-MM-dd");
+        fetchPromises.push(
+          fetchMealsForDate(currentDateString).then(mealsForDate => {
+            newMeals[currentDateString] = mealsForDate;
+          })
+        );
+      }
+      
+      await Promise.all(fetchPromises);
+      setMeals((prevMeals) => ({ ...prevMeals, ...newMeals }));
+      setError(null); // Clear any errors on successful fetch
+    } catch (error) {
+      console.error("Error fetching meals for week:", error);
+      setError("Failed to load meal plan. Please try again.");
+    } finally {
+      setIsRefreshing(false);
+      setIsInitialLoading(false);
     }
+  };
 
-    // Transform the data to match the expected Meal interface
-    const transformedMeals = data?.map(entry => ({
-      id: entry.meals?.id || entry.meal_id,
-      name: entry.meals?.name || "Unknown Meal",
-      description: entry.meals?.description || "",
-      calories: entry.meals?.calories || 0,
-      protein: entry.meals?.protein || 0,
-      carbohydrates: entry.meals?.carbohydrates || 0,
-      fat: entry.meals?.fat || 0,
-      picture: entry.meals?.picture || null,
-      meal_type: entry.meal_type || "Other", // Get meal_type from meal_plan table
-      userName: entry.meals?.created_by || "",
-      visibility: entry.meals?.visibility || false,
-      averageRating: 0, // Not stored in database
-      reviewCount: 0, // Not stored in database
-      meal_plan_id: entry.meal_plan_id,
-      instructions: entry.meals?.instructions || "",
-      recipeLink: entry.meals?.recipeLink || "",
-      created_at: entry.meals?.created_at || "",
-      created_by_ai: entry.meals?.created_by_ai || false,
-      favorite: entry.meals?.favorite || false,
-      dietary_restrictions: entry.meals?.dietary_restrictions || "",
-      servings: entry.meals?.servings || 1,
-      cuisine: entry.meals?.cuisine || ""
-    })) || [];
-
-    // Clear loading state for this date
-    setLoadingDates(prev => ({ ...prev, [date]: false }));
-    return transformedMeals;
-  } catch (error) {
-    console.error(`Error fetching meals for date (${date}):`, error);
-    setLoadingDates(prev => ({ ...prev, [date]: false }));
-    return [];
-  }
-};
-
-  const fetchMealsForWeek = async (weekStartDate: Date) => {
-    const newMeals: { [key: string]: Meal[] } = {};
-    for (let i = 0; i < daysToShow; i++) {
-      const currentDate = addDays(weekStartDate, i);
-      const currentDateString = format(currentDate, "yyyy-MM-dd");
-      const mealsForDate = await fetchMealsForDate(currentDateString);
-      newMeals[currentDateString] = mealsForDate;
-    }
-    setMeals((prevMeals) => ({ ...prevMeals, ...newMeals }));
+  const handleRefresh = async () => {
+    await fetchMealsForWeek(startOfCurrentWeek, true);
   };
 
   const deleteAllMealsForDate = async (date: string) => {
-  try {
-    const userId = await getCurrentUserId();
-    if (!userId) {
-      Alert.alert("Error", "You are not logged in.");
-      return;
+    try {
+      const userId = await getCurrentUserId();
+      if (!userId) {
+        Alert.alert("Error", "You are not logged in. Please log in to continue.");
+        return;
+      }
+
+      // Show confirmation dialog
+      Alert.alert(
+        "Confirm Delete",
+        `Are you sure you want to delete all meals for ${format(new Date(date), "EEEE, MMMM d")}?`,
+        [
+          {
+            text: "Cancel",
+            style: "cancel"
+          },
+          {
+            text: "Delete",
+            style: "destructive",
+            onPress: async () => {
+              try {
+                const { error } = await supabase
+                  .from("meal_plan")
+                  .delete()
+                  .eq("user_id", userId)
+                  .eq("date", date);
+
+                if (error) {
+                  console.error("Error deleting meals:", error.message);
+                  Alert.alert("Error", `Failed to delete meals: ${error.message}`);
+                  return;
+                }
+
+                Alert.alert("Success", `All meals for ${format(new Date(date), "EEEE, MMMM d")} have been deleted.`);
+                setMeals((prevMeals) => {
+                  const updatedMeals = { ...prevMeals };
+                  updatedMeals[date] = []; // Set to empty array instead of deleting
+                  return updatedMeals;
+                });
+              } catch (error) {
+                console.error("Unexpected error deleting meals:", error);
+                Alert.alert("Error", "An unexpected error occurred. Please try again.");
+              }
+            }
+          }
+        ]
+      );
+    } catch (error) {
+      console.error("Error in deleteAllMealsForDate:", error);
+      Alert.alert("Error", "An unexpected error occurred. Please try again.");
     }
-
-    const { error } = await supabase
-      .from("meal_plan")
-      .delete()
-      .eq("user_id", userId)
-      .eq("date", date);
-
-    if (error) throw error;
-
-    Alert.alert("Success", `All meals for ${date} have been deleted.`);
-    setMeals((prevMeals) => {
-      const updatedMeals = { ...prevMeals };
-      delete updatedMeals[date];
-      return updatedMeals;
-    });
-  } catch (error) {
-    console.error("Error deleting meals for date:", error);
-    Alert.alert("Error", "Failed to delete meals. Try again.");
-  }
-};
+  };
 
   useEffect(() => {
     fetchMealsForWeek(startOfCurrentWeek);
-  }, [daysToShow]);
+  }, []); // Only run on mount
 
   useEffect(() => {
-    const todayIndex = Math.floor(
-      (today.getTime() - startOfWeek(today, { weekStartsOn: 0 }).getTime()) /
-        (1000 * 60 * 60 * 24)
-    );
-    const dayWidth = SCREEN_WIDTH * 0.95 + 16; // Width of the day container + marginRight
-    scrollViewRef.current?.scrollTo({ x: todayIndex * dayWidth, animated: true });
-  }, []);
+    if (daysToShow > 7) {
+      // Only fetch new data when extending beyond initial week
+      const newWeekStart = addDays(startOfCurrentWeek, daysToShow - 7);
+      fetchMealsForWeek(newWeekStart);
+    }
+  }, [daysToShow]);
+
+  // Auto-scroll to today's date after initial loading is complete
+  useEffect(() => {
+    if (!isInitialLoading) {
+      const todayIndex = Math.floor(
+        (today.getTime() - startOfWeek(today, { weekStartsOn: 0 }).getTime()) /
+          (1000 * 60 * 60 * 24)
+      );
+      const dayWidth = SCREEN_WIDTH * 0.95 + 16; // Width of the day container + marginRight
+      
+      // Add a small delay to ensure the ScrollView has rendered properly
+      setTimeout(() => {
+        scrollViewRef.current?.scrollTo({ 
+          x: todayIndex * dayWidth, 
+          animated: true 
+        });
+      }, 300);
+    }
+  }, [isInitialLoading]);
 
   const handleDatePress = (date: string) => {
     setSelectedDate(date);
@@ -195,26 +303,76 @@ const MealPlanCalendar: React.FC = () => {
   };
 
   const handleAddMeal = () => {
-    if (selectedDate) {
-      router.push(`/(app)/meal-plan/${selectedDate}/add-to-date`);
-      setIsModalVisible(false);
+    try {
+      if (selectedDate) {
+        router.push(`/(app)/meal-plan/${selectedDate}/add-to-date`);
+        setIsModalVisible(false);
+      } else {
+        Alert.alert("Error", "No date selected. Please try again.");
+      }
+    } catch (error) {
+      console.error("Error navigating to add meal:", error);
+      Alert.alert("Error", "Failed to open add meal screen. Please try again.");
     }
   };
 
   const handleDeleteMeals = () => {
-    if (selectedDate) {
-      deleteAllMealsForDate(selectedDate);
-      setIsModalVisible(false);
+    try {
+      if (selectedDate) {
+        deleteAllMealsForDate(selectedDate);
+        setIsModalVisible(false);
+      } else {
+        Alert.alert("Error", "No date selected. Please try again.");
+      }
+    } catch (error) {
+      console.error("Error in handleDeleteMeals:", error);
+      Alert.alert("Error", "An unexpected error occurred. Please try again.");
     }
   };
 
-  const handleNextWeek = () => {
-    setDaysToShow((prev) => prev + 7);
+  const handleNextWeek = async () => {
+    try {
+      if (isRefreshing || isInitialLoading) {
+        return; // Prevent multiple requests
+      }
+      
+      const newDaysToShow = daysToShow + 7;
+      setDaysToShow(newDaysToShow);
+      
+      // Fetch meals for the new week
+      const newWeekStart = addDays(startOfCurrentWeek, daysToShow);
+      const newMeals: { [key: string]: Meal[] } = {};
+      
+      for (let i = 0; i < 7; i++) {
+        const currentDate = addDays(newWeekStart, i);
+        const currentDateString = format(currentDate, "yyyy-MM-dd");
+        if (!meals[currentDateString]) {
+          const mealsForDate = await fetchMealsForDate(currentDateString);
+          newMeals[currentDateString] = mealsForDate;
+        }
+      }
+      
+      if (Object.keys(newMeals).length > 0) {
+        setMeals((prevMeals) => ({ ...prevMeals, ...newMeals }));
+      }
+    } catch (error) {
+      console.error("Error loading next week:", error);
+      setError("Failed to load next week. Please try again.");
+    }
   };
 
   const handleMealSelect = (meal: Meal) => {
-    // Navigate to the meal details using the meal ID, not meal_plan_id
-    router.push(`/(app)/my-meals/${meal.id}/info`);
+    try {
+      if (!meal?.id) {
+        Alert.alert("Error", "Invalid meal data. Please try refreshing the calendar.");
+        return;
+      }
+      // Navigate to the meal details using the meal ID, not meal_plan_id
+      router.push(`/(app)/my-meals/${meal.id}/info`);
+    } catch (error) {
+      console.error("Error navigating to meal details:", error);
+      Alert.alert("Error", "Failed to open meal details. Please try again.");
+    }
   };
 
   const getMealButtonColor = (mealType: string) => {
@@ -224,23 +382,56 @@ const MealPlanCalendar: React.FC = () => {
 
   return (
     <View style={[styles.outerContainer, { backgroundColor: theme.background }]}>
+      {/* Error Banner */}
+      {error && (
+        <View style={[styles.errorBanner, { backgroundColor: theme.danger }]}>
+          <Text style={[styles.errorText, { color: theme.buttonText }]}>{error}</Text>
+          <TouchableOpacity
+            style={styles.retryButton}
+            onPress={handleRefresh}
+          >
+            <Text style={[styles.retryButtonText, { color: theme.buttonText }]}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       {/* Header Buttons */}
       <View style={styles.headerContainer}>
-      <TouchableOpacity
-        style={[styles.groceryButton, { backgroundColor: theme.button }]}
-        onPress={() => router.push("./grocery-list")}
-      >
-        <Text style={[styles.groceryButtonText, { color: theme.buttonText }]}>Grocery List</Text>
-      </TouchableOpacity>
-      <TouchableOpacity
-        style={[styles.pantryButton, { backgroundColor: theme.primary }]}
-        onPress={() => router.push("/pantry/pantry")} // Navigate to the Pantry screen
-      >
-        <Text style={[styles.pantryButtonText, { color: theme.buttonText }]}>Pantry</Text>
-      </TouchableOpacity>
-    </View>
-      <ScrollView horizontal style={styles.scrollView} ref={scrollViewRef}>
-        <View style={styles.container}>
+        <TouchableOpacity
+          style={[styles.groceryButton, { backgroundColor: theme.button }]}
+          onPress={() => router.push("./grocery-list")}
+        >
+          <Text style={[styles.groceryButtonText, { color: theme.buttonText }]}>Grocery List</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.pantryButton, { backgroundColor: theme.primary }]}
+          onPress={() => router.push("/pantry/pantry")}
+        >
+          <Text style={[styles.pantryButtonText, { color: theme.buttonText }]}>Pantry</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Loading Indicator for Initial Load */}
+      {isInitialLoading ? (
+        <View style={styles.initialLoadingContainer}>
+          <ActivityIndicator size="large" color={theme.primary} />
+          <Text style={[styles.loadingText, { color: theme.text }]}>Loading your meal plan...</Text>
+        </View>
+      ) : (
+        <ScrollView 
+          horizontal 
+          style={styles.scrollView} 
+          ref={scrollViewRef}
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefreshing}
+              onRefresh={handleRefresh}
+              colors={[theme.primary]}
+              tintColor={theme.primary}
+            />
+          }
+        >
+          <View style={styles.container}>
           {Array.from({ length: daysToShow }).map((_, i) => {
             const currentDate = addDays(startOfCurrentWeek, i);
             const dateString = format(currentDate, "yyyy-MM-dd");
@@ -254,7 +445,11 @@ const MealPlanCalendar: React.FC = () => {
                   isToday && { borderColor: theme.primary },
                 ]}
               >
-                <TouchableOpacity onPress={() => handleDatePress(dateString)}>
+                <TouchableOpacity 
+                  onPress={() => handleDatePress(dateString)}
+                  accessibilityLabel={`Options for ${format(currentDate, "EEEE, MMMM d")}`}
+                  accessibilityHint="Tap to add or delete meals for this date"
+                >
                   <Text style={[styles.dateLabel, { color: theme.text }]}>
                     {format(currentDate, "EEEE, MMMM d")}
                   </Text>
@@ -353,15 +548,27 @@ const MealPlanCalendar: React.FC = () => {
           })}
 
           <TouchableOpacity
-            style={[styles.nextWeekButton, { backgroundColor: theme.primary }]}
+            style={[
+              styles.nextWeekButton, 
+              { backgroundColor: theme.primary },
+              (isRefreshing || isInitialLoading) && { opacity: 0.6 }
+            ]}
             onPress={handleNextWeek}
+            disabled={isRefreshing || isInitialLoading}
+            accessibilityLabel="Load next week"
+            accessibilityHint="Tap to load more days in your meal plan"
           >
-            <Text style={[styles.nextWeekButtonText, { color: theme.buttonText }]}>
-              Next Week
-            </Text>
+            {isRefreshing || isInitialLoading ? (
+              <ActivityIndicator size="small" color={theme.buttonText} />
+            ) : (
+              <Text style={[styles.nextWeekButtonText, { color: theme.buttonText }]}>
+                Next Week
+              </Text>
+            )}
           </TouchableOpacity>
-        </View>
-      </ScrollView>
+          </View>
+        </ScrollView>
+      )}
 
       <Modal visible={isModalVisible} transparent animationType="slide">
         <View style={styles.modalContainer}>
@@ -382,7 +589,7 @@ const MealPlanCalendar: React.FC = () => {
               onPress={handleDeleteMeals}
             >
               <Text style={[styles.modalButtonText, { color: theme.buttonText }]}>
-                Delete All Meals on Today
+                Delete All Meals for This Date
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -403,11 +610,42 @@ const styles = StyleSheet.create({
   outerContainer: { 
     flex: 1 
   },
+  errorBanner: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: 12,
+    marginHorizontal: 16,
+    marginTop: 8,
+    borderRadius: 8,
+  },
+  errorText: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  retryButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    backgroundColor: "rgba(255,255,255,0.2)",
+    marginLeft: 8,
+  },
+  retryButtonText: {
+    fontSize: 14,
+    fontWeight: "bold",
+  },
+  initialLoadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 40,
+  },
   headerContainer: {
-  flexDirection: "row",
-  justifyContent: "space-between", // Space out buttons to opposite ends
-  padding: 16,
-},
+    flexDirection: "row",
+    justifyContent: "space-between",
+    padding: 16,
+  },
 groceryButton: {
   padding: 12,
   borderRadius: 8,

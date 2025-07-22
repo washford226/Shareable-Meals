@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -9,11 +9,14 @@ import {
   ActivityIndicator,
   Alert,
   Platform,
+  RefreshControl,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { supabase } from "utils/supabase";
+import { useTheme } from "../../../context/ThemeContext";
 
 const AICreateMeal = () => {
+  const { theme } = useTheme();
   const router = useRouter();
   const [prompt, setPrompt] = useState("");
   const [dietaryRestrictions, setDietaryRestrictions] = useState("");
@@ -33,8 +36,13 @@ const AICreateMeal = () => {
     instructions: "",
   });
   const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [usePantry, setUsePantry] = useState(false);
   const [fetchingRestrictions, setFetchingRestrictions] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
+  const [validationErrors, setValidationErrors] = useState<{[key: string]: string}>({});
 
   // Helper function to parse AI ingredients into array of objects
   function parseAIIngredients(ingredientText: string) {
@@ -56,66 +64,156 @@ const AICreateMeal = () => {
       });
   }
 
+  // Enhanced fetch function with retry logic
+  const fetchDietaryRestrictions = useCallback(async (isRefresh = false) => {
+    try {
+      if (isRefresh) {
+        setRefreshing(true);
+      } else {
+        setFetchingRestrictions(true);
+      }
+      setError(null);
+
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+      if (userError || !userData?.user) {
+        throw new Error("User not authenticated. Please log in.");
+      }
+      setUserId(userData.user.id);
+
+      // Fetch user profile from 'user_profiles' table
+      const { data, error } = await supabase
+        .from("user_profiles")
+        .select("*")
+        .eq("id", userData.user.id)
+        .single();
+
+      if (error) {
+        throw new Error("Failed to fetch dietary restrictions.");
+      }
+
+      setDietaryRestrictions(data.dietary_restrictions || "");
+      setAllergies(data.allergies || "");
+      setRetryCount(0);
+    } catch (error: any) {
+      console.error("Error fetching dietary restrictions:", error);
+      const errorMessage = error.message || "An error occurred while fetching dietary restrictions.";
+      setError(errorMessage);
+      
+      if (errorMessage.includes("not authenticated")) {
+        Alert.alert("Authentication Error", errorMessage, [
+          { text: "OK", onPress: () => router.replace("/login") }
+        ]);
+      }
+    } finally {
+      setFetchingRestrictions(false);
+      setRefreshing(false);
+    }
+  }, [router]);
+
+  // Retry function with exponential backoff
+  const handleRetry = useCallback(async () => {
+    const newRetryCount = retryCount + 1;
+    setRetryCount(newRetryCount);
+    
+    // Exponential backoff: 1s, 2s, 4s, 8s, 16s
+    const delay = Math.min(1000 * Math.pow(2, newRetryCount - 1), 16000);
+    
+    setTimeout(() => {
+      fetchDietaryRestrictions();
+    }, delay);
+  }, [retryCount, fetchDietaryRestrictions]);
+
   // Fetch dietary restrictions and user ID from Supabase
   useEffect(() => {
-    const fetchDietaryRestrictions = async () => {
-      try {
-        const { data: userData, error: userError } = await supabase.auth.getUser();
-        if (userError || !userData?.user) {
-          Alert.alert("Error", "User not authenticated. Please log in.");
-          router.replace("/login");
-          return;
-        }
-        setUserId(userData.user.id);
-
-        // Fetch user profile from 'user_profiles' table
-        const { data, error } = await supabase
-          .from("user_profiles")
-          .select("*")
-          .eq("id", userData.user.id)
-          .single();
-
-        if (error) {
-          Alert.alert("Error", "Failed to fetch dietary restrictions.");
-          return;
-        }
-
-        setDietaryRestrictions(data.dietary_restrictions || "");
-        setAllergies(data.allergies || "");
-      } catch (error) {
-        console.error("Error fetching dietary restrictions:", error);
-        Alert.alert("Error", "An error occurred while fetching dietary restrictions.");
-      } finally {
-        setFetchingRestrictions(false);
-      }
-    };
-
     fetchDietaryRestrictions();
+  }, [fetchDietaryRestrictions]);
+
+  // Validation functions
+  const validateMeal = useCallback(() => {
+    const errors: {[key: string]: string} = {};
+
+    if (!generatedMeal.name.trim()) {
+      errors.name = "Meal name is required";
+    } else if (generatedMeal.name.length > 100) {
+      errors.name = "Meal name must be 100 characters or less";
+    }
+
+    if (!generatedMeal.description.trim()) {
+      errors.description = "Description is required";
+    } else if (generatedMeal.description.length > 500) {
+      errors.description = "Description must be 500 characters or less";
+    }
+
+    if (!generatedMeal.servings || !/^\d+$/.test(generatedMeal.servings) || parseInt(generatedMeal.servings) < 1) {
+      errors.servings = "Servings must be a positive number";
+    }
+
+    if (generatedMeal.ingredients.length === 0) {
+      errors.ingredients = "At least one ingredient is required";
+    }
+
+    if (!generatedMeal.instructions.trim()) {
+      errors.instructions = "Instructions are required";
+    } else if (generatedMeal.instructions.length > 2000) {
+      errors.instructions = "Instructions must be 2000 characters or less";
+    }
+
+    setValidationErrors(errors);
+    return Object.keys(errors).length === 0;
+  }, [generatedMeal]);
+
+  const validatePrompt = useCallback(() => {
+    if (!prompt.trim()) {
+      return "Please enter a meal prompt";
+    }
+    if (prompt.length > 200) {
+      return "Prompt must be 200 characters or less";
+    }
+    return null;
+  }, [prompt]);
+
+  // Form field handlers
+  const handlePromptChange = useCallback((value: string) => {
+    setPrompt(value);
+    setError(null);
   }, []);
 
-  const handleSaveMeal = async () => {
-    if (
-      !generatedMeal.name ||
-      !generatedMeal.description ||
-      !generatedMeal.ingredients.length ||
-      !generatedMeal.instructions
-    ) {
-      Alert.alert("Error", "Please ensure all fields are filled before saving.");
+  const handleMealFieldChange = useCallback((field: string, value: string) => {
+    setGeneratedMeal(prev => ({ ...prev, [field]: value }));
+    if (validationErrors[field]) {
+      setValidationErrors(prev => ({ ...prev, [field]: '' }));
+    }
+  }, [validationErrors]);
+
+  const isMealValid = useCallback(() => {
+    return generatedMeal.name.trim() && 
+           generatedMeal.description.trim() && 
+           generatedMeal.instructions.trim() && 
+           generatedMeal.ingredients.length > 0 &&
+           Object.keys(validationErrors).length === 0;
+  }, [generatedMeal, validationErrors]);
+
+  // Enhanced save function with validation and error handling
+  const handleSaveMeal = useCallback(async () => {
+    if (!validateMeal()) {
+      Alert.alert("Validation Error", "Please fix the form errors before saving.");
       return;
     }
 
+    setSaving(true);
+    setError(null);
+
     try {
       if (!userId) {
-        Alert.alert("Error", "User not authenticated. Please log in.");
-        return;
+        throw new Error("User not authenticated. Please log in.");
       }
 
       // 1. Insert the meal (without ingredients)
       const { data: mealData, error: mealError } = await supabase.from("meals").insert([
         {
-          name: generatedMeal.name,
-          description: generatedMeal.description,
-          instructions: generatedMeal.instructions,
+          name: generatedMeal.name.trim(),
+          description: generatedMeal.description.trim(),
+          instructions: generatedMeal.instructions.trim(),
           servings: generatedMeal.servings ? parseInt(generatedMeal.servings) : 1,
           user_id: userId,
           visibility: true, // Default to public for AI-created meals
@@ -171,45 +269,55 @@ const AICreateMeal = () => {
         // Continue even if nutrition calculation fails
       }
 
-      Alert.alert("Success", "Meal added successfully!");
-      router.push("/(app)/my-meals/meals");
-    } catch (error) {
+      Alert.alert("Success", "Meal added successfully!", [
+        { text: "OK", onPress: () => router.push("/(app)/my-meals/meals") }
+      ]);
+    } catch (error: any) {
       console.error("Error adding meal:", error);
-      Alert.alert("Error", "Failed to add the meal to the database.");
+      const errorMessage = error.message || "Failed to add the meal to the database.";
+      setError(errorMessage);
+      Alert.alert("Save Error", errorMessage);
+    } finally {
+      setSaving(false);
     }
-  };
+  }, [validateMeal, generatedMeal, userId, dietaryRestrictions, router]);
 
-  // Ingredient input handlers
-  const addIngredient = () => {
+  // Enhanced ingredient management functions
+  const addIngredient = useCallback(() => {
     setGeneratedMeal(prev => ({
       ...prev,
       ingredients: [...prev.ingredients, { name: "", quantity: "", unit: "" }],
     }));
-  };
+    if (validationErrors.ingredients) {
+      setValidationErrors(prev => ({ ...prev, ingredients: '' }));
+    }
+  }, [validationErrors.ingredients]);
 
-  const removeIngredient = (index: number) => {
+  const removeIngredient = useCallback((index: number) => {
     setGeneratedMeal(prev => ({
       ...prev,
       ingredients: prev.ingredients.filter((_, i) => i !== index),
     }));
-  };
+  }, []);
 
-  const updateIngredient = (index: number, field: "name" | "quantity" | "unit", value: string) => {
+  const updateIngredient = useCallback((index: number, field: "name" | "quantity" | "unit", value: string) => {
     setGeneratedMeal(prev => {
       const newIngredients = [...prev.ingredients];
       newIngredients[index][field] = value;
       return { ...prev, ingredients: newIngredients };
     });
-  };
+  }, []);
 
-  // Replace this with your own AI meal generation logic or API call
-  const handleGenerateMeal = async () => {
-    if (!prompt.trim()) {
-      Alert.alert("Error", "Please enter a prompt.");
+  // Enhanced meal generation function
+  const handleGenerateMeal = useCallback(async () => {
+    const promptError = validatePrompt();
+    if (promptError) {
+      Alert.alert("Validation Error", promptError);
       return;
     }
 
     setLoading(true);
+    setError(null);
     setGeneratedMeal({
       name: "",
       description: "",
@@ -219,180 +327,346 @@ const AICreateMeal = () => {
     });
 
     try {
-      try {
-  const { data, error } = await supabase.functions.invoke("generate-AImeal", {
-    body: {
-      prompt,
-      dietaryRestrictions,
-      allergies,
-      usePantry,
-    },
-  });
+      const { data, error } = await supabase.functions.invoke("generate-AImeal", {
+        body: {
+          prompt: prompt.trim(),
+          dietaryRestrictions,
+          allergies,
+          usePantry,
+        },
+      });
 
-  if (error || !data) {
-    throw new Error(error?.message || "Failed to generate meal.");
-  }
+      if (error || !data) {
+        throw new Error(error?.message || "Failed to generate meal.");
+      }
 
-  setGeneratedMeal({
-    name: data.name || "",
-    description: data.description || "",
-    servings: data.servings || "1",
-    ingredients: data.ingredients || [],
-    instructions: data.instructions || "",
-  });
-} catch (err) {
-  console.error("AI generation error:", err);
-  Alert.alert("Error", "Failed to generate meal. Please try again.");
-} finally {
-  setLoading(false);
-}
-
-    } catch (error) {
-      console.error("Error generating meal:", error);
-      Alert.alert("Error", "An error occurred while generating the meal.");
+      setGeneratedMeal({
+        name: data.name || "",
+        description: data.description || "",
+        servings: data.servings || "1",
+        ingredients: data.ingredients || [],
+        instructions: data.instructions || "",
+      });
+    } catch (error: any) {
+      console.error("AI generation error:", error);
+      const errorMessage = error.message || "Failed to generate meal. Please try again.";
+      setError(errorMessage);
+      Alert.alert("Generation Error", errorMessage);
+    } finally {
       setLoading(false);
     }
-  };
+  }, [prompt, validatePrompt, dietaryRestrictions, allergies, usePantry]);
 
+  // Enhanced loading state with theme
   if (fetchingRestrictions) {
     return (
-      <View style={styles.container}>
-        <ActivityIndicator size="large" color="#007BFF" />
-        <Text style={styles.loadingText}>Fetching dietary restrictions...</Text>
+      <View style={[styles.container, { backgroundColor: theme.background, justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color={theme.primary} />
+        <Text style={[styles.loadingText, { color: theme.text }]}>Fetching dietary restrictions...</Text>
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
-      {/* Back Button */}
-      <TouchableOpacity
-        style={styles.backButton}
-        onPress={() => router.push("/(app)/my-meals/meals")}
+    <View style={[styles.container, { backgroundColor: theme.background }]}>
+      <ScrollView
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => fetchDietaryRestrictions(true)}
+            colors={[theme.primary]}
+            tintColor={theme.primary}
+          />
+        }
       >
-        <Text style={styles.backButtonText}>Back</Text>
-      </TouchableOpacity>
-
-      <Text style={styles.title}>AI Meal Creator</Text>
-
-      <TextInput
-        style={styles.input}
-        placeholder="Enter a meal prompt (e.g., vegan dinner)"
-        value={prompt}
-        onChangeText={setPrompt}
-      />
-
-      <Text style={styles.dietaryText}>
-        Dietary Restrictions: {dietaryRestrictions || "None"}
-      </Text>
-
-      <TouchableOpacity
-        style={styles.button}
-        onPress={handleGenerateMeal}
-        disabled={loading}
-      >
-        {loading ? (
-          <ActivityIndicator size="small" color="#fff" />
-        ) : (
-          <Text style={styles.buttonText}>Generate Meal</Text>
+        {/* Error Banner */}
+        {error && (
+          <View style={[styles.errorBanner, { backgroundColor: theme.card, borderColor: theme.danger }]}>
+            <Text style={[styles.errorBannerText, { color: theme.danger }]}>{error}</Text>
+            <TouchableOpacity 
+              style={[styles.errorBannerButton, { backgroundColor: theme.danger }]}
+              onPress={handleRetry}
+            >
+              <Text style={[styles.errorBannerButtonText, { color: theme.buttonText }]}>Retry</Text>
+            </TouchableOpacity>
+          </View>
         )}
-      </TouchableOpacity>
 
-      <View style={styles.checkboxContainer}>
+        {/* Retry Banner */}
+        {retryCount > 0 && !error && (
+          <View style={[styles.retryBanner, { backgroundColor: theme.card, borderColor: theme.primary }]}>
+            <Text style={[styles.retryBannerText, { color: theme.primary }]}>
+              Retrying... (Attempt {retryCount})
+            </Text>
+          </View>
+        )}
+
+        {/* Back Button */}
+        <TouchableOpacity
+          style={[styles.backButton, { backgroundColor: theme.button }]}
+          onPress={() => router.push("/(app)/my-meals/meals")}
+          disabled={loading || saving}
+        >
+          <Text style={[styles.backButtonText, { color: theme.buttonText }]}>Back</Text>
+        </TouchableOpacity>
+
+        <Text style={[styles.title, { color: theme.text }]}>AI Meal Creator</Text>
+
+        {/* Prompt Section */}
+        <View style={styles.formSection}>
+          <Text style={[styles.sectionLabel, { color: theme.text }]}>Meal Prompt *</Text>
+          <Text style={[styles.characterCount, { color: theme.subtext }]}>
+            {prompt.length}/200
+          </Text>
+          <TextInput
+            style={[styles.input, { borderColor: theme.border, color: theme.text, backgroundColor: theme.card }]}
+            placeholder="Enter a meal prompt (e.g., vegan dinner)"
+            placeholderTextColor={theme.subtext}
+            value={prompt}
+            onChangeText={handlePromptChange}
+            maxLength={200}
+            editable={!loading && !saving}
+          />
+        </View>
+
+        {/* Dietary Restrictions Display */}
+        <View style={styles.formSection}>
+          <Text style={[styles.sectionLabel, { color: theme.text }]}>Dietary Restrictions</Text>
+          <Text style={[styles.dietaryText, { color: theme.subtext }]}>
+            {dietaryRestrictions || "None"}
+          </Text>
+        </View>
+
+        {/* Pantry Checkbox */}
+        <View style={styles.checkboxContainer}>
+          <TouchableOpacity
+            style={[
+              styles.checkbox,
+              { 
+                backgroundColor: usePantry ? theme.primary : "transparent",
+                borderColor: theme.primary
+              },
+            ]}
+            onPress={() => setUsePantry(!usePantry)}
+            disabled={loading || saving}
+          >
+            {usePantry && <Text style={[styles.checkboxMark, { color: theme.buttonText }]}>✓</Text>}
+          </TouchableOpacity>
+          <Text style={[styles.checkboxLabel, { color: theme.text }]}>Use ingredients from my pantry</Text>
+        </View>
+
+        {/* Generate Button */}
         <TouchableOpacity
           style={[
-            styles.checkbox,
-            { backgroundColor: usePantry ? "#007BFF" : "transparent" },
+            styles.button, 
+            { 
+              backgroundColor: loading || saving || !prompt.trim() ? theme.border : theme.primary,
+              opacity: loading || saving ? 0.6 : 1
+            }
           ]}
-          onPress={() => setUsePantry(!usePantry)}
-        />
-        <Text style={styles.checkboxLabel}>Use ingredients from my pantry</Text>
-      </View>
+          onPress={handleGenerateMeal}
+          disabled={loading || saving || !prompt.trim()}
+        >
+          {loading ? (
+            <ActivityIndicator size="small" color={theme.buttonText} />
+          ) : (
+            <Text style={[styles.buttonText, { color: theme.buttonText }]}>Generate Meal</Text>
+          )}
+        </TouchableOpacity>
 
-      <ScrollView style={styles.resultContainer}>
+        {/* Generated Meal Results */}
         {generatedMeal.name ? (
-          <>
-            <TextInput
-              style={[styles.resultInput, styles.multilineInput]}
-              value={generatedMeal.name}
-              onChangeText={(text) =>
-                setGeneratedMeal((prev) => ({ ...prev, name: text }))
-              }
-              placeholder="Meal Name"
-              multiline={true}
-            />
-            <TextInput
-              style={[styles.resultInput, styles.multilineInput]}
-              value={generatedMeal.description}
-              onChangeText={(text) =>
-                setGeneratedMeal((prev) => ({ ...prev, description: text }))
-              }
-              placeholder="Description"
-              multiline={true}
-            />
-            <TextInput
-              style={[styles.resultInput]}
-              value={generatedMeal.servings}
-              onChangeText={text =>
-                setGeneratedMeal(prev => ({ ...prev, servings: text }))
-              }
-              placeholder="Servings"
-              keyboardType="numeric"
-            />
+          <View style={styles.resultContainer}>
+            <Text style={[styles.resultTitle, { color: theme.text }]}>Generated Meal</Text>
+            
+            {/* Meal Name Section */}
+            <View style={styles.formSection}>
+              <Text style={[styles.sectionLabel, { color: theme.text }]}>Meal Name *</Text>
+              <Text style={[styles.characterCount, { color: theme.subtext }]}>
+                {generatedMeal.name.length}/100
+              </Text>
+              <TextInput
+                style={[
+                  styles.resultInput, 
+                  styles.multilineInput,
+                  { 
+                    borderColor: validationErrors.name ? theme.danger : theme.border, 
+                    color: theme.text,
+                    backgroundColor: theme.card
+                  }
+                ]}
+                value={generatedMeal.name}
+                onChangeText={(text) => handleMealFieldChange('name', text)}
+                placeholder="Meal Name"
+                placeholderTextColor={theme.subtext}
+                multiline={true}
+                maxLength={100}
+                editable={!saving}
+              />
+              {validationErrors.name && (
+                <Text style={[styles.errorText, { color: theme.danger }]}>{validationErrors.name}</Text>
+              )}
+            </View>
+
+            {/* Description Section */}
+            <View style={styles.formSection}>
+              <Text style={[styles.sectionLabel, { color: theme.text }]}>Description *</Text>
+              <Text style={[styles.characterCount, { color: theme.subtext }]}>
+                {generatedMeal.description.length}/500
+              </Text>
+              <TextInput
+                style={[
+                  styles.resultInput, 
+                  styles.multilineInput,
+                  { 
+                    borderColor: validationErrors.description ? theme.danger : theme.border, 
+                    color: theme.text,
+                    backgroundColor: theme.card
+                  }
+                ]}
+                value={generatedMeal.description}
+                onChangeText={(text) => handleMealFieldChange('description', text)}
+                placeholder="Description"
+                placeholderTextColor={theme.subtext}
+                multiline={true}
+                maxLength={500}
+                editable={!saving}
+              />
+              {validationErrors.description && (
+                <Text style={[styles.errorText, { color: theme.danger }]}>{validationErrors.description}</Text>
+              )}
+            </View>
+
+            {/* Servings Section */}
+            <View style={styles.formSection}>
+              <Text style={[styles.sectionLabel, { color: theme.text }]}>Servings *</Text>
+              <TextInput
+                style={[
+                  styles.resultInput,
+                  { 
+                    borderColor: validationErrors.servings ? theme.danger : theme.border, 
+                    color: theme.text,
+                    backgroundColor: theme.card
+                  }
+                ]}
+                value={generatedMeal.servings}
+                onChangeText={(text) => handleMealFieldChange('servings', text)}
+                placeholder="Servings"
+                placeholderTextColor={theme.subtext}
+                keyboardType="numeric"
+                editable={!saving}
+              />
+              {validationErrors.servings && (
+                <Text style={[styles.errorText, { color: theme.danger }]}>{validationErrors.servings}</Text>
+              )}
+            </View>
+
             {/* Ingredients Section */}
-            <Text style={{ fontWeight: "bold", marginBottom: 8 }}>Ingredients</Text>
-            {generatedMeal.ingredients.map((ingredient, idx) => (
-              <View key={idx} style={{ flexDirection: "row", marginBottom: 10, alignItems: "center" }}>
-                <TextInput
-                  style={[styles.resultInput, { flex: 2, marginRight: 5 }]}
-                  placeholder="Name"
-                  value={ingredient.name}
-                  onChangeText={text => updateIngredient(idx, "name", text)}
-                />
-                <TextInput
-                  style={[styles.resultInput, { flex: 1, marginRight: 5 }]}
-                  placeholder="Qty"
-                  value={ingredient.quantity}
-                  onChangeText={text => updateIngredient(idx, "quantity", text)}
-                  keyboardType="numeric"
-                />
-                <TextInput
-                  style={[styles.resultInput, { flex: 1, marginRight: 5 }]}
-                  placeholder="Unit"
-                  value={ingredient.unit}
-                  onChangeText={text => updateIngredient(idx, "unit", text)}
-                />
-                <TouchableOpacity onPress={() => removeIngredient(idx)}>
-                  <Text style={{ color: "#d00", fontWeight: "bold", fontSize: 18 }}>✕</Text>
-                </TouchableOpacity>
-              </View>
-            ))}
-            <TouchableOpacity onPress={addIngredient} style={{ marginBottom: 15 }}>
-              <Text style={{ color: "#007BFF", fontWeight: "bold" }}>+ Add Ingredient</Text>
-            </TouchableOpacity>
-            {/* End Ingredients Section */}
-            <TextInput
-              style={[styles.resultInput, styles.multilineInput]}
-              value={generatedMeal.instructions}
-              onChangeText={(text) =>
-                setGeneratedMeal((prev) => ({ ...prev, instructions: text }))
-              }
-              placeholder="Instructions"
-              multiline={true}
-            />
-            {/* Add Save Button */}
+            <View style={styles.formSection}>
+              <Text style={[styles.sectionLabel, { color: theme.text }]}>Ingredients *</Text>
+              {generatedMeal.ingredients.map((ingredient, idx) => (
+                <View key={idx} style={styles.ingredientRow}>
+                  <TextInput
+                    style={[styles.ingredientInput, styles.ingredientName, { borderColor: theme.border, color: theme.text, backgroundColor: theme.card }]}
+                    placeholder="Name"
+                    placeholderTextColor={theme.subtext}
+                    value={ingredient.name}
+                    onChangeText={text => updateIngredient(idx, "name", text)}
+                    editable={!saving}
+                  />
+                  <TextInput
+                    style={[styles.ingredientInput, styles.ingredientQuantity, { borderColor: theme.border, color: theme.text, backgroundColor: theme.card }]}
+                    placeholder="Qty"
+                    placeholderTextColor={theme.subtext}
+                    value={ingredient.quantity}
+                    onChangeText={text => updateIngredient(idx, "quantity", text)}
+                    keyboardType="numeric"
+                    editable={!saving}
+                  />
+                  <TextInput
+                    style={[styles.ingredientInput, styles.ingredientUnit, { borderColor: theme.border, color: theme.text, backgroundColor: theme.card }]}
+                    placeholder="Unit"
+                    placeholderTextColor={theme.subtext}
+                    value={ingredient.unit}
+                    onChangeText={text => updateIngredient(idx, "unit", text)}
+                    editable={!saving}
+                  />
+                  <TouchableOpacity 
+                    onPress={() => removeIngredient(idx)}
+                    style={styles.removeButton}
+                    disabled={saving}
+                  >
+                    <Text style={[styles.removeButtonText, { color: theme.danger }]}>✕</Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
+              <TouchableOpacity 
+                onPress={addIngredient} 
+                style={[styles.addIngredientButton, { opacity: saving ? 0.6 : 1 }]}
+                disabled={saving}
+              >
+                <Text style={[styles.addIngredientText, { color: theme.primary }]}>+ Add Ingredient</Text>
+              </TouchableOpacity>
+              {validationErrors.ingredients && (
+                <Text style={[styles.errorText, { color: theme.danger }]}>{validationErrors.ingredients}</Text>
+              )}
+            </View>
+
+            {/* Instructions Section */}
+            <View style={styles.formSection}>
+              <Text style={[styles.sectionLabel, { color: theme.text }]}>Instructions *</Text>
+              <Text style={[styles.characterCount, { color: theme.subtext }]}>
+                {generatedMeal.instructions.length}/2000
+              </Text>
+              <TextInput
+                style={[
+                  styles.resultInput, 
+                  styles.multilineInput,
+                  { 
+                    borderColor: validationErrors.instructions ? theme.danger : theme.border, 
+                    color: theme.text,
+                    backgroundColor: theme.card
+                  }
+                ]}
+                value={generatedMeal.instructions}
+                onChangeText={(text) => handleMealFieldChange('instructions', text)}
+                placeholder="Instructions"
+                placeholderTextColor={theme.subtext}
+                multiline={true}
+                maxLength={2000}
+                editable={!saving}
+              />
+              {validationErrors.instructions && (
+                <Text style={[styles.errorText, { color: theme.danger }]}>{validationErrors.instructions}</Text>
+              )}
+            </View>
+
+            {/* Save Button */}
             <TouchableOpacity
-              style={styles.saveButton}
+              style={[
+                styles.saveButton,
+                { 
+                  backgroundColor: isMealValid() && !saving ? theme.primary : theme.border,
+                  opacity: saving ? 0.6 : 1
+                }
+              ]}
               onPress={handleSaveMeal}
+              disabled={!isMealValid() || saving}
             >
-              <Text style={styles.saveButtonText}>Save Meal</Text>
+              {saving ? (
+                <ActivityIndicator size="small" color={theme.buttonText} />
+              ) : (
+                <Text style={[styles.saveButtonText, { color: theme.buttonText }]}>Save Meal</Text>
+              )}
             </TouchableOpacity>
-          </>
+          </View>
         ) : (
           !loading && (
-            <Text style={styles.placeholderText}>
-              Your meal will appear here...
-            </Text>
+            <View style={styles.placeholderContainer}>
+              <Text style={[styles.placeholderText, { color: theme.subtext }]}>
+                Your meal will appear here...
+              </Text>
+            </View>
           )
         )}
       </ScrollView>
@@ -404,18 +678,55 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 16,
-    backgroundColor: "#fff",
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    textAlign: 'center',
+  },
+  errorBanner: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 12,
+    marginBottom: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  errorBannerText: {
+    flex: 1,
+    fontSize: 14,
+    marginRight: 12,
+  },
+  errorBannerButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  errorBannerButtonText: {
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  retryBanner: {
+    padding: 12,
+    marginBottom: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignItems: 'center',
+  },
+  retryBannerText: {
+    fontSize: 14,
+    fontWeight: '500',
   },
   backButton: {
     marginBottom: 16,
     padding: 10,
     borderRadius: 8,
-    backgroundColor: "#ccc",
     alignSelf: "flex-start",
   },
   backButtonText: {
     fontSize: 16,
-    color: "#000",
+    fontWeight: 'bold',
   },
   title: {
     fontSize: 24,
@@ -423,70 +734,42 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     textAlign: "center",
   },
-  saveButton: {
-    backgroundColor: "#28a745",
-    padding: 12,
-    borderRadius: 8,
-    alignItems: "center",
-    marginTop: 16,
+  formSection: {
+    marginBottom: 20,
   },
-  saveButtonText: {
-    color: "#fff",
+  sectionLabel: {
     fontSize: 16,
-    fontWeight: "bold",
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  characterCount: {
+    fontSize: 12,
+    textAlign: 'right',
+    marginBottom: 4,
   },
   input: {
     borderWidth: 1,
-    borderColor: "#ccc",
     borderRadius: 8,
     padding: 12,
-    marginBottom: 16,
     fontSize: 16,
+  },
+  errorText: {
+    fontSize: 12,
+    marginTop: 4,
   },
   dietaryText: {
     fontSize: 16,
-    marginBottom: 16,
-    color: "#555",
+    marginBottom: 4,
   },
   button: {
-    backgroundColor: "#007BFF",
     padding: 12,
     borderRadius: 8,
     alignItems: "center",
     marginBottom: 16,
   },
   buttonText: {
-    color: "#fff",
     fontSize: 16,
     fontWeight: "bold",
-  },
-  resultContainer: {
-    flex: 1,
-    marginTop: 16,
-  },
-  resultInput: {
-    borderWidth: 1,
-    borderColor: "#ccc",
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 16,
-    fontSize: 16,
-    backgroundColor: "#f9f9f9",
-  },
-  multilineInput: {
-    height: 100,
-    textAlignVertical: "top",
-  },
-  placeholderText: {
-    fontSize: 16,
-    color: "#aaa",
-    textAlign: "center",
-    marginTop: 16,
-  },
-  loadingText: {
-    fontSize: 16,
-    marginTop: 16,
-    textAlign: "center",
   },
   checkboxContainer: {
     flexDirection: "row",
@@ -497,13 +780,91 @@ const styles = StyleSheet.create({
     width: 20,
     height: 20,
     borderWidth: 1,
-    borderColor: "#007BFF",
     marginRight: 8,
     borderRadius: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkboxMark: {
+    fontSize: 12,
+    fontWeight: 'bold',
   },
   checkboxLabel: {
     fontSize: 16,
-    color: "#555",
+  },
+  resultContainer: {
+    marginTop: 16,
+  },
+  resultTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  resultInput: {
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 8,
+    fontSize: 16,
+  },
+  multilineInput: {
+    height: 100,
+    textAlignVertical: "top",
+  },
+  ingredientRow: {
+    flexDirection: "row",
+    marginBottom: 10,
+    alignItems: "center",
+  },
+  ingredientInput: {
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 14,
+    marginRight: 8,
+  },
+  ingredientName: {
+    flex: 2,
+  },
+  ingredientQuantity: {
+    flex: 1,
+  },
+  ingredientUnit: {
+    flex: 1,
+  },
+  removeButton: {
+    padding: 8,
+  },
+  removeButtonText: {
+    fontSize: 18,
+    fontWeight: "bold",
+  },
+  addIngredientButton: {
+    marginBottom: 15,
+  },
+  addIngredientText: {
+    fontWeight: "bold",
+    fontSize: 16,
+  },
+  saveButton: {
+    padding: 12,
+    borderRadius: 8,
+    alignItems: "center",
+    marginTop: 16,
+  },
+  saveButtonText: {
+    fontSize: 16,
+    fontWeight: "bold",
+  },
+  placeholderContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 40,
+  },
+  placeholderText: {
+    fontSize: 16,
+    textAlign: "center",
   },
 });
 

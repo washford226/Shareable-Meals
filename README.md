@@ -1,135 +1,42 @@
-## Meal Plan App
+# Meal Plan App
 
-This is a full-stack application for managing meal plans, including features like user authentication, dietary restrictions, calorie goals, and profile management.
+A comprehensive React Native mobile application for meal planning, nutrition tracking, and grocery list management.
 
----
+## Features
 
-### **Get Started**
+- **User Authentication** - Secure login and signup with Supabase
+- **Meal Planning** - Create, edit, and schedule meals on a calendar
+- **Nutrition Tracking** - Track daily, weekly, and monthly nutrition goals
+- **Grocery Lists** - Generate shopping lists from meal plans
+- **Recipe Management** - Create and share custom recipes
+- **Competition System** - Weekly meal competitions with voting
+- **Pantry Management** - Track pantry items and expiration dates
+- **Admin Panel** - Content moderation and user management
 
-#### 1. Install Dependencies
+## Tech Stack
 
-Install the required dependencies for both the backend and frontend.
+- **React Native** with Expo
+- **TypeScript** for type safety
+- **Supabase** for backend and database
+- **Expo Router** for navigation
+- **React Native Vector Icons** for UI
 
+## Installation
+
+1. Install dependencies:
 ```bash
-# Install dependencies
 npm install
- # For the time picker you nead this, Otherwise everything breaks
- npx expo install @react-native-community/datetimepicker
-
 ```
 
-#### 2. Set Up the Database
+2. Configure environment variables in `.env` file
 
-Make sure you have MySQL installed and running. Create a database and the required tables:
-
-```sql
-CREATE DATABASE meal_plan_app;
-
-USE meal_plan_app;
-
-CREATE TABLE users (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    username VARCHAR(255) NOT NULL UNIQUE,
-    email VARCHAR(255) NOT NULL UNIQUE,
-    password VARCHAR(255) NOT NULL,
-    calories_goal INT DEFAULT NULL,
-    dietary_restrictions TEXT DEFAULT NULL,
-    profile_picture BLOB DEFAULT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-... -- (Check SQl file for all tables)
-```
-
-#### 3. Configure Environment Variables
-
-Make sure that the env file is correct with all of your data:
-
-```
-DB_HOST=localhost
-DB_USER=root
-DB_PASSWORD=yourpassword
-DB_NAME=meal_plan_app
-JWT_SECRET=your_jwt_secret
-EMAIL_USER=your_email@gmail.com
-EMAIL_PASS=your_email_password
-```
-
-Replace `yourpassword`, `your_jwt_secret`, `your_email@gmail.com`, and `your_email_password` with your actual database credentials and email configuration.
-
-#### 4. Start the Backend Server
-
-Navigate to the `backend` directory and start the server and the command for USDA:
-
-```bash
-npx ts-node backend/routes/import_usda.ts
-
-cd backend
-npm run server
-```
-
-#### 5. Start the Frontend App
-
-Navigate to the `frontend` directory and start the app:
-
+3. Start the app:
 ```bash
 npx expo start
 ```
-Run on an Android emulator for the best experience. 
-If running on the web, please note that errors may not display properly and could cause the server to stop unexpectedly. 
-Exercise caution and ensure all inputs and actions are correct when using the web version.
----
 
+Run on Android emulator for the best experience.
 
+## License
 
-### **Features**
-### **Features**
-- **User Authentication**: Login, signup, and JWT-based authorization.
-- **Profile Management**: Edit dietary restrictions, calorie goals, and profile picture.
-- **Forgot Password**: Reset password functionality via email.
-- **Meal Plan Calendar**: 
-  - View meals in a calendar format for easy weekly planning.
-  - Add, edit, or delete meals directly from the calendar.
-- **Meal Management**:
-  - Save meals for quick access and reuse in the future.
-  - Create, edit, and delete meals with ingredients, descriptions, and images.
-  - Upload pictures of meals for better visualization.
-- **Community Features**:
-  - Discover meals created by other users (Community Meals).
-  - Upload meals to a shared database for others to view and add to their meal plans.
-  - Add and view reviews for meals to see which meals are popular and well-rated.
-  - Leave comments on other users' meals to discuss recipes and share feedback.
-- **Search and Filters**:
-  - Search meals by name or ingredients.
-  - Filter meals by category (e.g., vegetarian, low-calorie, high-protein).
-- **Nutritional Tracking**:
-  - View calorie counts for each meal to track nutritional intake.
-  - Set and track daily calorie goals.
-- **Cooking Assistance**:
-  - View ingredients and step-by-step cooking instructions for each meal.
-  - Zoom in on meal images for better presentation details.
-- **Theming**:
-  - Light and dark mode support for a personalized experience.
-- **Reporting**:
-  - Report meals that are inappropriate or violate community guidelines.
-- **Responsive Design**:
-  - Optimized for Android emulator and functional on the web (with some limitations). 
-
-
----
-
-### **Troubleshooting**
-- **Database Connection Issues:** Ensure your `.env` file is correctly configured and the MySQL server is running.
-- **Expo Issues:** If `npx expo start` fails, ensure you have Expo CLI installed globally:
-  ```bash
-  npm install -g expo-cli
-  ```
-- **Backend Errors:** Use tools like Postman to test API endpoints and debug issues.
-
-
----
-USDA command
-npx ts-node backend/routes/import_usda.ts
-
-### **License**
 This project is licensed under the MIT License.

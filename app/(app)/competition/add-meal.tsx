@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   StyleSheet,
   Alert,
   ActivityIndicator,
+  RefreshControl,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { useTheme } from "../../../context/ThemeContext";
@@ -22,18 +23,23 @@ const AddMeal = () => {
   const [meals, setMeals] = useState<Meal[]>([]);
   const [loading, setLoading] = useState(true);
   const [addingMeal, setAddingMeal] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
   const router = useRouter();
   const { theme } = useTheme();
 
   // Fetch user's meals from Supabase
-  const fetchUserMeals = async () => {
+  const fetchUserMeals = useCallback(async (showLoading = true) => {
     try {
-      setLoading(true);
+      if (showLoading) {
+        setLoading(true);
+      }
+      setError(null);
+
       const { data: userData, error: userError } = await supabase.auth.getUser();
       if (userError || !userData?.user) {
-        Alert.alert("Error", "User not authenticated. Please log in.");
-        setLoading(false);
-        return;
+        throw new Error("User not authenticated. Please log in.");
       }
       const userId = userData.user.id;
 
@@ -45,24 +51,38 @@ const AddMeal = () => {
       if (error) {
         throw error;
       }
+      
       setMeals(data || []);
-    } catch (error) {
+      setRetryCount(0); // Reset retry count on success
+    } catch (error: any) {
       console.error("Error fetching user meals:", error);
-      Alert.alert("Error", "Failed to fetch your meals. Please try again later.");
+      const errorMessage = error.message || "Failed to fetch your meals. Please try again later.";
+      setError(errorMessage);
+      
+      // Auto-retry logic with exponential backoff
+      if (retryCount < 3) {
+        const delay = Math.pow(2, retryCount) * 1000; // 1s, 2s, 4s
+        setTimeout(() => {
+          setRetryCount(prev => prev + 1);
+          fetchUserMeals(false);
+        }, delay);
+      }
     } finally {
-      setLoading(false);
+      if (showLoading) {
+        setLoading(false);
+      }
     }
-  };
+  }, [retryCount]);
 
   // Handle adding a meal to the competition
-  const handleAddMeal = async (mealId: number) => {
+  const handleAddMeal = useCallback(async (mealId: number) => {
+    if (addingMeal) return; // Prevent double submission
+    
     setAddingMeal(true);
     try {
       const { data: userData, error: userError } = await supabase.auth.getUser();
       if (userError || !userData?.user) {
-        Alert.alert("Error", "User not authenticated. Please log in.");
-        setAddingMeal(false);
-        return;
+        throw new Error("User not authenticated. Please log in.");
       }
       const userId = userData.user.id;
 
@@ -76,9 +96,7 @@ const AddMeal = () => {
         .single();
 
       if (competitionError || !competitionData) {
-        Alert.alert("Error", "No active competition found.");
-        setAddingMeal(false);
-        return;
+        throw new Error("No active competition found.");
       }
 
       // Check if user has already submitted this meal to this competition
@@ -91,9 +109,7 @@ const AddMeal = () => {
         .maybeSingle();
 
       if (existingSubmission) {
-        Alert.alert("Error", "You have already submitted this meal to the current competition.");
-        setAddingMeal(false);
-        return;
+        throw new Error("You have already submitted this meal to the current competition.");
       }
 
       // Insert into 'competition_submissions'
@@ -109,15 +125,31 @@ const AddMeal = () => {
         throw error;
       }
 
-      Alert.alert("Success", "Meal added to the competition!");
-      router.push("/competition/current-meals");
-    } catch (error) {
+      Alert.alert("Success", "Meal added to the competition!", [
+        { text: "OK", onPress: () => router.push("/competition/current-meals") }
+      ]);
+    } catch (error: any) {
       console.error("Error adding meal to competition:", error);
-      Alert.alert("Error", "Failed to add your meal to the competition. Please try again later.");
+      const errorMessage = error.message || "Failed to add your meal to the competition. Please try again later.";
+      Alert.alert("Error", errorMessage);
     } finally {
       setAddingMeal(false);
     }
-  };
+  }, [addingMeal, router]);
+
+  // Handle retry
+  const handleRetry = useCallback(() => {
+    setRetryCount(0);
+    fetchUserMeals(true);
+  }, [fetchUserMeals]);
+
+  // Handle refresh
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    setRetryCount(0);
+    await fetchUserMeals(false);
+    setRefreshing(false);
+  }, [fetchUserMeals]);
 
   useEffect(() => {
     fetchUserMeals();
@@ -126,13 +158,93 @@ const AddMeal = () => {
   if (loading) {
     return (
       <View style={[styles.container, { backgroundColor: theme.background }]}>
-        <ActivityIndicator size="large" color={theme.primary} />
+        {/* Error Banner */}
+        {error && (
+          <View style={[styles.errorBanner, { 
+            backgroundColor: `${theme.danger}15`, 
+            borderColor: theme.danger 
+          }]}>
+            <Text style={[styles.errorBannerText, { color: theme.danger }]}>
+              {error}
+            </Text>
+            <TouchableOpacity
+              style={[styles.errorBannerButton, { backgroundColor: theme.danger }]}
+              onPress={handleRetry}
+            >
+              <Text style={[styles.errorBannerButtonText, { color: theme.buttonText }]}>
+                Retry
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Retry Banner */}
+        {retryCount > 0 && (
+          <View style={[styles.retryBanner, { 
+            backgroundColor: `${theme.warning}15`, 
+            borderColor: theme.warning 
+          }]}>
+            <Text style={[styles.retryBannerText, { color: theme.warning }]}>
+              Retry attempt {retryCount}/3
+            </Text>
+          </View>
+        )}
+
+        <View style={styles.centerContent}>
+          <ActivityIndicator size="large" color={theme.primary} />
+          <Text style={[styles.loadingText, { color: theme.subtext }]}>
+            Loading your meals...
+          </Text>
+          
+          {error && (
+            <TouchableOpacity
+              style={[styles.retryButton, { backgroundColor: theme.primary, marginTop: 16 }]}
+              onPress={handleRetry}
+            >
+              <Text style={[styles.retryButtonText, { color: theme.buttonText }]}>
+                Try Again
+              </Text>
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
     );
   }
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
+      {/* Error Banner */}
+      {error && (
+        <View style={[styles.errorBanner, { 
+          backgroundColor: `${theme.danger}15`, 
+          borderColor: theme.danger 
+        }]}>
+          <Text style={[styles.errorBannerText, { color: theme.danger }]}>
+            {error}
+          </Text>
+          <TouchableOpacity
+            style={[styles.errorBannerButton, { backgroundColor: theme.danger }]}
+            onPress={handleRetry}
+          >
+            <Text style={[styles.errorBannerButtonText, { color: theme.buttonText }]}>
+              Retry
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Retry Banner */}
+      {retryCount > 0 && (
+        <View style={[styles.retryBanner, { 
+          backgroundColor: `${theme.warning}15`, 
+          borderColor: theme.warning 
+        }]}>
+          <Text style={[styles.retryBannerText, { color: theme.warning }]}>
+            Retry attempt {retryCount}/3
+          </Text>
+        </View>
+      )}
+
       {/* Back Button */}
       <TouchableOpacity
         style={[styles.backButton, { backgroundColor: theme.primary }]}
@@ -166,10 +278,30 @@ const AddMeal = () => {
             </View>
           );
         }}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            colors={[theme.primary]}
+            tintColor={theme.primary}
+          />
+        }
         ListEmptyComponent={
-          <Text style={[styles.emptyText, { color: theme.subtext }]}>
-            You have no meals to add to the competition.
-          </Text>
+          <View style={styles.centerContent}>
+            <Text style={[styles.emptyText, { color: theme.subtext }]}>
+              You have no meals to add to the competition.
+            </Text>
+            {!error && (
+              <TouchableOpacity
+                style={[styles.retryButton, { backgroundColor: theme.primary, marginTop: 16 }]}
+                onPress={handleRetry}
+              >
+                <Text style={[styles.retryButtonText, { color: theme.buttonText }]}>
+                  Refresh
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
         }
       />
     </View>
@@ -180,6 +312,76 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 16,
+  },
+  centerContent: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    fontSize: 16,
+    marginTop: 16,
+    textAlign: 'center',
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  errorText: {
+    fontSize: 16,
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  retryButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  retryButtonText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  retryText: {
+    fontSize: 14,
+    marginTop: 8,
+    textAlign: 'center',
+  },
+  errorBanner: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 12,
+    marginBottom: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  errorBannerText: {
+    flex: 1,
+    fontSize: 14,
+    marginRight: 12,
+  },
+  errorBannerButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  errorBannerButtonText: {
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  retryBanner: {
+    padding: 12,
+    marginBottom: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignItems: 'center',
+  },
+  retryBannerText: {
+    fontSize: 14,
+    fontWeight: '500',
   },
   backButton: {
     padding: 12,

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   TextInput,
   Switch,
+  RefreshControl,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { useTheme } from "../../../context/ThemeContext";
@@ -31,6 +32,8 @@ const GroceryListScreen = () => {
 
   const [isShoppingMode, setIsShoppingMode] = useState(false); // false = Planning Mode, true = Shopping Mode
   const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [groceryItems, setGroceryItems] = useState<GroceryItem[]>([]);
   const [startDate, setStartDate] = useState(new Date());
   const [endDate, setEndDate] = useState(addDays(new Date(), 7));
@@ -41,6 +44,35 @@ const GroceryListScreen = () => {
   const [editName, setEditName] = useState("");
   const [editQuantity, setEditQuantity] = useState("");
   const [editUnit, setEditUnit] = useState("");
+  const [generatingItems, setGeneratingItems] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
+
+  const getCurrentUser = useCallback(async () => {
+    try {
+      const { data, error } = await supabase.auth.getUser();
+      if (error || !data?.user) {
+        const errorMessage = "You are not logged in. Please log in to view your grocery list.";
+        setError(errorMessage);
+        Alert.alert(
+          "Authentication Required", 
+          errorMessage,
+          [{ text: "Login", onPress: () => router.push("/(auth)/login") }]
+        );
+        return;
+      }
+      setUserId(data.user.id);
+      setError(null);
+    } catch (error: any) {
+      console.error("Error getting user:", error);
+      const errorMessage = "Authentication error. Please try again.";
+      setError(errorMessage);
+      Alert.alert("Error", errorMessage);
+    }
+  }, [router]);
+
+  useEffect(() => {
+    getCurrentUser();
+  }, [getCurrentUser]);
 
   useEffect(() => {
     const getCurrentUser = async () => {
@@ -55,53 +87,109 @@ const GroceryListScreen = () => {
     getCurrentUser();
   }, []);
 
-  useEffect(() => {
-    if (userId) {
-      loadGroceryItems();
-    }
-  }, [userId]);
-
-  const loadGroceryItems = async () => {
+  const loadGroceryItems = useCallback(async (isRefresh = false) => {
     if (!userId) return;
-    setLoading(true);
+    
     try {
+      if (isRefresh) {
+        setRefreshing(true);
+        setError(null);
+      } else {
+        setLoading(true);
+        setError(null);
+      }
+
+      // Validate user authentication
+      const { data: authData, error: authError } = await supabase.auth.getUser();
+      if (authError || !authData?.user) {
+        throw new Error("Authentication required. Please log in again.");
+      }
+
       const { data, error } = await supabase
         .from("user_grocery_items")
         .select("*")
         .eq("user_id", userId)
         .order("created_at", { ascending: true });
       
-      if (error) throw error;
+      if (error) {
+        throw new Error(error.message || "Failed to load grocery items");
+      }
+      
       setGroceryItems(data || []);
-    } catch (error) {
+      setRetryCount(0); // Reset retry count on success
+    } catch (error: any) {
       console.error("Error loading grocery items:", error);
-      Alert.alert("Error", "Failed to load grocery items. Please try again.");
+      const errorMessage = error.message || "Failed to load grocery items. Please try again.";
+      setError(errorMessage);
+      
+      // Auto-retry with exponential backoff for network errors
+      if (retryCount < 3 && !error.message?.includes("Authentication")) {
+        const delay = Math.pow(2, retryCount) * 1000; // 1s, 2s, 4s
+        setTimeout(() => {
+          setRetryCount(prev => prev + 1);
+          loadGroceryItems(isRefresh);
+        }, delay);
+      }
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
-  };
+  }, [userId, retryCount]);
+
+  const handleRefresh = useCallback(() => {
+    setRetryCount(0);
+    loadGroceryItems(true);
+  }, [loadGroceryItems]);
+
+  useEffect(() => {
+    if (userId) {
+      loadGroceryItems();
+    }
+  }, [userId, loadGroceryItems]);
 
   const generateFromMealPlan = async () => {
-    if (!userId) return;
-    setLoading(true);
+    if (!userId || generatingItems) return;
+    
+    setGeneratingItems(true);
+    setError(null);
+    
     try {
+      // Validate date range
+      if (startDate >= endDate) {
+        throw new Error("End date must be after start date");
+      }
+
+      // Validate user authentication
+      const { data: authData, error: authError } = await supabase.auth.getUser();
+      if (authError || !authData?.user) {
+        throw new Error("Authentication required. Please log in again.");
+      }
+
       const { error } = await supabase.rpc("generate_grocery_items", {
         target_user_id: userId,
         start_date: format(startDate, "yyyy-MM-dd"),
         end_date: format(endDate, "yyyy-MM-dd"),
       });
       
-      if (error) throw error;
+      if (error) {
+        throw new Error(error.message || "Failed to generate grocery list");
+      }
       
       // Reload the grocery list to show the new items
       await loadGroceryItems();
       
-      Alert.alert("Success", "Grocery items have been added from your meal plan!");
-    } catch (error) {
+      Alert.alert(
+        "Success", 
+        "Grocery items have been added from your meal plan!",
+        [{ text: "OK" }]
+      );
+    } catch (error: any) {
       console.error("Error generating grocery list:", error);
-      Alert.alert("Error", "Failed to generate grocery list. Please try again.");
+      const errorMessage = error.message || "Failed to generate grocery list. Please try again.";
+      setError(errorMessage);
+      Alert.alert("Error", errorMessage);
     } finally {
-      setLoading(false);
+      setGeneratingItems(false);
     }
   };
 
@@ -112,19 +200,28 @@ const GroceryListScreen = () => {
     
     try {
       const newCheckedStatus = !item.checked;
+      
+      // Optimistic update
+      const updatedItems = [...groceryItems];
+      updatedItems[index].checked = newCheckedStatus;
+      setGroceryItems(updatedItems);
+      
       const { error } = await supabase
         .from("user_grocery_items")
         .update({ checked: newCheckedStatus })
         .eq("id", item.id);
       
-      if (error) throw error;
-      
-      const updatedItems = [...groceryItems];
-      updatedItems[index].checked = newCheckedStatus;
-      setGroceryItems(updatedItems);
-    } catch (error) {
+      if (error) {
+        // Revert optimistic update on error
+        updatedItems[index].checked = !newCheckedStatus;
+        setGroceryItems(updatedItems);
+        throw new Error(error.message || "Failed to update item");
+      }
+    } catch (error: any) {
       console.error("Error updating item:", error);
-      Alert.alert("Error", "Failed to update item. Please try again.");
+      const errorMessage = error.message || "Failed to update item. Please try again.";
+      setError(errorMessage);
+      Alert.alert("Error", errorMessage);
     }
   };
 
@@ -139,8 +236,13 @@ const GroceryListScreen = () => {
 
   // Save edited item
   const saveEdit = async () => {
-    if (!editName.trim() || !editQuantity.trim()) {
-      Alert.alert("Error", "Please fill in all required fields.");
+    if (!editName.trim()) {
+      Alert.alert("Validation Error", "Item name is required.");
+      return;
+    }
+
+    if (!editQuantity.trim() || isNaN(parseFloat(editQuantity)) || parseFloat(editQuantity) <= 0) {
+      Alert.alert("Validation Error", "Please enter a valid quantity greater than 0.");
       return;
     }
 
@@ -152,6 +254,8 @@ const GroceryListScreen = () => {
     };
 
     try {
+      setError(null);
+      
       if (item.id) {
         // Update existing item
         const { error } = await supabase
@@ -159,7 +263,14 @@ const GroceryListScreen = () => {
           .update(updatedItem)
           .eq("id", item.id);
         
-        if (error) throw error;
+        if (error) {
+          throw new Error(error.message || "Failed to update item");
+        }
+        
+        // Update local state for existing item
+        const updatedItems = [...groceryItems];
+        updatedItems[editingIndex!] = { ...item, ...updatedItem };
+        setGroceryItems(updatedItems);
       } else {
         // Insert new item
         const { data, error } = await supabase
@@ -168,24 +279,22 @@ const GroceryListScreen = () => {
           .select()
           .single();
         
-        if (error) throw error;
+        if (error) {
+          throw new Error(error.message || "Failed to add item");
+        }
         
         // Update local state with new ID
         const updatedItems = [...groceryItems];
         updatedItems[editingIndex!] = { ...data };
         setGroceryItems(updatedItems);
-        cancelEdit();
-        return;
       }
       
-      // Update local state for existing item
-      const updatedItems = [...groceryItems];
-      updatedItems[editingIndex!] = { ...item, ...updatedItem };
-      setGroceryItems(updatedItems);
       cancelEdit();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error saving item:", error);
-      Alert.alert("Error", "Failed to save item. Please try again.");
+      const errorMessage = error.message || "Failed to save item. Please try again.";
+      setError(errorMessage);
+      Alert.alert("Error", errorMessage);
     }
   };
 
@@ -203,7 +312,7 @@ const GroceryListScreen = () => {
     
     Alert.alert(
       "Delete Item",
-      "Are you sure you want to delete this item?",
+      `Are you sure you want to delete "${item.raw_name}"?`,
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -211,20 +320,29 @@ const GroceryListScreen = () => {
           style: "destructive",
           onPress: async () => {
             try {
+              setError(null);
+              
+              // Optimistic update
+              const updatedItems = groceryItems.filter((_, i) => i !== index);
+              setGroceryItems(updatedItems);
+              
               if (item.id) {
                 const { error } = await supabase
                   .from("user_grocery_items")
                   .delete()
                   .eq("id", item.id);
                 
-                if (error) throw error;
+                if (error) {
+                  // Revert optimistic update on error
+                  setGroceryItems(groceryItems);
+                  throw new Error(error.message || "Failed to delete item");
+                }
               }
-              
-              const updatedItems = groceryItems.filter((_, i) => i !== index);
-              setGroceryItems(updatedItems);
-            } catch (error) {
+            } catch (error: any) {
               console.error("Error deleting item:", error);
-              Alert.alert("Error", "Failed to delete item. Please try again.");
+              const errorMessage = error.message || "Failed to delete item. Please try again.";
+              setError(errorMessage);
+              Alert.alert("Error", errorMessage);
             }
           },
         },
@@ -252,9 +370,14 @@ const GroceryListScreen = () => {
 
   // Delete all items (Planning Mode)
   const deleteAllItems = () => {
+    if (groceryItems.length === 0) {
+      Alert.alert("No Items", "There are no items to delete.");
+      return;
+    }
+
     Alert.alert(
       "Delete All Items",
-      "Are you sure you want to delete all items?",
+      `Are you sure you want to delete all ${groceryItems.length} items? This action cannot be undone.`,
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -262,16 +385,29 @@ const GroceryListScreen = () => {
           style: "destructive",
           onPress: async () => {
             try {
+              setError(null);
+              
+              // Optimistic update
+              const backupItems = [...groceryItems];
+              setGroceryItems([]);
+              
               const { error } = await supabase
                 .from("user_grocery_items")
                 .delete()
                 .eq("user_id", userId);
               
-              if (error) throw error;
-              setGroceryItems([]);
-            } catch (error) {
+              if (error) {
+                // Revert optimistic update on error
+                setGroceryItems(backupItems);
+                throw new Error(error.message || "Failed to delete all items");
+              }
+              
+              Alert.alert("Success", "All items have been deleted.");
+            } catch (error: any) {
               console.error("Error deleting all items:", error);
-              Alert.alert("Error", "Failed to delete all items. Please try again.");
+              const errorMessage = error.message || "Failed to delete all items. Please try again.";
+              setError(errorMessage);
+              Alert.alert("Error", errorMessage);
             }
           },
         },
@@ -300,6 +436,23 @@ const GroceryListScreen = () => {
         </TouchableOpacity>
         <Text style={[styles.title, { color: theme.text }]}>Grocery List</Text>
       </View>
+
+      {/* Error Banner */}
+      {error && (
+        <View style={[styles.errorBanner, { backgroundColor: theme.danger }]}>
+          <Text style={[styles.errorBannerText, { color: theme.buttonText }]}>
+            {error}
+          </Text>
+          <TouchableOpacity
+            style={styles.errorBannerRetry}
+            onPress={handleRefresh}
+          >
+            <Text style={[styles.errorBannerRetryText, { color: theme.buttonText }]}>
+              Retry
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* Mode Toggle */}
       <View style={styles.modeContainer}>
@@ -345,11 +498,17 @@ const GroceryListScreen = () => {
           )}
 
           <TouchableOpacity
-            style={[styles.generateButton, { backgroundColor: theme.primary }]}
+            style={[
+              styles.generateButton, 
+              { 
+                backgroundColor: theme.primary,
+                opacity: generatingItems ? 0.7 : 1
+              }
+            ]}
             onPress={generateFromMealPlan}
-            disabled={loading}
+            disabled={generatingItems}
           >
-            {loading ? (
+            {generatingItems ? (
               <ActivityIndicator size="small" color={theme.buttonText} />
             ) : (
               <Text style={[styles.generateButtonText, { color: theme.buttonText }]}>Add From Meal Plan</Text>
@@ -375,8 +534,25 @@ const GroceryListScreen = () => {
       )}
 
       {/* Items List */}
-      <ScrollView style={styles.itemsContainer}>
-        {groceryItems.length > 0 ? (
+      <ScrollView 
+        style={styles.itemsContainer}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            colors={[theme.primary]}
+            tintColor={theme.primary}
+          />
+        }
+      >
+        {loading && groceryItems.length === 0 ? (
+          <View style={styles.centerContent}>
+            <ActivityIndicator size="large" color={theme.primary} />
+            <Text style={[styles.loadingText, { color: theme.text }]}>
+              Loading grocery list...
+            </Text>
+          </View>
+        ) : groceryItems.length > 0 ? (
           <>
             <Text style={[styles.itemsTitle, { color: theme.text }]}>
               Grocery Items ({groceryItems.length})
@@ -462,11 +638,26 @@ const GroceryListScreen = () => {
               </View>
             ))}
           </>
-        ) : !loading ? (
-          <Text style={[styles.emptyText, { color: theme.subtext }]}>
-            {isShoppingMode ? "No items in your grocery list." : "No meals found for selected dates."}
-          </Text>
-        ) : null}
+        ) : (
+          <View style={styles.centerContent}>
+            <Text style={[styles.emptyText, { color: theme.subtext }]}>
+              {isShoppingMode 
+                ? "No items in your grocery list." 
+                : "No grocery items yet. Add items manually or generate from your meal plan."
+              }
+            </Text>
+            {!isShoppingMode && (
+              <TouchableOpacity
+                style={[styles.emptyActionButton, { backgroundColor: theme.primary }]}
+                onPress={addNewItem}
+              >
+                <Text style={[styles.emptyActionButtonText, { color: theme.buttonText }]}>
+                  Add Your First Item
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
       </ScrollView>
       
       {/* Bottom Back Button */}
@@ -481,11 +672,64 @@ const GroceryListScreen = () => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16 },
-  header: { flexDirection: "row", alignItems: "center", marginBottom: 20 },
-  backButton: { padding: 10, borderRadius: 8, marginRight: 16 },
-  backButtonText: { fontSize: 16, fontWeight: "bold" },
-  title: { fontSize: 24, fontWeight: "bold", flex: 1 },
+  container: { 
+    flex: 1, 
+    padding: 16 
+  },
+  header: { 
+    flexDirection: "row", 
+    alignItems: "center", 
+    marginBottom: 20 
+  },
+  backButton: { 
+    padding: 10, 
+    borderRadius: 8, 
+    marginRight: 16 
+  },
+  backButtonText: { 
+    fontSize: 16, 
+    fontWeight: "bold" 
+  },
+  title: { 
+    fontSize: 24, 
+    fontWeight: "bold", 
+    flex: 1 
+  },
+  errorBanner: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 12,
+    marginBottom: 16,
+    borderRadius: 8,
+  },
+  errorBannerText: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  errorBannerRetry: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    marginLeft: 12,
+    borderRadius: 6,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  errorBannerRetryText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  centerContent: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    textAlign: 'center',
+  },
   modeContainer: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -494,12 +738,37 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 8,
   },
-  modeLabel: { fontSize: 18, fontWeight: "bold" },
-  dateContainer: { flexDirection: "row", justifyContent: "space-between", marginBottom: 16 },
-  dateButton: { flex: 1, padding: 12, borderRadius: 8, borderWidth: 1, marginHorizontal: 4, alignItems: "center" },
-  dateButtonText: { fontSize: 16, fontWeight: "500" },
-  generateButton: { padding: 12, borderRadius: 8, alignItems: "center", marginBottom: 16 },
-  generateButtonText: { fontSize: 16, fontWeight: "bold" },
+  modeLabel: { 
+    fontSize: 18, 
+    fontWeight: "bold" 
+  },
+  dateContainer: { 
+    flexDirection: "row", 
+    justifyContent: "space-between", 
+    marginBottom: 16 
+  },
+  dateButton: { 
+    flex: 1, 
+    padding: 12, 
+    borderRadius: 8, 
+    borderWidth: 1, 
+    marginHorizontal: 4, 
+    alignItems: "center" 
+  },
+  dateButtonText: { 
+    fontSize: 16, 
+    fontWeight: "500" 
+  },
+  generateButton: { 
+    padding: 12, 
+    borderRadius: 8, 
+    alignItems: "center", 
+    marginBottom: 16 
+  },
+  generateButtonText: { 
+    fontSize: 16, 
+    fontWeight: "bold" 
+  },
   actionButtons: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -512,9 +781,18 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginHorizontal: 4,
   },
-  actionButtonText: { fontSize: 16, fontWeight: "bold" },
-  itemsContainer: { flex: 1 },
-  itemsTitle: { fontSize: 18, fontWeight: "bold", marginBottom: 12 },
+  actionButtonText: { 
+    fontSize: 16, 
+    fontWeight: "bold" 
+  },
+  itemsContainer: { 
+    flex: 1 
+  },
+  itemsTitle: { 
+    fontSize: 18, 
+    fontWeight: "bold", 
+    marginBottom: 12 
+  },
   item: {
     flexDirection: "row",
     alignItems: "center",
@@ -544,9 +822,17 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
   },
-  itemInfo: { flex: 1 },
-  itemName: { fontSize: 16, fontWeight: "500" },
-  itemQuantity: { fontSize: 14, fontWeight: "bold" },
+  itemInfo: { 
+    flex: 1 
+  },
+  itemName: { 
+    fontSize: 16, 
+    fontWeight: "500" 
+  },
+  itemQuantity: { 
+    fontSize: 14, 
+    fontWeight: "bold" 
+  },
   itemActions: {
     flexDirection: "row",
   },
@@ -556,7 +842,10 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     marginLeft: 8,
   },
-  actionButtonTextSmall: { fontSize: 14, fontWeight: "bold" },
+  actionButtonTextSmall: { 
+    fontSize: 14, 
+    fontWeight: "bold" 
+  },
   editContainer: {
     flex: 1,
   },
@@ -586,8 +875,29 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginHorizontal: 4,
   },
-  editButtonText: { fontSize: 14, fontWeight: "bold" },
-  emptyText: { fontSize: 16, textAlign: "center", marginTop: 40, fontStyle: "italic" },
+  editButtonText: { 
+    fontSize: 14, 
+    fontWeight: "bold" 
+  },
+  emptyText: { 
+    fontSize: 16, 
+    textAlign: "center", 
+    marginTop: 40, 
+    fontStyle: "italic",
+    lineHeight: 24,
+    marginBottom: 20,
+  },
+  emptyActionButton: {
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+    marginTop: 16,
+  },
+  emptyActionButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
   bottomBackButton: { 
     padding: 12, 
     borderRadius: 8, 

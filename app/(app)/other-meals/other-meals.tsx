@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -10,6 +10,8 @@ import {
   TextInput,
   Modal,
   Image,
+  RefreshControl,
+  ScrollView,
 } from "react-native";
 import { Meal } from "../../../types/types";
 import { useTheme } from "../../../context/ThemeContext";
@@ -18,6 +20,7 @@ import { useRouter } from "expo-router";
 import BottomNav from "components/bottomNav";
 import RNPickerSelect from "react-native-picker-select";
 import { supabase } from "utils/supabase";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const aiOptions = [
   { label: "All", value: "" },
@@ -59,6 +62,9 @@ const OtherMeals: React.FC = () => {
   const [filteredMeals, setFilteredMeals] = useState<Meal[]>([]);
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
   const [isFilterModalVisible, setIsFilterModalVisible] = useState(false);
 
   const [filters, setFilters] = useState(defaultFilters);
@@ -81,59 +87,117 @@ const OtherMeals: React.FC = () => {
     cuisineFilter !== "" ||
     filters.some(f => f.greaterThan !== "" || f.lessThan !== "");
 
-  
+  // Load saved filters on component mount
+  useEffect(() => {
+    loadSavedFilters();
+  }, []);
+
+  const loadSavedFilters = async () => {
+    try {
+      const savedFilters = await AsyncStorage.getItem('otherMealsFilters');
+      if (savedFilters) {
+        const parsedFilters = JSON.parse(savedFilters);
+        setAiFilter(parsedFilters.aiFilter || "");
+        setDietaryRestrictionFilter(parsedFilters.dietaryRestrictionFilter || "");
+        setCuisineFilter(parsedFilters.cuisineFilter || "");
+        setFilters(parsedFilters.filters || defaultFilters);
+      }
+    } catch (error) {
+      console.warn('Failed to load saved filters:', error);
+    }
+  };
+
+  const saveFilters = async () => {
+    try {
+      const filtersToSave = {
+        aiFilter,
+        dietaryRestrictionFilter,
+        cuisineFilter,
+        filters,
+      };
+      await AsyncStorage.setItem('otherMealsFilters', JSON.stringify(filtersToSave));
+    } catch (error) {
+      console.warn('Failed to save filters:', error);
+    }
+  };
 
   // Fetch all public meals from Supabase
-  const fetchMeals = async () => {
-  setLoading(true);
-  try {
-    // 1. Fetch all public meals
-    let query = supabase
-      .from("meals")
-      .select("*")
-      .eq("visibility", true);
-
-    if (dietaryRestrictionFilter) query = query.eq("dietary_restrictions", dietaryRestrictionFilter);
-    if (aiFilter === "ai") query = query.eq("created_by_ai", true);
-    if (aiFilter === "not_ai") query = query.eq("created_by_ai", false);
-    if (cuisineFilter) query = query.eq("cuisine", cuisineFilter);
-
-    const { data: mealsData, error: mealsError } = await query;
-    if (mealsError) throw mealsError;
-
-    // 2. Fetch all user_profiles for those user_ids
-    const userIds = Array.from(new Set((mealsData || []).map(meal => meal.user_id)));
-    let userIdToUsername: Record<string, string> = {};
-    if (userIds.length > 0) {
-      const { data: profilesData, error: profilesError } = await supabase
-        .from("user_profiles")
-        .select("id,username")
-        .in("id", userIds);
-
-      if (profilesError) throw profilesError;
-
-      (profilesData || []).forEach(profile => {
-        userIdToUsername[profile.id] = profile.username;
-      });
+  const fetchMeals = useCallback(async (showLoading = true) => {
+    if (showLoading) {
+      setLoading(true);
     }
+    setError(null);
+    
+    try {
+      // 1. Fetch all public meals
+      let query = supabase
+        .from("meals")
+        .select("*")
+        .eq("visibility", true);
 
-    // 3. Combine meals and usernames
-    const mealsWithUsernames = (mealsData || []).map(meal => ({
-      ...meal,
-      userName: userIdToUsername[meal.user_id] || "Unknown",
-      averageRating: 0,
-      reviewCount: 0,
-    }));
+      if (dietaryRestrictionFilter) query = query.eq("dietary_restrictions", dietaryRestrictionFilter);
+      if (aiFilter === "ai") query = query.eq("created_by_ai", true);
+      if (aiFilter === "not_ai") query = query.eq("created_by_ai", false);
+      if (cuisineFilter) query = query.eq("cuisine", cuisineFilter);
 
-    setMeals(mealsWithUsernames);
-    setFilteredMeals(mealsWithUsernames);
-  } catch (error) {
-    console.error("Error fetching meals:", error);
-    Alert.alert("Error", "Failed to fetch meals. Please try again later.");
-  } finally {
-    setLoading(false);
-  }
-};
+      const { data: mealsData, error: mealsError } = await query;
+      if (mealsError) throw mealsError;
+
+      // 2. Fetch all user_profiles for those user_ids
+      const userIds = Array.from(new Set((mealsData || []).map(meal => meal.user_id)));
+      let userIdToUsername: Record<string, string> = {};
+      if (userIds.length > 0) {
+        const { data: profilesData, error: profilesError } = await supabase
+          .from("user_profiles")
+          .select("id,username")
+          .in("id", userIds);
+
+        if (profilesError) throw profilesError;
+
+        (profilesData || []).forEach(profile => {
+          userIdToUsername[profile.id] = profile.username;
+        });
+      }
+
+      // 3. Combine meals and usernames
+      const mealsWithUsernames = (mealsData || []).map(meal => ({
+        ...meal,
+        userName: userIdToUsername[meal.user_id] || "Unknown",
+        averageRating: 0,
+        reviewCount: 0,
+      }));
+
+      setMeals(mealsWithUsernames);
+      setFilteredMeals(mealsWithUsernames);
+      setRetryCount(0);
+    } catch (error) {
+      console.error("Error fetching meals:", error);
+      setError("Failed to load meals. Please check your connection and try again.");
+    } finally {
+      if (showLoading) {
+        setLoading(false);
+      }
+      setRefreshing(false);
+    }
+  }, [dietaryRestrictionFilter, aiFilter, cuisineFilter]);
+
+  const handleRetry = useCallback(async () => {
+    const newRetryCount = retryCount + 1;
+    setRetryCount(newRetryCount);
+    
+    // Exponential backoff: wait 1s, 2s, 4s, etc.
+    const delay = Math.min(1000 * Math.pow(2, newRetryCount - 1), 10000);
+    
+    setTimeout(() => {
+      fetchMeals();
+    }, delay);
+  }, [retryCount, fetchMeals]);
+
+  const handleRefresh = useCallback(() => {
+    setRefreshing(true);
+    setRetryCount(0);
+    fetchMeals(false);
+  }, [fetchMeals]);
 
   useEffect(() => {
     fetchMeals();
@@ -177,15 +241,16 @@ const OtherMeals: React.FC = () => {
     router.push(`/other-meals/${meal.id}/other-meals-info`);
   };
 
-  const applyFilters = () => {
+  const applyFilters = async () => {
     setFilters(tempFilters);
     setAiFilter(tempAiFilter);
     setDietaryRestrictionFilter(tempDietaryRestrictionFilter);
     setCuisineFilter(tempCuisineFilter);
     setIsFilterModalVisible(false);
+    await saveFilters();
   };
 
-  const clearFilters = () => {
+  const clearFilters = async () => {
     setFilters(defaultFilters);
     setTempFilters(defaultFilters);
     setAiFilter("");
@@ -196,6 +261,11 @@ const OtherMeals: React.FC = () => {
     setTempCuisineFilter("");
     setSearchQuery("");
     setIsFilterModalVisible(false);
+    try {
+      await AsyncStorage.removeItem('otherMealsFilters');
+    } catch (error) {
+      console.warn('Failed to clear saved filters:', error);
+    }
   };
 
   const handleSearchChange = (text: string) => {
@@ -204,15 +274,65 @@ const OtherMeals: React.FC = () => {
 
   if (loading) {
     return (
-      <View style={[styles.container, { backgroundColor: theme.background }]}>
+      <View style={[styles.centerContent, { backgroundColor: theme.background }]}>
         <ActivityIndicator size="large" color={theme.primary} />
         <Text style={[styles.loadingText, { color: theme.text }]}>Loading meals...</Text>
+        {error && (
+          <View style={styles.errorContainer}>
+            <Text style={[styles.errorText, { color: theme.danger }]}>{error}</Text>
+            <TouchableOpacity
+              style={[styles.retryButton, { backgroundColor: theme.primary }]}
+              onPress={handleRetry}
+            >
+              <Text style={[styles.retryButtonText, { color: theme.buttonText }]}>
+                Retry
+              </Text>
+            </TouchableOpacity>
+            {retryCount > 0 && (
+              <Text style={[styles.retryText, { color: theme.subtext }]}>
+                Retry attempt {retryCount}/3
+              </Text>
+            )}
+          </View>
+        )}
       </View>
     );
   }
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
+      {/* Error Banner */}
+      {error && !loading && (
+        <View style={[styles.errorBanner, { 
+          backgroundColor: `${theme.danger}15`, 
+          borderColor: theme.danger 
+        }]}>
+          <Text style={[styles.errorBannerText, { color: theme.danger }]}>
+            {error}
+          </Text>
+          <TouchableOpacity
+            style={[styles.errorBannerButton, { backgroundColor: theme.danger }]}
+            onPress={handleRetry}
+          >
+            <Text style={[styles.errorBannerButtonText, { color: theme.buttonText }]}>
+              Retry
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Retry Banner */}
+      {retryCount > 0 && !loading && (
+        <View style={[styles.retryBanner, { 
+          backgroundColor: `${theme.warning}15`, 
+          borderColor: theme.warning 
+        }]}>
+          <Text style={[styles.retryBannerText, { color: theme.warning }]}>
+            Retry attempt {retryCount}/3
+          </Text>
+        </View>
+      )}
+
       <View style={styles.searchBarContainer}>
         <TextInput
           style={[styles.searchBar, { borderColor: theme.border, color: theme.text }]}
@@ -251,6 +371,14 @@ const OtherMeals: React.FC = () => {
         data={filteredMeals}
         keyExtractor={(item) => item.id.toString()}
         numColumns={2}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            colors={[theme.primary]}
+            tintColor={theme.primary}
+          />
+        }
         renderItem={({ item }) => (
           <TouchableOpacity
             style={[styles.mealItem, { backgroundColor: theme.card, borderColor: theme.border }]}
@@ -655,6 +783,72 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "bold",
     marginBottom: 4,
+  },
+  centerContent: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  errorContainer: {
+    marginTop: 20,
+    alignItems: "center",
+  },
+  errorText: {
+    fontSize: 16,
+    textAlign: "center",
+    marginBottom: 10,
+  },
+  retryButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 6,
+    marginVertical: 5,
+  },
+  retryButtonText: {
+    fontSize: 16,
+    fontWeight: "bold",
+  },
+  retryText: {
+    fontSize: 14,
+    marginTop: 10,
+    textAlign: "center",
+  },
+  errorBanner: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: 12,
+    marginHorizontal: 16,
+    marginBottom: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  errorBannerText: {
+    flex: 1,
+    fontSize: 14,
+    marginRight: 12,
+  },
+  errorBannerButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    borderRadius: 4,
+  },
+  errorBannerButtonText: {
+    fontSize: 12,
+    fontWeight: "bold",
+  },
+  retryBanner: {
+    padding: 12,
+    marginHorizontal: 16,
+    marginBottom: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignItems: "center",
+  },
+  retryBannerText: {
+    fontSize: 14,
+    fontWeight: "bold",
   },
 });
 

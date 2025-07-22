@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -11,6 +11,7 @@ import {
   ScrollView,
   Switch,
   ActivityIndicator,
+  RefreshControl,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { useTheme } from "../../../context/ThemeContext";
@@ -74,8 +75,15 @@ const CreateMealScreen = () => {
   const [carbohydrates, setCarbohydrates] = useState("");
   const [fat, setFat] = useState("");
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
+  const [uploadingImage, setUploadingImage] = useState(false);
 
-  const pickMealImage = async () => {
+  const pickMealImage = useCallback(async () => {
+    setError(null);
+    setUploadingImage(true);
+    
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ["images"],
@@ -89,6 +97,7 @@ const CreateMealScreen = () => {
         const fileType = uriParts[uriParts.length - 1].toLowerCase();
 
         if (!["jpg", "jpeg", "png"].includes(fileType)) {
+          setError("Only JPEG and PNG images are allowed.");
           Alert.alert("Error", "Only JPEG and PNG images are allowed.");
           return;
         }
@@ -97,32 +106,42 @@ const CreateMealScreen = () => {
       }
     } catch (error) {
       console.error("Error picking image:", error);
-      Alert.alert("Error", "Failed to pick an image.");
+      const errorMessage = "Failed to pick an image. Please try again.";
+      setError(errorMessage);
+      Alert.alert("Error", errorMessage);
+    } finally {
+      setUploadingImage(false);
     }
-  };
+  }, []);
 
-  const addIngredient = () => {
-    setIngredients([...ingredients, { name: "", quantity: "", unit: "" }]);
-  };
+  const addIngredient = useCallback(() => {
+    setIngredients(prev => [...prev, { name: "", quantity: "", unit: "" }]);
+  }, []);
 
-  const removeIngredient = (index: number) => {
-    setIngredients(ingredients.filter((_, i) => i !== index));
-  };
+  const removeIngredient = useCallback((index: number) => {
+    setIngredients(prev => prev.filter((_, i) => i !== index));
+  }, []);
 
-  const updateIngredient = (index: number, field: "name" | "quantity" | "unit", value: string) => {
-    const newIngredients = [...ingredients];
-    newIngredients[index][field] = value;
-    setIngredients(newIngredients);
-  };
+  const updateIngredient = useCallback((index: number, field: "name" | "quantity" | "unit", value: string) => {
+    setIngredients(prev => {
+      const newIngredients = [...prev];
+      newIngredients[index][field] = value;
+      return newIngredients;
+    });
+  }, []);
 
   // Upload image to Supabase Storage and return the public URL
-  const uploadImageToSupabase = async (uri: string) => {
+  const uploadImageToSupabase = useCallback(async (uri: string): Promise<string | null> => {
     try {
       const response = await fetch(uri);
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch image: ${response.status}`);
+      }
+      
       const blob = await response.blob();
       const fileExt = uri.split(".").pop();
       const fileName = `meal_${Date.now()}.${fileExt}`;
-      const filePath = `meal-pictures/${fileName}`;
 
       const { data, error } = await supabase.storage
         .from("meal-pictures")
@@ -143,110 +162,249 @@ const CreateMealScreen = () => {
       return publicUrlData?.publicUrl || null;
     } catch (error) {
       console.error("Image upload error:", error);
-      Alert.alert("Error", "Failed to upload image.");
-      return null;
+      throw new Error("Failed to upload image. Please try again.");
     }
-  };
+  }, []);
 
-  const handleAddMeal = async () => {
-  if (
-    !mealName ||
-    !mealDescription ||
-    ingredients.some(i => !i.name || !i.quantity || !i.unit)
-  ) {
-    Alert.alert("Error", "Please fill in all required fields and ingredients.");
-    return;
-  }
+  const validateForm = useCallback(() => {
+    const errors: string[] = [];
+    
+    if (!mealName.trim()) errors.push("Meal name is required");
+    if (!mealDescription.trim()) errors.push("Meal description is required");
+    if (ingredients.length === 0) errors.push("At least one ingredient is required");
+    
+    const invalidIngredients = ingredients.some(i => !i.name.trim() || !i.quantity.trim() || !i.unit.trim());
+    if (invalidIngredients) errors.push("All ingredient fields must be filled");
+    
+    const invalidQuantities = ingredients.some(i => {
+      const qty = parseFloat(i.quantity);
+      return isNaN(qty) || qty <= 0;
+    });
+    if (invalidQuantities) errors.push("All ingredient quantities must be positive numbers");
+    
+    if (mealServings && (isNaN(parseInt(mealServings)) || parseInt(mealServings) <= 0)) {
+      errors.push("Servings must be a positive number");
+    }
+    
+    const nutritionFields = [
+      { value: calories, name: "Calories" },
+      { value: protein, name: "Protein" },
+      { value: carbohydrates, name: "Carbohydrates" },
+      { value: fat, name: "Fat" }
+    ];
+    
+    for (const field of nutritionFields) {
+      if (field.value && (isNaN(parseInt(field.value)) || parseInt(field.value) < 0)) {
+        errors.push(`${field.name} must be a non-negative number`);
+      }
+    }
+    
+    return errors;
+  }, [mealName, mealDescription, ingredients, mealServings, calories, protein, carbohydrates, fat]);
 
-  setLoading(true);
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    setError(null);
+    
+    try {
+      // Reset form to initial state
+      setMealName("");
+      setMealDescription("");
+      setIngredients([{ name: "", quantity: "", unit: "" }]);
+      setMealInstructions("");
+      setMealRecipeLink("");
+      setMealPicture(null);
+      setMealVisibility(true);
+      setMealDietaryRestriction("");
+      setMealCuisine("");
+      setMealServings("1");
+      setCalories("");
+      setProtein("");
+      setCarbohydrates("");
+      setFat("");
+      setRetryCount(0);
+    } catch (error) {
+      console.error("Error refreshing form:", error);
+      setError("Failed to reset form");
+    } finally {
+      setRefreshing(false);
+    }
+  }, []);
 
-  try {
-    const { data: userData, error: userError } = await supabase.auth.getUser();
-    if (userError || !userData?.user) {
-      Alert.alert("Error", "User not authenticated. Please log in again.");
-      setLoading(false);
+  const handleAddMeal = useCallback(async () => {
+    setError(null);
+    
+    // Validate form
+    const validationErrors = validateForm();
+    if (validationErrors.length > 0) {
+      const errorMessage = validationErrors.join(", ");
+      setError(errorMessage);
+      Alert.alert("Validation Error", errorMessage);
       return;
     }
-    const userId = userData.user.id;
 
-    let pictureUrl = null;
-    if (mealPicture) {
-      pictureUrl = await uploadImageToSupabase(mealPicture);
-    }
+    setLoading(true);
 
-    // 1. Insert the meal (without ingredients)
-    const { data: mealData, error: mealError } = await supabase.from("meals").insert([
-      {
-        user_id: userId,
-        name: mealName,
-        description: mealDescription,
-        instructions: mealInstructions,
-        recipeLink: mealRecipeLink,
-        visibility: mealVisibility,
-        dietary_restrictions: mealDietaryRestriction,
-        servings: mealServings ? parseInt(mealServings) : 1,
-        cuisine: mealCuisine,
-        calories: calories ? parseInt(calories) : null,
-        protein: protein ? parseInt(protein) : null,
-        carbohydrates: carbohydrates ? parseInt(carbohydrates) : null,
-        fat: fat ? parseInt(fat) : null,
-        picture: pictureUrl,
-      },
-    ]).select("id").single();
+    const maxRetries = 3;
+    let attempt = 0;
 
-    if (mealError) {
-      throw mealError;
-    }
+    while (attempt < maxRetries) {
+      try {
+        const { data: userData, error: userError } = await supabase.auth.getUser();
+        if (userError || !userData?.user) {
+          throw new Error("User not authenticated. Please log in again.");
+        }
+        const userId = userData.user.id;
 
-    const mealId = mealData?.id;
-    if (!mealId) {
-      throw new Error("Failed to get new meal ID.");
-    }
+        let pictureUrl = null;
+        if (mealPicture) {
+          try {
+            pictureUrl = await uploadImageToSupabase(mealPicture);
+          } catch (imageError) {
+            console.error("Image upload failed:", imageError);
+            setError("Failed to upload image. Continuing without image...");
+            // Continue without image rather than failing entirely
+          }
+        }
 
-    // 2. Insert ingredients, each with the new meal's ID
-    const ingredientRows = ingredients.map(ingredient => ({
-      meal_id: mealId,
-      raw_name: ingredient.name,
-      //food_id: ingredient.food_id ?? null, // If you ever add food_id support
-      quantity: ingredient.quantity ? parseFloat(ingredient.quantity) : 1.0,
-      unit: ingredient.unit || null,
-    }));
+        // 1. Insert the meal (without ingredients)
+        const { data: mealData, error: mealError } = await supabase.from("meals").insert([
+          {
+            user_id: userId,
+            name: mealName.trim(),
+            description: mealDescription.trim(),
+            instructions: mealInstructions.trim() || null,
+            recipeLink: mealRecipeLink.trim() || null,
+            visibility: mealVisibility,
+            dietary_restrictions: mealDietaryRestriction || null,
+            servings: mealServings ? parseInt(mealServings) : 1,
+            cuisine: mealCuisine || null,
+            calories: calories ? parseInt(calories) : null,
+            protein: protein ? parseInt(protein) : null,
+            carbohydrates: carbohydrates ? parseInt(carbohydrates) : null,
+            fat: fat ? parseInt(fat) : null,
+            picture: pictureUrl,
+          },
+        ]).select("id").single();
 
-    const { error: ingredientsError } = await supabase
-      .from("meal_ingredients")
-      .insert(ingredientRows);
+        if (mealError) {
+          throw mealError;
+        }
 
-    if (ingredientsError) {
-      throw ingredientsError;
-    }
+        const mealId = mealData?.id;
+        if (!mealId) {
+          throw new Error("Failed to get new meal ID.");
+        }
 
-    // 3. Calculate nutrition data using the edge function
-    try {
-      const { error: nutritionError } = await supabase.functions.invoke('calculate-nutrition', {
-        body: { meal_id: mealId }
-      });
-      
-      if (nutritionError) {
-        console.warn("Failed to calculate nutrition:", nutritionError);
-        // Don't fail the whole process if nutrition calculation fails
+        // 2. Insert ingredients, each with the new meal's ID
+        const ingredientRows = ingredients.map(ingredient => ({
+          meal_id: mealId,
+          raw_name: ingredient.name.trim(),
+          quantity: parseFloat(ingredient.quantity),
+          unit: ingredient.unit,
+        }));
+
+        const { error: ingredientsError } = await supabase
+          .from("meal_ingredients")
+          .insert(ingredientRows);
+
+        if (ingredientsError) {
+          throw ingredientsError;
+        }
+
+        // 3. Calculate nutrition data using the edge function
+        try {
+          const { error: nutritionError } = await supabase.functions.invoke('calculate-nutrition', {
+            body: { meal_id: mealId }
+          });
+          
+          if (nutritionError) {
+            console.warn("Failed to calculate nutrition:", nutritionError);
+            // Don't fail the whole process if nutrition calculation fails
+          }
+        } catch (nutritionErr) {
+          console.warn("Nutrition calculation error:", nutritionErr);
+          // Continue even if nutrition calculation fails
+        }
+
+        Alert.alert("Success", "Meal added successfully!");
+        router.push("/(app)/my-meals/meals");
+        return; // Success, exit retry loop
+        
+      } catch (error) {
+        attempt++;
+        console.error(`Error adding meal (attempt ${attempt}):`, error);
+        
+        if (attempt >= maxRetries) {
+          const errorMessage = error instanceof Error ? error.message : "Failed to add the meal to the database.";
+          setError(errorMessage);
+          Alert.alert("Error", errorMessage);
+        } else {
+          // Wait before retrying with exponential backoff
+          const delay = Math.pow(2, attempt - 1) * 1000;
+          await new Promise(resolve => setTimeout(resolve, delay));
+          setRetryCount(attempt);
+        }
       }
-    } catch (nutritionErr) {
-      console.warn("Nutrition calculation error:", nutritionErr);
-      // Continue even if nutrition calculation fails
     }
-
-    Alert.alert("Success", "Meal added successfully!");
-    router.push("/(app)/my-meals/meals");
-  } catch (error) {
-    console.error("Error adding meal:", error);
-    Alert.alert("Error", "Failed to add the meal to the database.");
-  } finally {
+    
     setLoading(false);
-  }
-};
+  }, [
+    validateForm, 
+    mealName, 
+    mealDescription, 
+    ingredients, 
+    mealInstructions, 
+    mealRecipeLink, 
+    mealPicture, 
+    mealVisibility, 
+    mealDietaryRestriction, 
+    mealCuisine, 
+    mealServings, 
+    calories, 
+    protein, 
+    carbohydrates, 
+    fat, 
+    uploadImageToSupabase, 
+    router
+  ]);
 
   return (
-    <ScrollView contentContainerStyle={[styles.container, { backgroundColor: theme.background }]}>
+    <ScrollView 
+      contentContainerStyle={[styles.container, { backgroundColor: theme.background }]}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={handleRefresh}
+          colors={[theme.primary]}
+          tintColor={theme.primary}
+        />
+      }
+    >
+      {error && (
+        <View style={[styles.errorBanner, { backgroundColor: theme.card, borderColor: theme.danger }]}>
+          <Text style={[styles.errorBannerText, { color: theme.danger }]}>
+            {error}
+          </Text>
+          <TouchableOpacity
+            style={[styles.errorBannerButton, { backgroundColor: theme.danger }]}
+            onPress={() => setError(null)}
+          >
+            <Text style={[styles.errorBannerButtonText, { color: theme.buttonText }]}>
+              Dismiss
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {retryCount > 0 && (
+        <View style={[styles.retryBanner, { backgroundColor: theme.card, borderColor: theme.warning }]}>
+          <Text style={[styles.retryBannerText, { color: theme.warning }]}>
+            Retry attempt {retryCount}/3...
+          </Text>
+        </View>
+      )}
+
       <Text style={[styles.title, { color: theme.text }]}>Create a New Meal</Text>
 
       <TextInput
@@ -431,8 +589,16 @@ const CreateMealScreen = () => {
         />
       </View>
 
-      <TouchableOpacity style={[styles.imagePicker, { backgroundColor: theme.primary }]} onPress={pickMealImage}>
-        <Text style={[styles.imagePickerText, { color: theme.buttonText }]}>Pick a Meal Image</Text>
+      <TouchableOpacity 
+        style={[styles.imagePicker, { backgroundColor: theme.primary }]} 
+        onPress={pickMealImage}
+        disabled={uploadingImage}
+      >
+        {uploadingImage ? (
+          <ActivityIndicator color={theme.buttonText} />
+        ) : (
+          <Text style={[styles.imagePickerText, { color: theme.buttonText }]}>Pick a Meal Image</Text>
+        )}
       </TouchableOpacity>
       {mealPicture && <Image source={{ uri: mealPicture }} style={styles.mealPicture} />}
 
@@ -531,6 +697,42 @@ const styles = StyleSheet.create({
   },
   createButtonText: {
     fontSize: 16,
+    fontWeight: "bold",
+  },
+  errorBanner: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: 12,
+    marginHorizontal: 20,
+    marginBottom: 15,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  errorBannerText: {
+    flex: 1,
+    fontSize: 14,
+    marginRight: 12,
+  },
+  errorBannerButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    borderRadius: 4,
+  },
+  errorBannerButtonText: {
+    fontSize: 12,
+    fontWeight: "bold",
+  },
+  retryBanner: {
+    padding: 12,
+    marginHorizontal: 20,
+    marginBottom: 15,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignItems: "center",
+  },
+  retryBannerText: {
+    fontSize: 14,
     fontWeight: "bold",
   },
 });

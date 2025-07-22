@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   StyleSheet,
   ActivityIndicator,
   Alert,
+  RefreshControl,
 } from "react-native";
 import StarRating from "react-native-star-rating-widget";
 import { useTheme } from "../../../../context/ThemeContext";
@@ -25,20 +26,30 @@ interface Review {
 const ViewReviews = () => {
   const [reviews, setReviews] = useState<Review[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
 
   const { theme } = useTheme();
   const router = useRouter();
   const { id: mealId, mealName } = useLocalSearchParams<{ id: string; mealName: string }>();
 
-  const fetchReviews = async () => {
+  const fetchReviews = useCallback(async (showLoading = true) => {
     if (!mealId) {
-      Alert.alert("Error", "Meal ID is missing. Please try again.");
-      setLoading(false);
+      const errorMessage = "Meal ID is missing. Please try again.";
+      setError(errorMessage);
+      if (showLoading) {
+        setLoading(false);
+      }
       return;
     }
 
     try {
-      setLoading(true);
+      if (showLoading) {
+        setLoading(true);
+      }
+      setError(null);
+
       // 1. Fetch reviews for the meal
       const { data: reviewsData, error: reviewsError } = await supabase
         .from("reviews")
@@ -71,13 +82,40 @@ const ViewReviews = () => {
       }));
 
       setReviews(reviewsWithUsernames);
-    } catch (error) {
+      setRetryCount(0); // Reset retry count on success
+    } catch (error: any) {
       console.error("Error fetching reviews:", error);
-      Alert.alert("Error", "Failed to fetch reviews. Please try again later.");
+      const errorMessage = error.message || "Failed to fetch reviews. Please try again later.";
+      setError(errorMessage);
+      
+      // Auto-retry logic with exponential backoff
+      if (retryCount < 3) {
+        const delay = Math.pow(2, retryCount) * 1000; // 1s, 2s, 4s
+        setTimeout(() => {
+          setRetryCount(prev => prev + 1);
+          fetchReviews(false);
+        }, delay);
+      }
     } finally {
-      setLoading(false);
+      if (showLoading) {
+        setLoading(false);
+      }
     }
-  };
+  }, [mealId, retryCount]);
+
+  // Handle retry
+  const handleRetry = useCallback(() => {
+    setRetryCount(0);
+    fetchReviews(true);
+  }, [fetchReviews]);
+
+  // Handle refresh
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    setRetryCount(0);
+    await fetchReviews(false);
+    setRefreshing(false);
+  }, [fetchReviews]);
 
   useEffect(() => {
     fetchReviews();
@@ -87,8 +125,53 @@ const ViewReviews = () => {
   if (loading) {
     return (
       <View style={[styles.container, { backgroundColor: theme.background }]}>
-        <ActivityIndicator size="large" color={theme.primary} />
-        <Text style={[styles.loadingText, { color: theme.text }]}>Loading reviews...</Text>
+        {/* Error Banner */}
+        {error && (
+          <View style={[styles.errorBanner, { 
+            backgroundColor: `${theme.danger}15`, 
+            borderColor: theme.danger 
+          }]}>
+            <Text style={[styles.errorBannerText, { color: theme.danger }]}>
+              {error}
+            </Text>
+            <TouchableOpacity
+              style={[styles.errorBannerButton, { backgroundColor: theme.danger }]}
+              onPress={handleRetry}
+            >
+              <Text style={[styles.errorBannerButtonText, { color: theme.buttonText }]}>
+                Retry
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Retry Banner */}
+        {retryCount > 0 && (
+          <View style={[styles.retryBanner, { 
+            backgroundColor: `${theme.warning}15`, 
+            borderColor: theme.warning 
+          }]}>
+            <Text style={[styles.retryBannerText, { color: theme.warning }]}>
+              Retry attempt {retryCount}/3
+            </Text>
+          </View>
+        )}
+
+        <View style={styles.centerContent}>
+          <ActivityIndicator size="large" color={theme.primary} />
+          <Text style={[styles.loadingText, { color: theme.text }]}>Loading reviews...</Text>
+          
+          {error && (
+            <TouchableOpacity
+              style={[styles.retryButton, { backgroundColor: theme.primary, marginTop: 16 }]}
+              onPress={handleRetry}
+            >
+              <Text style={[styles.retryButtonText, { color: theme.buttonText }]}>
+                Try Again
+              </Text>
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
     );
   }
@@ -96,9 +179,55 @@ const ViewReviews = () => {
   if (reviews.length === 0) {
     return (
       <View style={[styles.container, { backgroundColor: theme.background }]}>
-        <Text style={[styles.noReviewsText, { color: theme.text }]}>
-          No reviews available for {mealName || "this meal"}.
-        </Text>
+        {/* Error Banner */}
+        {error && (
+          <View style={[styles.errorBanner, { 
+            backgroundColor: `${theme.danger}15`, 
+            borderColor: theme.danger 
+          }]}>
+            <Text style={[styles.errorBannerText, { color: theme.danger }]}>
+              {error}
+            </Text>
+            <TouchableOpacity
+              style={[styles.errorBannerButton, { backgroundColor: theme.danger }]}
+              onPress={handleRetry}
+            >
+              <Text style={[styles.errorBannerButtonText, { color: theme.buttonText }]}>
+                Retry
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Retry Banner */}
+        {retryCount > 0 && (
+          <View style={[styles.retryBanner, { 
+            backgroundColor: `${theme.warning}15`, 
+            borderColor: theme.warning 
+          }]}>
+            <Text style={[styles.retryBannerText, { color: theme.warning }]}>
+              Retry attempt {retryCount}/3
+            </Text>
+          </View>
+        )}
+
+        <View style={styles.centerContent}>
+          <Text style={[styles.noReviewsText, { color: theme.text }]}>
+            {error || `No reviews available for ${mealName || "this meal"}.`}
+          </Text>
+          
+          {!error && (
+            <TouchableOpacity
+              style={[styles.retryButton, { backgroundColor: theme.primary, marginTop: 16 }]}
+              onPress={handleRetry}
+            >
+              <Text style={[styles.retryButtonText, { color: theme.buttonText }]}>
+                Check Again
+              </Text>
+            </TouchableOpacity>
+          )}
+        </View>
+        
         <TouchableOpacity
           style={[styles.backButton, { backgroundColor: theme.button }]}
           onPress={() => router.back()}
@@ -111,6 +240,38 @@ const ViewReviews = () => {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
+      {/* Error Banner */}
+      {error && (
+        <View style={[styles.errorBanner, { 
+          backgroundColor: `${theme.danger}15`, 
+          borderColor: theme.danger 
+        }]}>
+          <Text style={[styles.errorBannerText, { color: theme.danger }]}>
+            {error}
+          </Text>
+          <TouchableOpacity
+            style={[styles.errorBannerButton, { backgroundColor: theme.danger }]}
+            onPress={handleRetry}
+          >
+            <Text style={[styles.errorBannerButtonText, { color: theme.buttonText }]}>
+              Retry
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Retry Banner */}
+      {retryCount > 0 && (
+        <View style={[styles.retryBanner, { 
+          backgroundColor: `${theme.warning}15`, 
+          borderColor: theme.warning 
+        }]}>
+          <Text style={[styles.retryBannerText, { color: theme.warning }]}>
+            Retry attempt {retryCount}/3
+          </Text>
+        </View>
+      )}
+
       <Text style={[styles.title, { color: theme.text }]}>Reviews for {mealName || "Meal"}</Text>
       <FlatList
         data={reviews}
@@ -134,6 +295,14 @@ const ViewReviews = () => {
             </Text>
           </View>
         )}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            colors={[theme.primary]}
+            tintColor={theme.primary}
+          />
+        }
         contentContainerStyle={styles.listContent}
       />
       <TouchableOpacity
@@ -150,6 +319,71 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 16,
+  },
+  centerContent: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  errorText: {
+    fontSize: 16,
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  retryButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  retryButtonText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  retryText: {
+    fontSize: 14,
+    marginTop: 8,
+    textAlign: 'center',
+  },
+  errorBanner: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 12,
+    marginBottom: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  errorBannerText: {
+    flex: 1,
+    fontSize: 14,
+    marginRight: 12,
+  },
+  errorBannerButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  errorBannerButtonText: {
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  retryBanner: {
+    padding: 12,
+    marginBottom: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignItems: 'center',
+  },
+  retryBannerText: {
+    fontSize: 14,
+    fontWeight: '500',
   },
   title: {
     fontSize: 20,

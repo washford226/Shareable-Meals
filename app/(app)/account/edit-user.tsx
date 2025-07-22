@@ -1,5 +1,16 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, Image, ActivityIndicator, ScrollView } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import { 
+  View, 
+  Text, 
+  TextInput, 
+  TouchableOpacity, 
+  StyleSheet, 
+  Alert, 
+  Image, 
+  ActivityIndicator, 
+  ScrollView,
+  RefreshControl 
+} from 'react-native';
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import RNPickerSelect from 'react-native-picker-select';
@@ -25,72 +36,116 @@ const EditUserScreen: React.FC = () => {
   const [allergies, setAllergies] = useState<string>('');
   const [profilePicture, setProfilePicture] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [fetchingUser, setFetchingUser] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
+  const [validationErrors, setValidationErrors] = useState<{[key: string]: string}>({});
 
   const { theme } = useTheme();
   const router = useRouter();
 
   useEffect(() => {
-    const fetchUserData = async () => {
-      try {
-        setLoading(true);
-        const { data: userData, error: userError } = await supabase.auth.getUser();
-        if (userError || !userData?.user) {
-          Alert.alert('Error', 'User not authenticated. Please log in.');
-          router.replace('/login');
-          return;
-        }
-        const userId = userData.user.id;
-
-        const { data, error } = await supabase
-          .from('user_profiles')
-          .select('*')
-          .eq('id', userId)
-          .single();
-
-        if (error) {
-          throw error;
-        }
-
-        setUsername(data.username ?? '');
-        setCaloriesGoal(data.calories_goal?.toString() ?? '');
-        setProteinGoal(data.protein_goal?.toString() ?? '');
-        setCarbsGoal(data.carbohydrates_goal?.toString() ?? '');
-        setFatGoal(data.fat_goal?.toString() ?? '');
-        setDietaryRestrictions(data.dietary_restrictions ?? '');
-        setAllergies(data.allergies ?? '');
-        setProfilePicture(data.profile_picture ?? null);
-      } catch (error) {
-        console.error('Error fetching user info:', error);
-        Alert.alert('Error', 'Failed to fetch user information.');
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchUserData();
   }, []);
 
-  const updateUserField = async (fields: Record<string, any>, successMsg: string, errorMsg: string) => {
+  const fetchUserData = useCallback(async (isRefresh = false) => {
     try {
-      setLoading(true);
+      if (isRefresh) {
+        setRefreshing(true);
+        setError(null);
+      } else {
+        setFetchingUser(true);
+        setError(null);
+      }
+
       const { data: userData, error: userError } = await supabase.auth.getUser();
       if (userError || !userData?.user) {
-        Alert.alert('Error', 'User not authenticated.');
-        return;
+        throw new Error('User not authenticated. Please log in.');
       }
       const userId = userData.user.id;
+
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .select('*')
+        .eq('id', userId)
+        .single();
+
+      if (error) {
+        console.error('Error fetching user data:', error);
+        throw new Error(error.message || 'Failed to fetch user data');
+      }
+
+      if (data) {
+        setUsername(data.username || '');
+        setCaloriesGoal(data.calories_goal?.toString() || '');
+        setProteinGoal(data.protein_goal?.toString() || '');
+        setCarbsGoal(data.carbs_goal?.toString() || '');
+        setFatGoal(data.fat_goal?.toString() || '');
+        setDietaryRestrictions(data.dietary_restrictions || '');
+        setAllergies(data.allergies || '');
+        setProfilePicture(data.profile_picture || null);
+      }
+      
+      setRetryCount(0); // Reset retry count on success
+    } catch (error: any) {
+      console.error('Error:', error);
+      const errorMessage = error?.message || 'An unexpected error occurred while fetching user data';
+      setError(errorMessage);
+      
+      if (error?.message?.includes('not authenticated')) {
+        router.replace('/login');
+        return;
+      }
+      
+      // Auto-retry logic with exponential backoff
+      if (retryCount < 3) {
+        const delay = Math.pow(2, retryCount) * 1000; // 1s, 2s, 4s
+        setTimeout(() => {
+          setRetryCount(prev => prev + 1);
+          fetchUserData(isRefresh);
+        }, delay);
+      }
+    } finally {
+      setFetchingUser(false);
+      setRefreshing(false);
+    }
+  }, [retryCount, router]);
+
+  const handleRetry = useCallback(() => {
+    setRetryCount(0);
+    fetchUserData();
+  }, [fetchUserData]);
+
+  const onRefresh = useCallback(() => {
+    fetchUserData(true);
+  }, [fetchUserData]);
+
+  const updateUserField = useCallback(async (fields: Record<string, any>, successMsg: string, errorMsg: string) => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+      if (userError || !userData?.user) {
+        throw new Error('User not authenticated.');
+      }
+      const userId = userData.user.id;
+      
       const { error } = await supabase.from('user_profiles').update(fields).eq('id', userId);
       if (error) {
-        Alert.alert('Error', errorMsg);
-      } else {
-        Alert.alert('Success', successMsg);
+        console.error('Error updating user field:', error);
+        throw new Error(error.message || errorMsg);
       }
-    } catch (error) {
-      Alert.alert('Error', errorMsg);
+      
+      Alert.alert('Success', successMsg);
+    } catch (error: any) {
+      console.error('Error:', error);
+      Alert.alert('Error', error?.message || errorMsg);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   const handleUpdateCaloriesGoal = async () => {
     if (!caloriesGoal) {

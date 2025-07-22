@@ -1,5 +1,14 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, Alert, RefreshControl } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import { 
+  View, 
+  Text, 
+  FlatList, 
+  TouchableOpacity, 
+  StyleSheet, 
+  Alert, 
+  RefreshControl,
+  ActivityIndicator 
+} from 'react-native';
 import { useTheme } from '../../../context/ThemeContext';
 import { supabase } from '../../../utils/supabase';
 import { router } from 'expo-router';
@@ -21,14 +30,25 @@ const AdminReportsScreen: React.FC = () => {
   const [reports, setReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
+  const [actionLoading, setActionLoading] = useState<number | null>(null);
 
   useEffect(() => {
     fetchReports();
   }, []);
 
-  const fetchReports = async () => {
+  const fetchReports = useCallback(async (isRefresh = false) => {
     try {
-      const { data, error } = await supabase
+      if (isRefresh) {
+        setRefreshing(true);
+        setError(null);
+      } else {
+        setLoading(true);
+        setError(null);
+      }
+
+      const { data, error: fetchError } = await supabase
         .from('reports')
         .select(`
           *,
@@ -37,10 +57,9 @@ const AdminReportsScreen: React.FC = () => {
         `)
         .order('created_at', { ascending: false });
 
-      if (error) {
-        console.error('Error fetching reports:', error);
-        Alert.alert('Error', 'Failed to fetch reports');
-        return;
+      if (fetchError) {
+        console.error('Error fetching reports:', fetchError);
+        throw new Error(fetchError.message || 'Failed to fetch reports');
       }
 
       const formattedReports = data?.map(report => ({
@@ -50,21 +69,38 @@ const AdminReportsScreen: React.FC = () => {
       })) || [];
 
       setReports(formattedReports);
-    } catch (error) {
+      setRetryCount(0); // Reset retry count on success
+    } catch (error: any) {
       console.error('Error:', error);
-      Alert.alert('Error', 'An unexpected error occurred');
+      const errorMessage = error?.message || 'An unexpected error occurred while fetching reports';
+      setError(errorMessage);
+      
+      // Auto-retry logic with exponential backoff
+      if (retryCount < 3) {
+        const delay = Math.pow(2, retryCount) * 1000; // 1s, 2s, 4s
+        setTimeout(() => {
+          setRetryCount(prev => prev + 1);
+          fetchReports(isRefresh);
+        }, delay);
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, [retryCount]);
 
-  const onRefresh = () => {
-    setRefreshing(true);
+  const handleRetry = useCallback(() => {
+    setRetryCount(0);
     fetchReports();
-  };
+  }, [fetchReports]);
 
-  const handleReportAction = async (reportId: number, action: 'Resolved' | 'Dismissed') => {
+  const onRefresh = useCallback(() => {
+    fetchReports(true);
+  }, [fetchReports]);
+
+  const handleReportAction = useCallback(async (reportId: number, action: 'Resolved' | 'Dismissed') => {
+    if (actionLoading === reportId) return; // Prevent double-tap
+
     if (action === 'Resolved') {
       // Show options for resolving
       Alert.alert(
@@ -94,10 +130,14 @@ const AdminReportsScreen: React.FC = () => {
       // Direct dismiss
       updateReportStatus(reportId, 'Dismissed');
     }
-  };
+  }, [actionLoading]);
 
-  const navigateToMealDetails = async (reportId: number) => {
+  const navigateToMealDetails = useCallback(async (reportId: number) => {
+    if (actionLoading === reportId) return; // Prevent double-tap
+    
     try {
+      setActionLoading(reportId);
+      
       // Get the meal_id from the report
       const { data: reportData, error: reportError } = await supabase
         .from('reports')
@@ -107,20 +147,26 @@ const AdminReportsScreen: React.FC = () => {
 
       if (reportError) {
         console.error('Error fetching report details:', reportError);
-        Alert.alert('Error', 'Failed to fetch report details');
+        Alert.alert('Error', 'Failed to fetch report details. Please try again.');
         return;
       }
 
       // Navigate to admin meal view screen
       router.push(`./meal-details?mealId=${reportData.meal_id}&reportId=${reportId}`);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error:', error);
-      Alert.alert('Error', 'An unexpected error occurred');
+      Alert.alert('Error', error?.message || 'An unexpected error occurred while navigating to meal details');
+    } finally {
+      setActionLoading(null);
     }
-  };
+  }, [actionLoading]);
 
-  const handleResolveWithMealAction = async (reportId: number, actionType: 'hide_meal' | 'ban_user') => {
+  const handleResolveWithMealAction = useCallback(async (reportId: number, actionType: 'hide_meal' | 'ban_user') => {
+    if (actionLoading === reportId) return; // Prevent double-tap
+    
     try {
+      setActionLoading(reportId);
+      
       // First get the report details to know which meal and user
       const { data: reportData, error: reportError } = await supabase
         .from('reports')
@@ -130,8 +176,7 @@ const AdminReportsScreen: React.FC = () => {
 
       if (reportError) {
         console.error('Error fetching report details:', reportError);
-        Alert.alert('Error', 'Failed to fetch report details');
-        return;
+        throw new Error('Failed to fetch report details');
       }
 
       if (actionType === 'hide_meal') {
@@ -143,8 +188,7 @@ const AdminReportsScreen: React.FC = () => {
 
         if (mealError) {
           console.error('Error hiding meal:', mealError);
-          Alert.alert('Error', 'Failed to hide meal');
-          return;
+          throw new Error('Failed to hide meal');
         }
       } else if (actionType === 'ban_user') {
         // Set user's ban column to true
@@ -155,8 +199,7 @@ const AdminReportsScreen: React.FC = () => {
 
         if (banError) {
           console.error('Error banning user:', banError);
-          Alert.alert('Error', 'Failed to ban user');
-          return;
+          throw new Error('Failed to ban user');
         }
       }
 
@@ -165,14 +208,20 @@ const AdminReportsScreen: React.FC = () => {
       
       const actionText = actionType === 'hide_meal' ? 'Meal hidden and report resolved' : 'User banned and report resolved';
       Alert.alert('Success', actionText);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error:', error);
-      Alert.alert('Error', 'An unexpected error occurred');
+      Alert.alert('Error', error?.message || 'An unexpected error occurred while processing the action');
+    } finally {
+      setActionLoading(null);
     }
-  };
+  }, [actionLoading]);
 
-  const updateReportStatus = async (reportId: number, status: 'Resolved' | 'Dismissed') => {
+  const updateReportStatus = useCallback(async (reportId: number, status: 'Resolved' | 'Dismissed') => {
+    if (actionLoading === reportId) return; // Prevent double-tap
+    
     try {
+      setActionLoading(reportId);
+      
       const { error } = await supabase
         .from('reports')
         .update({ status: status })
@@ -180,8 +229,7 @@ const AdminReportsScreen: React.FC = () => {
 
       if (error) {
         console.error('Error updating report:', error);
-        Alert.alert('Error', 'Failed to update report status');
-        return;
+        throw new Error('Failed to update report status');
       }
 
       // Refresh the reports list
@@ -189,11 +237,13 @@ const AdminReportsScreen: React.FC = () => {
       if (status === 'Dismissed') {
         Alert.alert('Success', 'Report dismissed successfully');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error:', error);
-      Alert.alert('Error', 'An unexpected error occurred');
+      Alert.alert('Error', error?.message || 'An unexpected error occurred while updating report status');
+    } finally {
+      setActionLoading(null);
     }
-  };
+  }, [fetchReports, actionLoading]);
 
   const getStatusColor = (status: string) => {
     switch (status.toLowerCase()) {
@@ -208,59 +258,87 @@ const AdminReportsScreen: React.FC = () => {
     }
   };
 
-  const renderReportItem = ({ item }: { item: Report }) => (
-    <View style={[styles.reportCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
-      <View style={styles.reportHeader}>
-        <Text style={[styles.reportType, { color: theme.text }]}>Report</Text>
-        <Text style={[styles.reportStatus, { color: getStatusColor(item.status) }]}>
-          {item.status.toUpperCase()}
-        </Text>
-      </View>
-      
-      <Text style={[styles.reportDetail, { color: theme.text }]}>
-        Reporter: {item.reporter_username}
-      </Text>
-      
-      {item.meal_title && (
-        <Text style={[styles.reportDetail, { color: theme.text }]}>
-          Meal: {item.meal_title}
-        </Text>
-      )}
-      
-      <Text style={[styles.reportDescription, { color: theme.text }]}>
-        {item.reason}
-      </Text>
-      
-      <Text style={[styles.reportDate, { color: theme.subtext }]}>
-        {new Date(item.created_at).toLocaleDateString()}
-      </Text>
-
-      {item.status === 'Pending' && (
-        <View style={styles.actionButtons}>
-          <TouchableOpacity
-            style={[styles.actionButton, { backgroundColor: '#2196F3' }]}
-            onPress={() => navigateToMealDetails(item.report_id)}
-          >
-            <Text style={styles.actionButtonText}>View Meal</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity
-            style={[styles.actionButton, { backgroundColor: '#4CAF50' }]}
-            onPress={() => handleReportAction(item.report_id, 'Resolved')}
-          >
-            <Text style={styles.actionButtonText}>Resolve</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity
-            style={[styles.actionButton, { backgroundColor: '#9E9E9E' }]}
-            onPress={() => handleReportAction(item.report_id, 'Dismissed')}
-          >
-            <Text style={styles.actionButtonText}>Dismiss</Text>
-          </TouchableOpacity>
+  const renderReportItem = useCallback(({ item }: { item: Report }) => {
+    const isActionLoading = actionLoading === item.report_id;
+    
+    return (
+      <View style={[styles.reportCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+        <View style={styles.reportHeader}>
+          <Text style={[styles.reportType, { color: theme.text }]}>Report</Text>
+          <Text style={[styles.reportStatus, { color: getStatusColor(item.status) }]}>
+            {item.status.toUpperCase()}
+          </Text>
         </View>
-      )}
-    </View>
-  );
+        
+        <Text style={[styles.reportDetail, { color: theme.text }]}>
+          Reporter: {item.reporter_username}
+        </Text>
+        
+        {item.meal_title && (
+          <Text style={[styles.reportDetail, { color: theme.text }]}>
+            Meal: {item.meal_title}
+          </Text>
+        )}
+        
+        <Text style={[styles.reportDescription, { color: theme.text }]}>
+          {item.reason}
+        </Text>
+        
+        <Text style={[styles.reportDate, { color: theme.subtext }]}>
+          {new Date(item.created_at).toLocaleDateString()}
+        </Text>
+
+        {item.status === 'Pending' && (
+          <View style={styles.actionButtons}>
+            <TouchableOpacity
+              style={[
+                styles.actionButton, 
+                { backgroundColor: '#2196F3', opacity: isActionLoading ? 0.6 : 1 }
+              ]}
+              onPress={() => navigateToMealDetails(item.report_id)}
+              disabled={isActionLoading}
+            >
+              {isActionLoading ? (
+                <ActivityIndicator size="small" color="white" />
+              ) : (
+                <Text style={styles.actionButtonText}>View Meal</Text>
+              )}
+            </TouchableOpacity>
+            
+            <TouchableOpacity
+              style={[
+                styles.actionButton, 
+                { backgroundColor: '#4CAF50', opacity: isActionLoading ? 0.6 : 1 }
+              ]}
+              onPress={() => handleReportAction(item.report_id, 'Resolved')}
+              disabled={isActionLoading}
+            >
+              {isActionLoading ? (
+                <ActivityIndicator size="small" color="white" />
+              ) : (
+                <Text style={styles.actionButtonText}>Resolve</Text>
+              )}
+            </TouchableOpacity>
+            
+            <TouchableOpacity
+              style={[
+                styles.actionButton, 
+                { backgroundColor: '#9E9E9E', opacity: isActionLoading ? 0.6 : 1 }
+              ]}
+              onPress={() => handleReportAction(item.report_id, 'Dismissed')}
+              disabled={isActionLoading}
+            >
+              {isActionLoading ? (
+                <ActivityIndicator size="small" color="white" />
+              ) : (
+                <Text style={styles.actionButtonText}>Dismiss</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
+    );
+  }, [theme, actionLoading, getStatusColor, navigateToMealDetails, handleReportAction]);
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
@@ -274,6 +352,28 @@ const AdminReportsScreen: React.FC = () => {
         <Text style={[styles.headerTitle, { color: theme.text }]}>Admin Reports</Text>
       </View>
 
+      {/* Error Banner */}
+      {error && (
+        <View style={[styles.errorBanner, { backgroundColor: theme.card, borderColor: theme.danger }]}>
+          <Text style={[styles.errorBannerText, { color: theme.danger }]}>{error}</Text>
+          <TouchableOpacity 
+            style={[styles.errorBannerButton, { backgroundColor: theme.danger }]}
+            onPress={handleRetry}
+          >
+            <Text style={[styles.errorBannerButtonText, { color: theme.buttonText }]}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Retry Banner */}
+      {retryCount > 0 && !error && (
+        <View style={[styles.retryBanner, { backgroundColor: theme.card, borderColor: theme.primary }]}>
+          <Text style={[styles.retryBannerText, { color: theme.primary }]}>
+            Retrying... (Attempt {retryCount})
+          </Text>
+        </View>
+      )}
+
       <FlatList
         data={reports}
         renderItem={renderReportItem}
@@ -284,13 +384,23 @@ const AdminReportsScreen: React.FC = () => {
             refreshing={refreshing}
             onRefresh={onRefresh}
             tintColor={theme.primary}
+            colors={[theme.primary]}
           />
         }
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            <Text style={[styles.emptyText, { color: theme.subtext }]}>
-              {loading ? 'Loading reports...' : 'No reports found'}
-            </Text>
+            {loading ? (
+              <>
+                <ActivityIndicator size="large" color={theme.primary} />
+                <Text style={[styles.emptyText, { color: theme.subtext, marginTop: 16 }]}>
+                  Loading reports...
+                </Text>
+              </>
+            ) : (
+              <Text style={[styles.emptyText, { color: theme.subtext }]}>
+                No reports found
+              </Text>
+            )}
           </View>
         }
       />
@@ -314,6 +424,42 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 20,
     fontWeight: 'bold',
+  },
+  errorBanner: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    marginHorizontal: 16,
+    marginBottom: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  errorBannerText: {
+    flex: 1,
+    fontSize: 14,
+    marginRight: 12,
+  },
+  errorBannerButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 6,
+  },
+  errorBannerButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  retryBanner: {
+    padding: 16,
+    marginHorizontal: 16,
+    marginBottom: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignItems: 'center',
+  },
+  retryBannerText: {
+    fontSize: 14,
+    fontWeight: '500',
   },
   listContainer: {
     padding: 16,
@@ -362,6 +508,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     borderRadius: 6,
     minWidth: 80,
+    minHeight: 36,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   actionButtonText: {
     color: 'white',

@@ -1,5 +1,15 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Alert, Image } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import { 
+  View, 
+  Text, 
+  ScrollView, 
+  StyleSheet, 
+  TouchableOpacity, 
+  Alert, 
+  Image,
+  ActivityIndicator,
+  RefreshControl 
+} from 'react-native';
 import { useTheme } from '../../../context/ThemeContext';
 import { supabase } from '../../../utils/supabase';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -44,6 +54,10 @@ const AdminMealDetailsScreen: React.FC = () => {
   const [meal, setMeal] = useState<MealDetails | null>(null);
   const [ingredients, setIngredients] = useState<MealIngredient[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   useEffect(() => {
     if (mealId) {
@@ -51,20 +65,25 @@ const AdminMealDetailsScreen: React.FC = () => {
     }
   }, [mealId]);
 
-  const fetchMealDetails = async () => {
+  const fetchMealDetails = useCallback(async (isRefresh = false) => {
     try {
-      const { data, error } = await supabase
+      if (isRefresh) {
+        setRefreshing(true);
+        setError(null);
+      } else {
+        setLoading(true);
+        setError(null);
+      }
+
+      const { data, error: mealError } = await supabase
         .from('meals')
-        .select(`
-          *
-        `)
+        .select(`*`)
         .eq('id', parseInt(mealId))
         .single();
 
-      if (error) {
-        console.error('Error fetching meal details:', error);
-        Alert.alert('Error', 'Failed to fetch meal details');
-        return;
+      if (mealError) {
+        console.error('Error fetching meal details:', mealError);
+        throw new Error(mealError.message || 'Failed to fetch meal details');
       }
 
       // Get username from user_profiles using the user_id
@@ -74,6 +93,11 @@ const AdminMealDetailsScreen: React.FC = () => {
         .eq('id', data.user_id)
         .single();
 
+      if (userError) {
+        console.warn('Error fetching user profile:', userError);
+        // Don't fail completely if user profile can't be fetched
+      }
+
       // Get meal ingredients
       const { data: ingredientsData, error: ingredientsError } = await supabase
         .from('meal_ingredients')
@@ -81,7 +105,7 @@ const AdminMealDetailsScreen: React.FC = () => {
         .eq('meal_id', parseInt(mealId));
 
       if (ingredientsError) {
-        console.error('Error fetching ingredients:', ingredientsError);
+        console.warn('Error fetching ingredients:', ingredientsError);
         // Don't fail completely if ingredients can't be fetched
       }
 
@@ -92,15 +116,38 @@ const AdminMealDetailsScreen: React.FC = () => {
 
       setMeal(mealWithCreator);
       setIngredients(ingredientsData || []);
-    } catch (error) {
+      setRetryCount(0); // Reset retry count on success
+    } catch (error: any) {
       console.error('Error:', error);
-      Alert.alert('Error', 'An unexpected error occurred');
+      const errorMessage = error?.message || 'An unexpected error occurred while fetching meal details';
+      setError(errorMessage);
+      
+      // Auto-retry logic with exponential backoff
+      if (retryCount < 3) {
+        const delay = Math.pow(2, retryCount) * 1000; // 1s, 2s, 4s
+        setTimeout(() => {
+          setRetryCount(prev => prev + 1);
+          fetchMealDetails(isRefresh);
+        }, delay);
+      }
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
-  };
+  }, [mealId, retryCount]);
 
-  const handleHideMeal = async () => {
+  const handleRetry = useCallback(() => {
+    setRetryCount(0);
+    fetchMealDetails();
+  }, [fetchMealDetails]);
+
+  const onRefresh = useCallback(() => {
+    fetchMealDetails(true);
+  }, [fetchMealDetails]);
+
+  const handleHideMeal = useCallback(async () => {
+    if (actionLoading === 'hide' || !meal) return;
+
     Alert.alert(
       'Hide Meal',
       'Are you sure you want to hide this meal? This action will make it permanently invisible.',
@@ -111,6 +158,8 @@ const AdminMealDetailsScreen: React.FC = () => {
           style: 'destructive',
           onPress: async () => {
             try {
+              setActionLoading('hide');
+              
               const { error } = await supabase
                 .from('meals')
                 .update({ forever_invis: true })
@@ -118,30 +167,30 @@ const AdminMealDetailsScreen: React.FC = () => {
 
               if (error) {
                 console.error('Error hiding meal:', error);
-                Alert.alert('Error', 'Failed to hide meal');
-                return;
+                throw new Error('Failed to hide meal');
               }
 
               // Update local state
-              if (meal) {
-                setMeal({ ...meal, forever_invis: true });
-              }
-
+              setMeal(prev => prev ? { ...prev, forever_invis: true } : null);
               Alert.alert('Success', 'Meal has been hidden');
-            } catch (error) {
+            } catch (error: any) {
               console.error('Error:', error);
-              Alert.alert('Error', 'An unexpected error occurred');
+              Alert.alert('Error', error?.message || 'An unexpected error occurred while hiding the meal');
+            } finally {
+              setActionLoading(null);
             }
           },
         },
       ]
     );
-  };
+  }, [actionLoading, meal, mealId]);
 
-  const handleResolveReport = async () => {
-    if (!reportId) return;
+  const handleResolveReport = useCallback(async () => {
+    if (!reportId || actionLoading === 'resolve') return;
     
     try {
+      setActionLoading('resolve');
+      
       const { error } = await supabase
         .from('reports')
         .update({ status: 'Resolved' })
@@ -149,8 +198,7 @@ const AdminMealDetailsScreen: React.FC = () => {
 
       if (error) {
         console.error('Error resolving report:', error);
-        Alert.alert('Error', 'Failed to resolve report');
-        return;
+        throw new Error('Failed to resolve report');
       }
 
       Alert.alert('Success', 'Report has been resolved', [
@@ -159,16 +207,20 @@ const AdminMealDetailsScreen: React.FC = () => {
           onPress: () => router.back(),
         },
       ]);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error:', error);
-      Alert.alert('Error', 'An unexpected error occurred');
+      Alert.alert('Error', error?.message || 'An unexpected error occurred while resolving the report');
+    } finally {
+      setActionLoading(null);
     }
-  };
+  }, [reportId, actionLoading]);
 
-  const handleDismissReport = async () => {
-    if (!reportId) return;
+  const handleDismissReport = useCallback(async () => {
+    if (!reportId || actionLoading === 'dismiss') return;
     
     try {
+      setActionLoading('dismiss');
+      
       const { error } = await supabase
         .from('reports')
         .update({ status: 'Dismissed' })
@@ -176,8 +228,7 @@ const AdminMealDetailsScreen: React.FC = () => {
 
       if (error) {
         console.error('Error dismissing report:', error);
-        Alert.alert('Error', 'Failed to dismiss report');
-        return;
+        throw new Error('Failed to dismiss report');
       }
 
       Alert.alert('Success', 'Report has been dismissed', [
@@ -186,16 +237,33 @@ const AdminMealDetailsScreen: React.FC = () => {
           onPress: () => router.back(),
         },
       ]);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error:', error);
-      Alert.alert('Error', 'An unexpected error occurred');
+      Alert.alert('Error', error?.message || 'An unexpected error occurred while dismissing the report');
+    } finally {
+      setActionLoading(null);
     }
-  };
+  }, [reportId, actionLoading]);
 
   if (loading) {
     return (
       <View style={[styles.container, styles.centered, { backgroundColor: theme.background }]}>
+        <ActivityIndicator size="large" color={theme.primary} />
         <Text style={[styles.loadingText, { color: theme.text }]}>Loading meal details...</Text>
+      </View>
+    );
+  }
+
+  if (error && !meal) {
+    return (
+      <View style={[styles.container, styles.centered, { backgroundColor: theme.background }]}>
+        <Text style={[styles.errorText, { color: theme.danger }]}>{error}</Text>
+        <TouchableOpacity 
+          style={[styles.retryButton, { backgroundColor: theme.primary }]}
+          onPress={handleRetry}
+        >
+          <Text style={[styles.retryButtonText, { color: theme.buttonText }]}>Retry</Text>
+        </TouchableOpacity>
       </View>
     );
   }
@@ -204,6 +272,12 @@ const AdminMealDetailsScreen: React.FC = () => {
     return (
       <View style={[styles.container, styles.centered, { backgroundColor: theme.background }]}>
         <Text style={[styles.errorText, { color: theme.danger }]}>Meal not found</Text>
+        <TouchableOpacity 
+          style={[styles.retryButton, { backgroundColor: theme.primary }]}
+          onPress={handleRetry}
+        >
+          <Text style={[styles.retryButtonText, { color: theme.buttonText }]}>Retry</Text>
+        </TouchableOpacity>
       </View>
     );
   }
@@ -220,7 +294,40 @@ const AdminMealDetailsScreen: React.FC = () => {
         <Text style={[styles.headerTitle, { color: theme.text }]}>Admin Meal Review</Text>
       </View>
 
-      <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
+      {/* Error Banner */}
+      {error && (
+        <View style={[styles.errorBanner, { backgroundColor: theme.card, borderColor: theme.danger }]}>
+          <Text style={[styles.errorBannerText, { color: theme.danger }]}>{error}</Text>
+          <TouchableOpacity 
+            style={[styles.errorBannerButton, { backgroundColor: theme.danger }]}
+            onPress={handleRetry}
+          >
+            <Text style={[styles.errorBannerButtonText, { color: theme.buttonText }]}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Retry Banner */}
+      {retryCount > 0 && !error && (
+        <View style={[styles.retryBanner, { backgroundColor: theme.card, borderColor: theme.primary }]}>
+          <Text style={[styles.retryBannerText, { color: theme.primary }]}>
+            Retrying... (Attempt {retryCount})
+          </Text>
+        </View>
+      )}
+
+      <ScrollView 
+        style={styles.content} 
+        contentContainerStyle={styles.contentContainer}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[theme.primary]}
+            tintColor={theme.primary}
+          />
+        }
+      >
         {/* Meal Status Indicators */}
         <View style={styles.statusContainer}>
           {meal.forever_invis && (
@@ -337,27 +444,59 @@ const AdminMealDetailsScreen: React.FC = () => {
       {/* Action Buttons */}
       <View style={[styles.actionContainer, { backgroundColor: theme.background, borderTopColor: theme.border }]}>
         <TouchableOpacity
-          style={[styles.actionButton, { backgroundColor: theme.danger }]}
+          style={[
+            styles.actionButton, 
+            { 
+              backgroundColor: theme.danger,
+              opacity: (meal.forever_invis || actionLoading) ? 0.6 : 1
+            }
+          ]}
           onPress={handleHideMeal}
-          disabled={meal.forever_invis}
+          disabled={meal.forever_invis || actionLoading === 'hide'}
         >
-          <Text style={styles.actionButtonText}>
-            {meal.forever_invis ? 'Already Hidden' : 'Hide Meal'}
-          </Text>
+          {actionLoading === 'hide' ? (
+            <ActivityIndicator size="small" color="white" />
+          ) : (
+            <Text style={styles.actionButtonText}>
+              {meal.forever_invis ? 'Already Hidden' : 'Hide Meal'}
+            </Text>
+          )}
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[styles.actionButton, { backgroundColor: theme.warning }]}
+          style={[
+            styles.actionButton, 
+            { 
+              backgroundColor: theme.warning,
+              opacity: actionLoading ? 0.6 : 1
+            }
+          ]}
           onPress={handleDismissReport}
+          disabled={actionLoading === 'dismiss'}
         >
-          <Text style={styles.actionButtonText}>Dismiss Report</Text>
+          {actionLoading === 'dismiss' ? (
+            <ActivityIndicator size="small" color="white" />
+          ) : (
+            <Text style={styles.actionButtonText}>Dismiss Report</Text>
+          )}
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[styles.actionButton, { backgroundColor: theme.primary }]}
+          style={[
+            styles.actionButton, 
+            { 
+              backgroundColor: theme.primary,
+              opacity: actionLoading ? 0.6 : 1
+            }
+          ]}
           onPress={handleResolveReport}
+          disabled={actionLoading === 'resolve'}
         >
-          <Text style={styles.actionButtonText}>Resolve Report</Text>
+          {actionLoading === 'resolve' ? (
+            <ActivityIndicator size="small" color="white" />
+          ) : (
+            <Text style={styles.actionButtonText}>Resolve Report</Text>
+          )}
         </TouchableOpacity>
       </View>
     </View>
@@ -384,6 +523,52 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 20,
     fontWeight: 'bold',
+  },
+  errorBanner: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    marginHorizontal: 16,
+    marginBottom: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  errorBannerText: {
+    flex: 1,
+    fontSize: 14,
+    marginRight: 12,
+  },
+  errorBannerButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 6,
+  },
+  errorBannerButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  retryBanner: {
+    padding: 16,
+    marginHorizontal: 16,
+    marginBottom: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignItems: 'center',
+  },
+  retryBannerText: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  retryButton: {
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+    marginTop: 16,
+  },
+  retryButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
   },
   content: {
     flex: 1,
@@ -488,6 +673,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     borderRadius: 8,
     minWidth: 100,
+    minHeight: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   actionButtonText: {
     color: 'white',
@@ -496,10 +684,13 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     fontSize: 16,
+    marginTop: 16,
+    textAlign: 'center',
   },
   errorText: {
     fontSize: 16,
     textAlign: 'center',
+    marginBottom: 8,
   },
 });
 

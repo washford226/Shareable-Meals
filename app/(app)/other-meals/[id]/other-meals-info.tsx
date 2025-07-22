@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
   Image,
   ScrollView,
   ActivityIndicator,
+  RefreshControl,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useTheme } from "../../../../context/ThemeContext";
@@ -23,13 +24,21 @@ const MealDetails = () => {
   const [isReportModalVisible, setIsReportModalVisible] = useState(false);
   const [reportReason, setReportReason] = useState("");
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
+  const [reportLoading, setReportLoading] = useState(false);
+  const [copyLoading, setCopyLoading] = useState(false);
   const { theme } = useTheme();
 
   // Fetch meal by id from Supabase
-  const fetchMealById = async (mealId: string) => {
-    try {
+  const fetchMealById = useCallback(async (mealId: string, showLoading = true) => {
+    if (showLoading) {
       setLoading(true);
-      
+    }
+    setError(null);
+    
+    try {
       // Fetch meal data and ingredients separately
       const [{ data: mealData, error: mealError }, { data: ingredientsData, error: ingredientsError }] = await Promise.all([
         supabase
@@ -44,36 +53,68 @@ const MealDetails = () => {
       ]);
 
       if (mealError || !mealData) {
-        Alert.alert("Error", "Failed to fetch meal details.");
-        setMeal(null);
-      } else {
-        // Combine meal data with ingredients
-        const mealWithIngredients = {
-          ...mealData,
-          ingredients: ingredientsData || []
-        };
-        setMeal(mealWithIngredients);
+        throw new Error("Failed to fetch meal details");
       }
+
+      // Combine meal data with ingredients
+      const mealWithIngredients = {
+        ...mealData,
+        ingredients: ingredientsData || []
+      };
+      setMeal(mealWithIngredients);
+      setRetryCount(0);
 
       if (ingredientsError) {
         console.warn("Error fetching ingredients:", ingredientsError);
       }
     } catch (error) {
       console.error("Error fetching meal:", error);
-      Alert.alert("Error", "An error occurred while fetching meal details.");
+      setError("Failed to load meal details. Please check your connection and try again.");
       setMeal(null);
     } finally {
-      setLoading(false);
+      if (showLoading) {
+        setLoading(false);
+      }
+      setRefreshing(false);
     }
-  };
+  }, []);
+
+  const handleRetry = useCallback(async () => {
+    const newRetryCount = retryCount + 1;
+    setRetryCount(newRetryCount);
+    
+    // Exponential backoff: wait 1s, 2s, 4s, etc.
+    const delay = Math.min(1000 * Math.pow(2, newRetryCount - 1), 10000);
+    
+    setTimeout(() => {
+      if (id && typeof id === "string") {
+        fetchMealById(id);
+      }
+    }, delay);
+  }, [retryCount, fetchMealById, id]);
+
+  const handleRefresh = useCallback(() => {
+    setRefreshing(true);
+    setRetryCount(0);
+    if (id && typeof id === "string") {
+      fetchMealById(id, false);
+    }
+  }, [fetchMealById, id]);
 
   // Report meal (insert into a 'reports' table)
   const handleReportMeal = async () => {
+    if (!reportReason.trim()) {
+      Alert.alert("Error", "Please provide a reason for reporting this meal.");
+      return;
+    }
+
+    setReportLoading(true);
     try {
       if (!meal) {
         Alert.alert("Error", "Meal details are not available.");
         return;
       }
+      
       const { data: userData, error: userError } = await supabase.auth.getUser();
       if (userError || !userData?.user) {
         Alert.alert("Error", "User not authenticated. Please log in.");
@@ -85,30 +126,34 @@ const MealDetails = () => {
         {
           meal_id: meal.id,
           user_id: userId,
-          reason: reportReason,
+          reason: reportReason.trim(),
         },
       ]);
 
       if (error) {
-        Alert.alert("Error", "Failed to report meal.");
-      } else {
-        Alert.alert("Success", "Meal reported successfully!");
-        setIsReportModalVisible(false);
-        setReportReason("");
+        throw error;
       }
+
+      Alert.alert("Success", "Meal reported successfully!");
+      setIsReportModalVisible(false);
+      setReportReason("");
     } catch (err) {
       console.error("Error reporting meal:", err);
-      Alert.alert("Error", "An error occurred while reporting the meal.");
+      Alert.alert("Error", "Failed to report meal. Please try again.");
+    } finally {
+      setReportLoading(false);
     }
   };
 
   // Copy meal to user's meals
   const handleCopyMeal = async () => {
+    setCopyLoading(true);
     try {
       if (!meal) {
         Alert.alert("Error", "Meal details are not available.");
         return;
       }
+      
       const { data: userData, error: userError } = await supabase.auth.getUser();
       if (userError || !userData?.user) {
         Alert.alert("Error", "User not authenticated. Please log in.");
@@ -173,7 +218,9 @@ const MealDetails = () => {
       Alert.alert("Success", "Meal copied successfully!");
     } catch (err) {
       console.error("Error copying meal:", err);
-      Alert.alert("Error", "An error occurred while copying the meal.");
+      Alert.alert("Error", "Failed to copy meal. Please try again.");
+    } finally {
+      setCopyLoading(false);
     }
   };
 
@@ -186,19 +233,47 @@ const MealDetails = () => {
 
   if (loading) {
     return (
-      <View style={[styles.container, { backgroundColor: theme.background }]}>
+      <View style={[styles.centerContent, { backgroundColor: theme.background }]}>
         <ActivityIndicator size="large" color={theme.primary} />
         <Text style={[styles.loadingText, { color: theme.text }]}>Loading meal details...</Text>
+        {error && (
+          <View style={styles.errorContainer}>
+            <Text style={[styles.errorText, { color: theme.danger }]}>{error}</Text>
+            <TouchableOpacity
+              style={[styles.retryButton, { backgroundColor: theme.primary }]}
+              onPress={handleRetry}
+            >
+              <Text style={[styles.retryButtonText, { color: theme.buttonText }]}>
+                Retry
+              </Text>
+            </TouchableOpacity>
+            {retryCount > 0 && (
+              <Text style={[styles.retryText, { color: theme.subtext }]}>
+                Retry attempt {retryCount}/3
+              </Text>
+            )}
+          </View>
+        )}
       </View>
     );
   }
 
   if (!meal) {
     return (
-      <View style={[styles.container, { backgroundColor: theme.background }]}>
-        <Text style={[styles.errorText, { color: theme.text }]}>Meal not found.</Text>
+      <View style={[styles.centerContent, { backgroundColor: theme.background }]}>
+        <Text style={[styles.errorText, { color: theme.danger }]}>
+          {error || "Meal not found."}
+        </Text>
         <TouchableOpacity
-          style={[styles.button, { backgroundColor: theme.button }]}
+          style={[styles.retryButton, { backgroundColor: theme.primary }]}
+          onPress={handleRetry}
+        >
+          <Text style={[styles.retryButtonText, { color: theme.buttonText }]}>
+            Retry
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.button, { backgroundColor: theme.button, marginTop: 10 }]}
           onPress={() => router.back()}
         >
           <Text style={[styles.buttonText, { color: theme.buttonText }]}>Back</Text>
@@ -208,8 +283,50 @@ const MealDetails = () => {
   }
 
   return (
-    <ScrollView contentContainerStyle={[styles.scrollContainer, { backgroundColor: theme.background }]}>
-      <View style={[styles.container, { backgroundColor: theme.background }]}>
+    <View style={[styles.container, { backgroundColor: theme.background }]}>
+      {/* Error Banner */}
+      {error && !loading && (
+        <View style={[styles.errorBanner, { 
+          backgroundColor: `${theme.danger}15`, 
+          borderColor: theme.danger 
+        }]}>
+          <Text style={[styles.errorBannerText, { color: theme.danger }]}>
+            {error}
+          </Text>
+          <TouchableOpacity
+            style={[styles.errorBannerButton, { backgroundColor: theme.danger }]}
+            onPress={handleRetry}
+          >
+            <Text style={[styles.errorBannerButtonText, { color: theme.buttonText }]}>
+              Retry
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Retry Banner */}
+      {retryCount > 0 && !loading && (
+        <View style={[styles.retryBanner, { 
+          backgroundColor: `${theme.warning}15`, 
+          borderColor: theme.warning 
+        }]}>
+          <Text style={[styles.retryBannerText, { color: theme.warning }]}>
+            Retry attempt {retryCount}/3
+          </Text>
+        </View>
+      )}
+
+      <ScrollView 
+        contentContainerStyle={[styles.scrollContainer, { backgroundColor: theme.background }]}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            colors={[theme.primary]}
+            tintColor={theme.primary}
+          />
+        }
+      >
         {/* Meal Picture */}
         {meal.picture && typeof meal.picture === "string" ? (
           <Image source={{ uri: meal.picture }} style={styles.mealPicture} resizeMode="cover" />
@@ -279,8 +396,13 @@ const MealDetails = () => {
         <TouchableOpacity
           style={[styles.button, { backgroundColor: theme.button }]}
           onPress={handleCopyMeal}
+          disabled={copyLoading}
         >
-          <Text style={[styles.buttonText, { color: theme.buttonText }]}>Add Meal</Text>
+          {copyLoading ? (
+            <ActivityIndicator size="small" color={theme.buttonText} />
+          ) : (
+            <Text style={[styles.buttonText, { color: theme.buttonText }]}>Add Meal</Text>
+          )}
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -296,41 +418,54 @@ const MealDetails = () => {
         >
           <Text style={[styles.buttonText, { color: theme.buttonText }]}>Back</Text>
         </TouchableOpacity>
+      </ScrollView>
 
-        {/* Report Modal */}
-        <Modal visible={isReportModalVisible} transparent animationType="slide">
-          <View style={styles.modalContainer}>
-            <View style={styles.modalContent}>
-              <Text style={[styles.modalTitle, { color: theme.text }]}>Report Meal</Text>
-              <TextInput
-                style={[styles.modalInput, { borderColor: theme.border, color: theme.text }]}
-                placeholder="Enter reason for reporting"
-                placeholderTextColor={theme.placeholder}
-                value={reportReason}
-                onChangeText={setReportReason}
-              />
-              <View style={styles.modalButtons}>
-                <TouchableOpacity
-                  style={[styles.modalButton, { backgroundColor: theme.button }]}
-                  onPress={handleReportMeal}
-                >
+      {/* Report Modal */}
+      <Modal visible={isReportModalVisible} transparent animationType="slide">
+        <View style={styles.modalContainer}>
+          <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
+            <Text style={[styles.modalTitle, { color: theme.text }]}>Report Meal</Text>
+            <TextInput
+              style={[styles.modalInput, { 
+                borderColor: theme.border, 
+                color: theme.text,
+                backgroundColor: theme.background 
+              }]}
+              placeholder="Enter reason for reporting"
+              placeholderTextColor={theme.placeholder}
+              value={reportReason}
+              onChangeText={setReportReason}
+              multiline
+              numberOfLines={3}
+              textAlignVertical="top"
+            />
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={[styles.modalButton, { backgroundColor: theme.primary }]}
+                onPress={handleReportMeal}
+                disabled={reportLoading}
+              >
+                {reportLoading ? (
+                  <ActivityIndicator size="small" color={theme.buttonText} />
+                ) : (
                   <Text style={[styles.modalButtonText, { color: theme.buttonText }]}>Submit</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.modalButton, { backgroundColor: theme.danger }]}
-                  onPress={() => {
-                    setIsReportModalVisible(false);
-                    setReportReason("");
-                  }}
-                >
-                  <Text style={[styles.modalButtonText, { color: theme.buttonText }]}>Cancel</Text>
-                </TouchableOpacity>
-              </View>
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, { backgroundColor: theme.danger }]}
+                onPress={() => {
+                  setIsReportModalVisible(false);
+                  setReportReason("");
+                }}
+                disabled={reportLoading}
+              >
+                <Text style={[styles.modalButtonText, { color: theme.buttonText }]}>Cancel</Text>
+              </TouchableOpacity>
             </View>
           </View>
-        </Modal>
-      </View>
-    </ScrollView>
+        </View>
+      </Modal>
+    </View>
   );
 };
 
@@ -464,6 +599,67 @@ const styles = StyleSheet.create({
   mealPicturePlaceholderText: {
     fontSize: 16,
     color: "#6c757d",
+  },
+  centerContent: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  errorContainer: {
+    marginTop: 20,
+    alignItems: "center",
+  },
+  retryButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 6,
+    marginVertical: 5,
+  },
+  retryButtonText: {
+    fontSize: 16,
+    fontWeight: "bold",
+  },
+  retryText: {
+    fontSize: 14,
+    marginTop: 10,
+    textAlign: "center",
+  },
+  errorBanner: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: 12,
+    marginHorizontal: 16,
+    marginBottom: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  errorBannerText: {
+    flex: 1,
+    fontSize: 14,
+    marginRight: 12,
+  },
+  errorBannerButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    borderRadius: 4,
+  },
+  errorBannerButtonText: {
+    fontSize: 12,
+    fontWeight: "bold",
+  },
+  retryBanner: {
+    padding: 12,
+    marginHorizontal: 16,
+    marginBottom: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignItems: "center",
+  },
+  retryBannerText: {
+    fontSize: 14,
+    fontWeight: "bold",
   },
 });
 

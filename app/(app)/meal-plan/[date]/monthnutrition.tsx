@@ -6,10 +6,13 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
+  ActivityIndicator,
+  RefreshControl,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import NutritionNav from "../../../../components/nutritionNav";
 import { format, subDays } from "date-fns";
+import { useTheme } from "../../../../context/ThemeContext";
 import { supabase } from "utils/supabase";
 
 type MacroKey = "calories" | "protein" | "carbs" | "fat";
@@ -20,6 +23,7 @@ const barColors = ["#4F8EF7", "#F7B32B", "#F76E5C", "#7ED957"];
 const MonthNutritionScreen = () => {
   const { date } = useLocalSearchParams();
   const router = useRouter();
+  const { theme } = useTheme();
 
   const [macroGoals, setMacroGoals] = useState({
     calories: 2000,
@@ -31,6 +35,8 @@ const MonthNutritionScreen = () => {
     { date: string; calories: number; protein: number; carbs: number; fat: number }[]
   >([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // Get the last 30 days including the current date
   const getLast30Dates = () => {
@@ -120,11 +126,38 @@ const MonthNutritionScreen = () => {
     }
   };
 
-  useEffect(() => {
+  // Refresh function
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    setError(null);
+    
+    try {
+      await Promise.all([fetchUserGoals(), fetchMonthData()]);
+    } catch (error) {
+      console.error("Error during refresh:", error);
+      setError("An unexpected error occurred during refresh.");
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  // Load data function  
+  const loadData = async () => {
     setLoading(true);
-    Promise.all([fetchUserGoals(), fetchMonthData()]).finally(() =>
-      setLoading(false)
-    );
+    setError(null);
+    
+    try {
+      await Promise.all([fetchUserGoals(), fetchMonthData()]);
+    } catch (error) {
+      console.error("Error loading data:", error);
+      setError("Failed to load monthly nutrition data.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [date]);
 
@@ -137,21 +170,49 @@ const MonthNutritionScreen = () => {
 
   if (loading) {
     return (
-      <View style={styles.container}>
-        <Text style={styles.title}>Loading...</Text>
+      <View style={[styles.container, styles.centerContent, { backgroundColor: theme.background }]}>
+        <ActivityIndicator size="large" color={theme.primary} />
+        <Text style={[styles.loadingText, { color: theme.text }]}>
+          Loading monthly nutrition data...
+        </Text>
       </View>
     );
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <ScrollView 
+      contentContainerStyle={[styles.container, { backgroundColor: theme.background }]}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={handleRefresh}
+          colors={[theme.primary]}
+          tintColor={theme.primary}
+        />
+      }
+    >
       <NutritionNav />
 
-      <Text style={styles.title}>Monthly Nutrition Overview</Text>
+      {/* Error Banner */}
+      {error && (
+        <View style={[styles.errorBanner, { backgroundColor: theme.danger }]}>
+          <Text style={[styles.errorText, { color: theme.buttonText }]}>
+            {error}
+          </Text>
+          <TouchableOpacity
+            style={styles.retryButton}
+            onPress={handleRefresh}
+          >
+            <Text style={[styles.retryButtonText, { color: theme.buttonText }]}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      <Text style={[styles.title, { color: theme.text }]}>Monthly Nutrition Overview</Text>
 
       {/* Averages Block */}
-      <View style={styles.averagesBlock}>
-        <Text style={styles.averagesTitle}>Monthly Averages</Text>
+      <View style={[styles.averagesBlock, { backgroundColor: theme.card }]}>
+        <Text style={[styles.averagesTitle, { color: theme.primary }]}>Monthly Averages</Text>
         {macroLabels.map((label, i) => {
           const key = macroKeys[i];
           const value = averages[key];
@@ -161,10 +222,10 @@ const MonthNutritionScreen = () => {
 
           return (
             <View key={label} style={{ marginBottom: 14 }}>
-              <Text style={styles.averageText}>
+              <Text style={[styles.averageText, { color: theme.text }]}>
                 {label}: {value} / {goal} {label === "Calories" ? "kcal" : "g"} ({Math.round((value / goal) * 100)}%)
               </Text>
-              <View style={styles.progressBarBackground}>
+              <View style={[styles.progressBarBackground, { backgroundColor: theme.border }]}>
                 <View
                   style={[
                     styles.progressBarFill,
@@ -175,20 +236,7 @@ const MonthNutritionScreen = () => {
                   ]}
                 />
                 {over && (
-                  <View
-                    style={[
-                      styles.progressBarFill,
-                      {
-                        width: "100%",
-                        backgroundColor: "#ff4444",
-                        opacity: 0.3,
-                        position: "absolute",
-                        left: 0,
-                        top: 0,
-                        bottom: 0,
-                      },
-                    ]}
-                  />
+                  <View style={[styles.progressBarOverrun, { backgroundColor: theme.danger }]} />
                 )}
               </View>
             </View>
@@ -196,21 +244,25 @@ const MonthNutritionScreen = () => {
         })}
       </View>
 
-      {[...monthData].reverse().map((day) => (
-        <View key={day.date} style={styles.dayBlock}>
-          <Text style={styles.dayLabel}>{day.date}</Text>
+      {/* Show last 7 days only for performance */}
+      {monthData.slice(-7).reverse().map((day) => (
+        <View key={day.date} style={[styles.dayBlock, { borderBottomColor: theme.border }]}>
+          <Text style={[styles.dayLabel, { color: theme.text }]}>
+            {format(new Date(day.date), "EEEE, MMMM d")}
+          </Text>
           {macroLabels.map((label, i) => {
             const key = macroKeys[i];
             const value = day[key];
             const goal = macroGoals[key];
             const percent = Math.min(1, value / goal);
+            const isOver = value > goal;
 
             return (
               <View key={label} style={{ marginBottom: 10 }}>
-                <Text style={{ fontSize: 14, marginBottom: 2 }}>
-                  {label}: {value} / {goal} {label === "Calories" ? "kcal" : "g"}
+                <Text style={[styles.macroText, { color: theme.text }]}>
+                  {label}: {value} / {goal} {label === "Calories" ? "kcal" : "g"} ({Math.round((value / goal) * 100)}%)
                 </Text>
-                <View style={styles.progressBarBackground}>
+                <View style={[styles.progressBarBackground, { backgroundColor: theme.border }]}>
                   <View
                     style={[
                       styles.progressBarFill,
@@ -220,21 +272,8 @@ const MonthNutritionScreen = () => {
                       },
                     ]}
                   />
-                  {value > goal && (
-                    <View
-                      style={[
-                        styles.progressBarFill,
-                        {
-                          width: "100%",
-                          backgroundColor: "#ff4444",
-                          opacity: 0.3,
-                          position: "absolute",
-                          left: 0,
-                          top: 0,
-                          bottom: 0,
-                        },
-                      ]}
-                    />
+                  {isOver && (
+                    <View style={[styles.progressBarOverrun, { backgroundColor: theme.danger }]} />
                   )}
                 </View>
               </View>
@@ -242,8 +281,16 @@ const MonthNutritionScreen = () => {
           })}
         </View>
       ))}
-      <TouchableOpacity style={styles.backButton} onPress={() => router.push("/(app)/meal-plan/calendar")}>
-        <Text style={styles.backButtonText}>Back</Text>
+      
+      <Text style={[styles.summaryText, { color: theme.subtext }]}>
+        Showing last 7 days. Monthly averages calculated from all 30 days.
+      </Text>
+      
+      <TouchableOpacity 
+        style={[styles.backButton, { backgroundColor: theme.button }]} 
+        onPress={() => router.push("/(app)/meal-plan/calendar")}
+      >
+        <Text style={[styles.backButtonText, { color: theme.buttonText }]}>Back to Calendar</Text>
       </TouchableOpacity>
     </ScrollView>
   );
@@ -256,64 +303,121 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     flexGrow: 1,
   },
+  centerContent: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  loadingText: {
+    fontSize: 16,
+    marginTop: 16,
+    textAlign: "center",
+  },
+  errorBanner: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: 12,
+    marginBottom: 16,
+    borderRadius: 8,
+  },
+  errorText: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  retryButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    backgroundColor: "rgba(255,255,255,0.2)",
+    marginLeft: 8,
+  },
+  retryButtonText: {
+    fontSize: 14,
+    fontWeight: "bold",
+  },
   backButton: {
     alignSelf: "flex-start",
+    marginTop: 20,
     marginBottom: 10,
-    padding: 10,
+    padding: 15,
     backgroundColor: "#ccc",
-    borderRadius: 5,
+    borderRadius: 8,
+    minWidth: 120,
+    alignItems: "center",
   },
   backButtonText: {
     color: "#000",
     fontSize: 16,
+    fontWeight: "bold",
   },
   title: {
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: "bold",
-    marginBottom: 20,
+    marginBottom: 24,
     textAlign: "center",
   },
   averagesBlock: {
     backgroundColor: "#e6eaf0",
-    borderRadius: 10,
-    padding: 12,
+    borderRadius: 12,
+    padding: 16,
     marginBottom: 24,
   },
   averagesTitle: {
     fontWeight: "bold",
-    fontSize: 18,
-    marginBottom: 8,
+    fontSize: 20,
+    marginBottom: 12,
     color: "#4F8EF7",
     textAlign: "center",
   },
   averageText: {
-    fontSize: 15,
-    marginBottom: 2,
+    fontSize: 16,
+    marginBottom: 4,
     textAlign: "center",
-    color: "#333",
+    fontWeight: "500",
   },
   dayBlock: {
     marginBottom: 24,
-    paddingBottom: 10,
+    paddingBottom: 12,
     borderBottomWidth: 1,
     borderBottomColor: "#eee",
   },
   dayLabel: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: "bold",
-    marginBottom: 8,
+    marginBottom: 12,
     color: "#333",
+  },
+  macroText: {
+    fontSize: 15,
+    marginBottom: 4,
+    fontWeight: "500",
+  },
+  summaryText: {
+    fontSize: 14,
+    textAlign: "center",
+    fontStyle: "italic",
+    marginVertical: 16,
   },
   progressBarBackground: {
     width: "100%",
-    height: 14,
+    height: 16,
     backgroundColor: "#eee",
-    borderRadius: 7,
+    borderRadius: 8,
     overflow: "hidden",
   },
   progressBarFill: {
     height: "100%",
-    borderRadius: 7,
+    borderRadius: 8,
+  },
+  progressBarOverrun: {
+    position: "absolute",
+    left: 0,
+    top: 0,
+    bottom: 0,
+    right: 0,
+    opacity: 0.3,
   },
 });
 

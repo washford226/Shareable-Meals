@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   StyleSheet,
   Alert,
   ActivityIndicator,
+  RefreshControl,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { useTheme } from "../../../context/ThemeContext";
@@ -35,13 +36,39 @@ const CurrentMeals = () => {
   const [competitionTheme, setCompetitionTheme] = useState<string | null>(null);
   const [competitionStatus, setCompetitionStatus] = useState<string | null>(null);
   const [voting, setVoting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
   const router = useRouter();
   const { theme } = useTheme();
 
+  const handleRetry = useCallback(async () => {
+    const newRetryCount = retryCount + 1;
+    setRetryCount(newRetryCount);
+    
+    // Exponential backoff: wait 1s, 2s, 4s, etc.
+    const delay = Math.min(1000 * Math.pow(2, newRetryCount - 1), 10000);
+    
+    setTimeout(() => {
+      fetchLatestCompetition();
+    }, delay);
+  }, [retryCount]);
+
+  const handleRefresh = useCallback(() => {
+    setRefreshing(true);
+    setRetryCount(0);
+    setError(null);
+    fetchLatestCompetition();
+  }, []);
+
   // Fetch the latest competition from Supabase
-  const fetchLatestCompetition = async () => {
-    try {
+  const fetchLatestCompetition = useCallback(async (showLoading = true) => {
+    if (showLoading) {
       setLoading(true);
+    }
+    setError(null);
+
+    try {
       const { data, error } = await supabase
         .from("weekly_competitions")
         .select(`
@@ -76,31 +103,38 @@ const CurrentMeals = () => {
           .single();
 
         if (latestError || !latestData) {
-          Alert.alert("No Competitions", "There are no competitions available.");
-          setLoading(false);
+          setError("No competitions available at this time.");
+          if (showLoading) {
+            setLoading(false);
+          }
+          setRefreshing(false);
           return;
         }
 
         setCompetitionId(latestData.competition_id);
         setCompetitionTheme(latestData.competition_themes?.[0]?.theme_name || "Unknown Theme");
         setCompetitionStatus(latestData.status);
-        fetchMeals(latestData.competition_id);
+        await fetchMeals(latestData.competition_id, showLoading);
         return;
       }
 
       setCompetitionId(data.competition_id);
       setCompetitionTheme(data.competition_themes?.[0]?.theme_name || "Unknown Theme");
       setCompetitionStatus(data.status);
-      fetchMeals(data.competition_id);
+      await fetchMeals(data.competition_id, showLoading);
+      setRetryCount(0);
     } catch (error) {
       console.error("Error fetching competitions:", error);
-      Alert.alert("Error", "Failed to fetch competitions. Please try again later.");
-      setLoading(false);
+      setError("Failed to load competitions. Please check your connection and try again.");
+      if (showLoading) {
+        setLoading(false);
+      }
+      setRefreshing(false);
     }
-  };
+  }, []);
 
   // Fetch meals for the given competition from Supabase
-  const fetchMeals = async (competitionId: number) => {
+  const fetchMeals = async (competitionId: number, showLoading = true) => {
     try {
       const { data, error } = await supabase
         .from("competition_submissions")
@@ -143,9 +177,12 @@ const CurrentMeals = () => {
       setMeals(mealsWithVotes);
     } catch (error) {
       console.error("Error fetching meals:", error);
-      Alert.alert("Error", "Failed to fetch meals. Please try again later.");
+      setError("Failed to load meals. Please try again.");
     } finally {
-      setLoading(false);
+      if (showLoading) {
+        setLoading(false);
+      }
+      setRefreshing(false);
     }
   };
 
@@ -193,7 +230,9 @@ const CurrentMeals = () => {
       }
 
       Alert.alert("Success", "Your vote has been cast!");
-      fetchMeals(competitionId); // Refresh the list to update vote counts
+      if (competitionId) {
+        fetchMeals(competitionId, false); // Refresh the list to update vote counts
+      }
     } catch (error) {
       console.error("Error voting for meal:", error);
       Alert.alert("Error", "Failed to cast your vote. Please try again.");
@@ -208,8 +247,27 @@ const CurrentMeals = () => {
 
   if (loading) {
     return (
-      <View style={[styles.container, { backgroundColor: theme.background }]}>
+      <View style={[styles.centerContent, { backgroundColor: theme.background }]}>
         <ActivityIndicator size="large" color={theme.primary} />
+        <Text style={[styles.loadingText, { color: theme.text }]}>Loading competitions...</Text>
+        {error && (
+          <View style={styles.errorContainer}>
+            <Text style={[styles.errorText, { color: theme.danger }]}>{error}</Text>
+            <TouchableOpacity
+              style={[styles.retryButton, { backgroundColor: theme.primary }]}
+              onPress={handleRetry}
+            >
+              <Text style={[styles.retryButtonText, { color: theme.buttonText }]}>
+                Retry
+              </Text>
+            </TouchableOpacity>
+            {retryCount > 0 && (
+              <Text style={[styles.retryText, { color: theme.subtext }]}>
+                Retry attempt {retryCount}/3
+              </Text>
+            )}
+          </View>
+        )}
       </View>
     );
   }
@@ -217,6 +275,38 @@ const CurrentMeals = () => {
   if (!competitionId) {
     return (
       <View style={[styles.container, { backgroundColor: theme.background }]}>
+        {/* Error Banner */}
+        {error && (
+          <View style={[styles.errorBanner, { 
+            backgroundColor: `${theme.danger}15`, 
+            borderColor: theme.danger 
+          }]}>
+            <Text style={[styles.errorBannerText, { color: theme.danger }]}>
+              {error}
+            </Text>
+            <TouchableOpacity
+              style={[styles.errorBannerButton, { backgroundColor: theme.danger }]}
+              onPress={handleRetry}
+            >
+              <Text style={[styles.errorBannerButtonText, { color: theme.buttonText }]}>
+                Retry
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Retry Banner */}
+        {retryCount > 0 && (
+          <View style={[styles.retryBanner, { 
+            backgroundColor: `${theme.warning}15`, 
+            borderColor: theme.warning 
+          }]}>
+            <Text style={[styles.retryBannerText, { color: theme.warning }]}>
+              Retry attempt {retryCount}/3
+            </Text>
+          </View>
+        )}
+
         {/* Back Button */}
         <TouchableOpacity
           style={[styles.backButton, { backgroundColor: theme.primary }]}
@@ -225,9 +315,21 @@ const CurrentMeals = () => {
           <Text style={[styles.backButtonText, { color: theme.buttonText }]}>Back</Text>
         </TouchableOpacity>
         
-        <Text style={[styles.emptyText, { color: theme.subtext }]}>
-          No active competitions available.
-        </Text>
+        <View style={styles.centerContent}>
+          <Text style={[styles.emptyText, { color: theme.subtext }]}>
+            {error || "No active competitions available."}
+          </Text>
+          {!error && (
+            <TouchableOpacity
+              style={[styles.retryButton, { backgroundColor: theme.primary, marginTop: 16 }]}
+              onPress={handleRetry}
+            >
+              <Text style={[styles.retryButtonText, { color: theme.buttonText }]}>
+                Check Again
+              </Text>
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
     );
   }
@@ -290,10 +392,20 @@ const CurrentMeals = () => {
             </TouchableOpacity>
           </View>
         )}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            colors={[theme.primary]}
+            tintColor={theme.primary}
+          />
+        }
         ListEmptyComponent={
-          <Text style={[styles.emptyText, { color: theme.subtext }]}>
-            No meals have been added to this competition yet.
-          </Text>
+          <View style={styles.centerContent}>
+            <Text style={[styles.emptyText, { color: theme.subtext }]}>
+              No meals have been added to this competition yet.
+            </Text>
+          </View>
         }
       />
     </View>
@@ -378,6 +490,76 @@ const styles = StyleSheet.create({
     fontSize: 16,
     textAlign: "center",
     marginTop: 32,
+  },
+  centerContent: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    fontSize: 16,
+    marginTop: 16,
+    textAlign: 'center',
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  errorText: {
+    fontSize: 16,
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  retryButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  retryButtonText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  retryText: {
+    fontSize: 14,
+    marginTop: 8,
+    textAlign: 'center',
+  },
+  errorBanner: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 12,
+    marginBottom: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  errorBannerText: {
+    flex: 1,
+    fontSize: 14,
+    marginRight: 12,
+  },
+  errorBannerButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  errorBannerButtonText: {
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  retryBanner: {
+    padding: 12,
+    marginBottom: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignItems: 'center',
+  },
+  retryBannerText: {
+    fontSize: 14,
+    fontWeight: '500',
   },
 });
 
