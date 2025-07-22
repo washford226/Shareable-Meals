@@ -17,19 +17,23 @@ const CurrentMeals = () => {
     meal_id: number;
     name: string;
     votes: number;
+    user_id: string;
+    username?: string;
   }
 
   interface Competition {
     competition_id: number;
     start_date: string;
     end_date: string;
-    theme: string;
+    theme_name: string;
+    status: string;
   }
 
   const [meals, setMeals] = useState<Meal[]>([]);
   const [loading, setLoading] = useState(true);
   const [competitionId, setCompetitionId] = useState<number | null>(null);
   const [competitionTheme, setCompetitionTheme] = useState<string | null>(null);
+  const [competitionStatus, setCompetitionStatus] = useState<string | null>(null);
   const [voting, setVoting] = useState(false);
   const router = useRouter();
   const { theme } = useTheme();
@@ -39,20 +43,54 @@ const CurrentMeals = () => {
     try {
       setLoading(true);
       const { data, error } = await supabase
-        .from("competitions")
-        .select("*")
+        .from("weekly_competitions")
+        .select(`
+          competition_id,
+          start_date,
+          end_date,
+          status,
+          competition_themes!fk_theme_id (
+            theme_name
+          )
+        `)
+        .eq("status", "active")
         .order("competition_id", { ascending: false })
         .limit(1)
         .single();
 
       if (error || !data) {
-        Alert.alert("No Competitions", "There are no active competitions.");
-        setLoading(false);
+        // If no active competition, try to get the latest one
+        const { data: latestData, error: latestError } = await supabase
+          .from("weekly_competitions")
+          .select(`
+            competition_id,
+            start_date,
+            end_date,
+            status,
+            competition_themes!fk_theme_id (
+              theme_name
+            )
+          `)
+          .order("competition_id", { ascending: false })
+          .limit(1)
+          .single();
+
+        if (latestError || !latestData) {
+          Alert.alert("No Competitions", "There are no competitions available.");
+          setLoading(false);
+          return;
+        }
+
+        setCompetitionId(latestData.competition_id);
+        setCompetitionTheme(latestData.competition_themes?.[0]?.theme_name || "Unknown Theme");
+        setCompetitionStatus(latestData.status);
+        fetchMeals(latestData.competition_id);
         return;
       }
 
       setCompetitionId(data.competition_id);
-      setCompetitionTheme(data.theme);
+      setCompetitionTheme(data.competition_themes?.[0]?.theme_name || "Unknown Theme");
+      setCompetitionStatus(data.status);
       fetchMeals(data.competition_id);
     } catch (error) {
       console.error("Error fetching competitions:", error);
@@ -65,14 +103,44 @@ const CurrentMeals = () => {
   const fetchMeals = async (competitionId: number) => {
     try {
       const { data, error } = await supabase
-        .from("competition_meals_view") // Use a view or join to get meal name and votes
-        .select("meal_id, name, votes")
+        .from("competition_submissions")
+        .select(`
+          meal_id,
+          meals!competition_submissions_meal_id_fkey (
+            id,
+            name
+          ),
+          user_profiles!competition_submissions_user_id_fkey (
+            id,
+            username
+          )
+        `)
         .eq("competition_id", competitionId);
 
       if (error) {
         throw error;
       }
-      setMeals(data || []);
+
+      // Process the data to include vote counts
+      const mealsWithVotes = await Promise.all(
+        (data || []).map(async (submission: any) => {
+          const { data: voteData } = await supabase
+            .from("meal_votes")
+            .select("vote_id")
+            .eq("meal_id", submission.meal_id)
+            .eq("competition_id", competitionId);
+
+          return {
+            meal_id: submission.meal_id,
+            name: submission.meals?.name || "Unknown Meal",
+            votes: voteData?.length || 0,
+            user_id: submission.user_profiles?.id || "",
+            username: submission.user_profiles?.username || "Unknown User",
+          };
+        })
+      );
+
+      setMeals(mealsWithVotes);
     } catch (error) {
       console.error("Error fetching meals:", error);
       Alert.alert("Error", "Failed to fetch meals. Please try again later.");
@@ -96,22 +164,23 @@ const CurrentMeals = () => {
       }
       const userId = userData.user.id;
 
-      // Check if user has already voted in this competition
+      // Check if user has already voted for this meal in this competition
       const { data: existingVote } = await supabase
-        .from("competition_votes")
+        .from("meal_votes")
         .select("*")
         .eq("competition_id", competitionId)
         .eq("user_id", userId)
+        .eq("meal_id", mealId)
         .maybeSingle();
 
       if (existingVote) {
-        Alert.alert("Error", "You have already voted in this competition.");
+        Alert.alert("Error", "You have already voted for this meal in this competition.");
         setVoting(false);
         return;
       }
 
       // Insert vote
-      const { error } = await supabase.from("competition_votes").insert([
+      const { error } = await supabase.from("meal_votes").insert([
         {
           competition_id: competitionId,
           meal_id: mealId,
@@ -148,6 +217,14 @@ const CurrentMeals = () => {
   if (!competitionId) {
     return (
       <View style={[styles.container, { backgroundColor: theme.background }]}>
+        {/* Back Button */}
+        <TouchableOpacity
+          style={[styles.backButton, { backgroundColor: theme.primary }]}
+          onPress={() => router.push("/other-meals/other-meals")}
+        >
+          <Text style={[styles.backButtonText, { color: theme.buttonText }]}>Back</Text>
+        </TouchableOpacity>
+        
         <Text style={[styles.emptyText, { color: theme.subtext }]}>
           No active competitions available.
         </Text>
@@ -167,9 +244,16 @@ const CurrentMeals = () => {
 
       {/* Competition Theme */}
       {competitionTheme && (
-        <Text style={[styles.themeText, { color: theme.text }]}>
-          Current Theme: {competitionTheme}
-        </Text>
+        <View style={styles.competitionInfo}>
+          <Text style={[styles.themeText, { color: theme.text }]}>
+            Current Theme: {competitionTheme}
+          </Text>
+          {competitionStatus && (
+            <Text style={[styles.statusText, { color: theme.subtext }]}>
+              Status: {competitionStatus.charAt(0).toUpperCase() + competitionStatus.slice(1)}
+            </Text>
+          )}
+        </View>
       )}
 
       {/* Add Meal Button */}
@@ -186,10 +270,15 @@ const CurrentMeals = () => {
         keyExtractor={(item) => item.meal_id.toString()}
         renderItem={({ item }) => (
           <View style={[styles.mealContainer, { backgroundColor: theme.card }]}>
-            <Text style={[styles.mealName, { color: theme.text }]}>{item.name}</Text>
-            <Text style={[styles.mealVotes, { color: theme.subtext }]}>
-              Votes: {item.votes}
-            </Text>
+            <View style={styles.mealInfo}>
+              <Text style={[styles.mealName, { color: theme.text }]}>{item.name}</Text>
+              <Text style={[styles.mealUser, { color: theme.subtext }]}>
+                by {item.username}
+              </Text>
+              <Text style={[styles.mealVotes, { color: theme.subtext }]}>
+                Votes: {item.votes}
+              </Text>
+            </View>
             <TouchableOpacity
               style={[styles.voteButton, { backgroundColor: theme.primary }]}
               onPress={() => handleVote(item.meal_id)}
@@ -227,10 +316,19 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "bold",
   },
+  competitionInfo: {
+    marginBottom: 16,
+    alignItems: "center",
+  },
   themeText: {
     fontSize: 18,
     fontWeight: "bold",
-    marginBottom: 16,
+    marginBottom: 4,
+    textAlign: "center",
+  },
+  statusText: {
+    fontSize: 14,
+    fontStyle: "italic",
     textAlign: "center",
   },
   addMealButton: {
@@ -251,18 +349,26 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
   },
+  mealInfo: {
+    flex: 1,
+  },
   mealName: {
     fontSize: 16,
     fontWeight: "bold",
-    flex: 1,
+    marginBottom: 2,
+  },
+  mealUser: {
+    fontSize: 12,
+    fontStyle: "italic",
+    marginBottom: 2,
   },
   mealVotes: {
     fontSize: 14,
-    marginRight: 16,
   },
   voteButton: {
     padding: 8,
     borderRadius: 8,
+    marginLeft: 16,
   },
   voteButtonText: {
     fontSize: 14,

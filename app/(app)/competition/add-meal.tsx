@@ -66,10 +66,44 @@ const AddMeal = () => {
       }
       const userId = userData.user.id;
 
-      // Insert into 'competition_meals' (or your competition meals table)
+      // Get the current active competition
+      const { data: competitionData, error: competitionError } = await supabase
+        .from("weekly_competitions")
+        .select("competition_id")
+        .eq("status", "active")
+        .order("competition_id", { ascending: false })
+        .limit(1)
+        .single();
+
+      if (competitionError || !competitionData) {
+        Alert.alert("Error", "No active competition found.");
+        setAddingMeal(false);
+        return;
+      }
+
+      // Check if user has already submitted this meal to this competition
+      const { data: existingSubmission } = await supabase
+        .from("competition_submissions")
+        .select("id")
+        .eq("user_id", userId)
+        .eq("competition_id", competitionData.competition_id)
+        .eq("meal_id", mealId)
+        .maybeSingle();
+
+      if (existingSubmission) {
+        Alert.alert("Error", "You have already submitted this meal to the current competition.");
+        setAddingMeal(false);
+        return;
+      }
+
+      // Insert into 'competition_submissions'
       const { error } = await supabase
-        .from("competition_meals")
-        .insert([{ meal_id: mealId, user_id: userId }]);
+        .from("competition_submissions")
+        .insert([{ 
+          meal_id: mealId, 
+          user_id: userId, 
+          competition_id: competitionData.competition_id 
+        }]);
 
       if (error) {
         throw error;

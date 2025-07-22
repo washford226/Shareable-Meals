@@ -12,6 +12,7 @@ const AccountScreen: React.FC = () => {
   const [allergies, setAllergies] = useState<string>('');
   const [profilePicture, setProfilePicture] = useState<string | null>(null);
   const [email, setEmail] = useState<string>('');
+  const [isAdmin, setIsAdmin] = useState<boolean>(false);
 
   const { theme, toggleTheme } = useTheme();
   const router = useRouter();
@@ -41,6 +42,7 @@ const AccountScreen: React.FC = () => {
         setEmail(data.email ?? '');
         setAllergies(data.allergies ?? '');
         setProfilePicture(data.profile_picture ?? null);
+        setIsAdmin(data.is_admin ?? false);
       } catch (error) {
         console.error('Error fetching user data:', error);
       }
@@ -162,6 +164,18 @@ const AccountScreen: React.FC = () => {
         </Text>
       </TouchableOpacity>
 
+      {/* Admin Panel Button - Only show for admins */}
+      {isAdmin && (
+        <TouchableOpacity
+          style={[styles.adminButton, { backgroundColor: theme.primary, borderColor: theme.border, borderWidth: 1, borderRadius: 10 }]}
+          onPress={() => router.push('./admin-reports')}
+        >
+          <Text style={[styles.adminButtonText, { color: theme.buttonText, alignSelf: 'flex-start' }]}>
+            Admin Reports
+          </Text>
+        </TouchableOpacity>
+      )}
+
       {/* Logout Button */}
       <TouchableOpacity
         style={[styles.logoutButton, { backgroundColor: theme.button, borderColor: theme.border, borderWidth: 1, borderRadius: 10 }]}
@@ -209,6 +223,16 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   editButtonText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  adminButton: {
+    marginTop: 20,
+    padding: 12,
+    alignItems: 'center',
+    width: '100%',
+  },
+  adminButtonText: {
     fontSize: 16,
     fontWeight: 'bold',
   },
