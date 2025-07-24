@@ -363,12 +363,12 @@ const MealPlanCalendar: React.FC = () => {
 
   const handleMealSelect = (meal: Meal) => {
     try {
-      if (!meal?.id) {
+      if (!meal?.meal_plan_id) {
         Alert.alert("Error", "Invalid meal data. Please try refreshing the calendar.");
         return;
       }
-      // Navigate to the meal details using the meal ID, not meal_plan_id
-      router.push(`/(app)/my-meals/${meal.id}/info`);
+      // Navigate to the meal plan details using the meal_plan_id
+      router.push(`/(app)/meal-plan/${meal.meal_plan_id}/details`);
     } catch (error) {
       console.error("Error navigating to meal details:", error);
       Alert.alert("Error", "Failed to open meal details. Please try again.");
@@ -384,31 +384,44 @@ const MealPlanCalendar: React.FC = () => {
     <View style={[styles.outerContainer, { backgroundColor: theme.background }]}>
       {/* Error Banner */}
       {error && (
-        <View style={[styles.errorBanner, { backgroundColor: theme.danger }]}>
-          <Text style={[styles.errorText, { color: theme.buttonText }]}>{error}</Text>
+        <View style={[styles.errorBanner, { backgroundColor: theme.dangerLight, borderColor: theme.danger }]}>
+          <View style={styles.errorContent}>
+            <Text style={[styles.errorIcon, { color: theme.danger }]}>⚠️</Text>
+            <Text style={[styles.errorText, { color: theme.danger }]}>{error}</Text>
+          </View>
           <TouchableOpacity
-            style={styles.retryButton}
+            style={[styles.retryButton, { backgroundColor: theme.danger }]}
             onPress={handleRefresh}
           >
-            <Text style={[styles.retryButtonText, { color: theme.buttonText }]}>Retry</Text>
+            <Text style={[styles.retryButtonText, { color: theme.buttonTextPrimary }]}>Retry</Text>
           </TouchableOpacity>
         </View>
       )}
 
-      {/* Header Buttons */}
-      <View style={styles.headerContainer}>
-        <TouchableOpacity
-          style={[styles.groceryButton, { backgroundColor: theme.button }]}
-          onPress={() => router.push("./grocery-list")}
-        >
-          <Text style={[styles.groceryButtonText, { color: theme.buttonText }]}>Grocery List</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.pantryButton, { backgroundColor: theme.primary }]}
-          onPress={() => router.push("/pantry/pantry")}
-        >
-          <Text style={[styles.pantryButtonText, { color: theme.buttonText }]}>Pantry</Text>
-        </TouchableOpacity>
+      {/* Compact Header */}
+      <View style={[styles.headerContainer, { backgroundColor: theme.card, shadowColor: theme.shadow }]}>
+        <View style={styles.headerButtons}>
+          <TouchableOpacity
+            style={[styles.headerButton, styles.groceryButton, { 
+              backgroundColor: theme.successLight, 
+              borderColor: theme.success 
+            }]}
+            onPress={() => router.push("./grocery-list")}
+          >
+            <Text style={[styles.headerButtonIcon, { color: theme.success }]}>🛒</Text>
+            <Text style={[styles.headerButtonText, { color: theme.success }]}>Grocery List</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.headerButton, styles.pantryButton, { 
+              backgroundColor: theme.primaryLight, 
+              borderColor: theme.primary 
+            }]}
+            onPress={() => router.push("/pantry/pantry")}
+          >
+            <Text style={[styles.headerButtonIcon, { color: theme.primary }]}>🏠</Text>
+            <Text style={[styles.headerButtonText, { color: theme.primary }]}>Pantry</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Loading Indicator for Initial Load */}
@@ -441,70 +454,122 @@ const MealPlanCalendar: React.FC = () => {
                 key={dateString}
                 style={[
                   styles.dayContainer,
-                  { backgroundColor: theme.card },
-                  isToday && { borderColor: theme.primary },
+                  { 
+                    backgroundColor: theme.card,
+                    borderColor: isToday ? theme.primary : theme.border,
+                    shadowColor: theme.shadow,
+                  },
+                  isToday && styles.todayContainer,
                 ]}
               >
+                {/* Enhanced Date Header */}
                 <TouchableOpacity 
+                  style={[styles.dateHeader, isToday && { backgroundColor: theme.primaryLight }]}
                   onPress={() => handleDatePress(dateString)}
                   accessibilityLabel={`Options for ${format(currentDate, "EEEE, MMMM d")}`}
                   accessibilityHint="Tap to add or delete meals for this date"
                 >
-                  <Text style={[styles.dateLabel, { color: theme.text }]}>
-                    {format(currentDate, "EEEE, MMMM d")}
+                  <View style={styles.dateHeaderContent}>
+                    <Text style={[styles.dayName, { color: isToday ? theme.primary : theme.text }]}>
+                      {format(currentDate, "EEEE")}
+                    </Text>
+                    <Text style={[styles.dateNumber, { color: isToday ? theme.primary : theme.text }]}>
+                      {format(currentDate, "MMM d")}
+                    </Text>
+                    {isToday && (
+                      <View style={[styles.todayBadge, { backgroundColor: theme.primary }]}>
+                        <Text style={[styles.todayText, { color: theme.buttonTextPrimary }]}>Today</Text>
+                      </View>
+                    )}
+                  </View>
+                  <Text style={[styles.optionsHint, { color: theme.textSecondary }]}>
+                    Tap for options
                   </Text>
                 </TouchableOpacity>
                 <View style={styles.mealsContainer}>
-                  <ScrollView>
+                  <ScrollView contentContainerStyle={styles.mealsScrollContent}>
                   {loadingDates[dateString] ? (
                     <View style={styles.loadingContainer}>
-                      <Text style={[styles.loadingText, { color: theme.text }]}>Loading meals...</Text>
+                      <ActivityIndicator size="small" color={theme.primary} />
+                      <Text style={[styles.loadingText, { color: theme.textSecondary }]}>Loading meals...</Text>
                     </View>
                   ) : meals[dateString]?.length > 0 ? (
                     meals[dateString].map((meal, index) => (
                       <TouchableOpacity
                         key={`${meal.id}-${index}`}
                         style={[
-                          styles.mealButton,
-                          { backgroundColor: getMealButtonColor(meal.meal_type) },
+                          styles.mealCard,
+                          { 
+                            backgroundColor: theme.mealColors[meal.meal_type.toLowerCase() as keyof typeof theme.mealColors] || theme.card,
+                            borderColor: theme.mealAccent[meal.meal_type.toLowerCase() as keyof typeof theme.mealAccent] || theme.border,
+                            shadowColor: theme.shadow,
+                          },
                         ]}
                         onPress={() => handleMealSelect(meal)}
+                        activeOpacity={0.7}
                       >
-                        <View style={styles.mealContent}>
-                          {/* Display the meal picture */}
-                          {meal.picture && typeof meal.picture === "string" ? (
-                            <Image source={{ uri: meal.picture }} style={styles.mealPicture} />
-                          ) : (
-                            <View style={styles.mealPicturePlaceholder}>
-                              <Text style={styles.mealPicturePlaceholderText}>No Image</Text>
-                            </View>
-                          )}
+                        <View style={styles.mealCardContent}>
+                          {/* Meal Type Badge */}
+                          <View style={[styles.mealTypeBadge, { 
+                            backgroundColor: theme.mealAccent[meal.meal_type.toLowerCase() as keyof typeof theme.mealAccent] || theme.primary 
+                          }]}>
+                            <Text style={[styles.mealTypeBadgeText, { color: theme.buttonTextPrimary }]}>
+                              {meal.meal_type}
+                            </Text>
+                          </View>
 
-                          {/* Display the meal name and description */}
-                          <View style={styles.mealTextContainer}>
-                            <Text style={[styles.mealText, { color: theme.mealText }]} numberOfLines={2}>
+                          {/* Meal Image */}
+                          <View style={styles.mealImageContainer}>
+                            {meal.picture && typeof meal.picture === "string" ? (
+                              <Image source={{ uri: meal.picture }} style={styles.mealImage} />
+                            ) : (
+                              <View style={[styles.mealImagePlaceholder, { backgroundColor: theme.divider }]}>
+                                <Text style={[styles.mealImagePlaceholderText, { color: theme.textSecondary }]}>🍽️</Text>
+                              </View>
+                            )}
+                          </View>
+
+                          {/* Meal Info */}
+                          <View style={styles.mealInfo}>
+                            <Text style={[styles.mealName, { color: theme.text }]} numberOfLines={2}>
                               {meal.name || "Unknown Meal"}
                             </Text>
-                            <Text style={[styles.mealDescription, { color: theme.subtext }]} numberOfLines={3}>
+                            <Text style={[styles.mealDescription, { color: theme.textSecondary }]} numberOfLines={2}>
                               {meal.description || "No description available"}
                             </Text>
-                            <Text style={[styles.mealTypeText, { color: theme.subtext }]}>
-                              {meal.meal_type || "Other"}
-                            </Text>
+                            {/* Nutrition Preview */}
+                            <View style={styles.nutritionPreview}>
+                              <Text style={[styles.nutritionPreviewText, { color: theme.textSecondary }]}>
+                                {meal.calories || 0} cal • {meal.protein || 0}g protein
+                              </Text>
+                            </View>
                           </View>
                         </View>
                       </TouchableOpacity>
                     ))
                   ) : meals[dateString] !== undefined ? (
-                    <Text style={[styles.noMealText, { color: theme.subtext }]}>
-                      No meals for this day
-                    </Text>
+                    <View style={styles.emptyMealsContainer}>
+                      <Text style={[styles.emptyMealsIcon, { color: theme.textSecondary }]}>🍽️</Text>
+                      <Text style={[styles.emptyMealsText, { color: theme.textSecondary }]}>
+                        No meals planned
+                      </Text>
+                      <Text style={[styles.emptyMealsSubtext, { color: theme.textSecondary }]}>
+                        Tap the date to add meals
+                      </Text>
+                    </View>
                   ) : null}
                   </ScrollView>
                 </View>
-                {/* Nutrition Block - always visible */}
+                {/* Enhanced Nutrition Block */}
                 <TouchableOpacity
-                  style={[styles.nutritionBlock, { backgroundColor: theme.card }]}
+                  style={[styles.nutritionBlock, { 
+                    backgroundColor: theme.card,
+                    shadowColor: theme.shadow,
+                    shadowOffset: { width: 0, height: 2 },
+                    shadowOpacity: 0.1,
+                    shadowRadius: 8,
+                    elevation: 3,
+                  }]}
                   activeOpacity={0.8}
                   onPress={() => router.push({ pathname: "/(app)/meal-plan/[date]/daynutrition", params: { date: dateString } })}
                 >
@@ -512,31 +577,46 @@ const MealPlanCalendar: React.FC = () => {
                     const totals = meals[dateString]?.length > 0
                       ? calculateNutritionTotals(meals[dateString])
                       : { calories: 0, protein: 0, carbs: 0, fat: 0 };
+                    const hasNutrition = totals.calories > 0;
                     return (
                       <>
-                        <Text style={[styles.nutritionTitle, { color: theme.text }]}>Nutrition Facts</Text>
+                        <View style={styles.nutritionHeader}>
+                          <Text style={[styles.nutritionTitle, { color: theme.text }]}>
+                            Daily Nutrition
+                          </Text>
+                          <Text style={[styles.nutritionSubtitle, { color: theme.textSecondary }]}>
+                            Tap for details
+                          </Text>
+                        </View>
                         <View style={styles.nutritionRow}>
-                          <View style={styles.nutritionColumn}>
-                            <Text style={[styles.nutritionLabel, { color: theme.text }]}>Calories</Text>
-                            <Text style={[styles.nutritionValue, { color: theme.text }]}>{totals.calories} kcal</Text>
+                          <View style={[styles.nutritionColumn, styles.caloriesColumn]}>
+                            <Text style={[styles.nutritionValue, { color: theme.primary, fontSize: 20, fontWeight: '800' }]}>
+                              {totals.calories}
+                            </Text>
+                            <Text style={[styles.nutritionLabel, { color: theme.textSecondary }]}>calories</Text>
                           </View>
-                          <View style={styles.nutritionColumn}>
-                            <Text style={[styles.nutritionLabel, { color: theme.text }]}>Protein</Text>
-                            <Text style={[styles.nutritionValue, { color: theme.text }]}>{totals.protein} g</Text>
-                          </View>
-                          <View style={styles.nutritionColumn}>
-                            <Text style={[styles.nutritionLabel, { color: theme.text }]}>Carbs</Text>
-                            <Text style={[styles.nutritionValue, { color: theme.text }]}>{totals.carbs} g</Text>
-                          </View>
-                          <View style={styles.nutritionColumn}>
-                            <Text style={[styles.nutritionLabel, { color: theme.text }]}>Fat</Text>
-                            <Text style={[styles.nutritionValue, { color: theme.text }]}>{totals.fat} g</Text>
+                          <View style={styles.nutritionDivider} />
+                          <View style={styles.macrosContainer}>
+                            <View style={styles.macroItem}>
+                              <Text style={[styles.macroValue, { color: theme.text }]}>{totals.protein}g</Text>
+                              <Text style={[styles.macroLabel, { color: theme.protein }]}>Protein</Text>
+                            </View>
+                            <View style={styles.macroItem}>
+                              <Text style={[styles.macroValue, { color: theme.text }]}>{totals.carbs}g</Text>
+                              <Text style={[styles.macroLabel, { color: theme.carbs }]}>Carbs</Text>
+                            </View>
+                            <View style={styles.macroItem}>
+                              <Text style={[styles.macroValue, { color: theme.text }]}>{totals.fat}g</Text>
+                              <Text style={[styles.macroLabel, { color: theme.fat }]}>Fat</Text>
+                            </View>
                           </View>
                         </View>
-                        {meals[dateString] !== undefined && meals[dateString]?.length === 0 && (
-                          <Text style={[styles.noMealText, { color: theme.subtext, marginTop: 8 }]}>
-                            No meals for this day
-                          </Text>
+                        {!hasNutrition && (
+                          <View style={styles.emptyNutritionContainer}>
+                            <Text style={[styles.emptyNutritionText, { color: theme.textSecondary }]}>
+                              📊 Add meals to see nutrition data
+                            </Text>
+                          </View>
                         )}
                       </>
                     );
@@ -608,16 +688,27 @@ const MealPlanCalendar: React.FC = () => {
 
 const styles = StyleSheet.create({
   outerContainer: { 
-    flex: 1 
+    flex: 1,
+    paddingTop: 20, // Add top padding to avoid status bar overlap
   },
   errorBanner: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    padding: 12,
+    padding: 16,
     marginHorizontal: 16,
     marginTop: 8,
-    borderRadius: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  errorContent: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  errorIcon: {
+    fontSize: 18,
+    marginRight: 8,
   },
   errorText: {
     flex: 1,
@@ -625,26 +716,52 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   retryButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6,
-    backgroundColor: "rgba(255,255,255,0.2)",
-    marginLeft: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    marginLeft: 12,
   },
   retryButtonText: {
     fontSize: 14,
     fontWeight: "bold",
+  },
+  headerContainer: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    marginBottom: 4,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  headerButtons: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  headerButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    borderRadius: 16,
+    borderWidth: 2,
+    gap: 8,
+  },
+  headerButtonIcon: {
+    fontSize: 20,
+  },
+  headerButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
   },
   initialLoadingContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
     padding: 40,
-  },
-  headerContainer: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    padding: 16,
   },
 groceryButton: {
   padding: 12,
@@ -690,11 +807,62 @@ pantryButtonText: {
     fontWeight: "bold",
   },
   nutritionTitle: {
-  fontSize: 16,
-  fontWeight: "bold",
-  textAlign: "center",
-  marginBottom: 8, // Add spacing between the title and the nutrition rows
-},
+    fontSize: 16,
+    fontWeight: "bold",
+    textAlign: "center",
+    marginBottom: 8, // Add spacing between the title and the nutrition rows
+  },
+  nutritionHeader: {
+    marginBottom: 16,
+    alignItems: 'center',
+  },
+  nutritionSubtitle: {
+    fontSize: 12,
+    marginTop: 2,
+    textAlign: 'center',
+  },
+  caloriesColumn: {
+    flex: 2,
+    alignItems: 'center',
+    paddingRight: 16,
+  },
+  nutritionDivider: {
+    width: 1,
+    backgroundColor: '#e5e7eb',
+    marginHorizontal: 16,
+    alignSelf: 'stretch',
+  },
+  macrosContainer: {
+    flex: 3,
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+  },
+  macroItem: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  macroValue: {
+    fontSize: 14,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  macroLabel: {
+    fontSize: 11,
+    fontWeight: '500',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  emptyNutritionContainer: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#f3f4f6',
+    alignItems: 'center',
+  },
+  emptyNutritionText: {
+    fontSize: 13,
+    fontStyle: 'italic',
+  },
   createMealButtonContainer: { 
     alignItems: "center", 
     marginVertical: 16 
@@ -744,10 +912,55 @@ pantryButtonText: {
   dayContainer: {
     width: SCREEN_WIDTH * 0.95,
     marginRight: 16,
-    padding: 8,
-    borderWidth: 1,
-    borderRadius: 8,
-    height: SCREEN_HEIGHT * 0.8,
+    padding: 0,
+    borderWidth: 2,
+    borderRadius: 20,
+    height: SCREEN_HEIGHT * 0.75,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 5,
+    overflow: 'hidden',
+  },
+  todayContainer: {
+    shadowOpacity: 0.2,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  dateHeader: {
+    padding: 16,
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.1)',
+  },
+  dateHeaderContent: {
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  dayName: {
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  dateNumber: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  todayBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginTop: 8,
+  },
+  todayText: {
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  optionsHint: {
+    fontSize: 12,
+    fontStyle: 'italic',
   },
   dateLabel: { 
     fontSize: 16, 
@@ -756,9 +969,95 @@ pantryButtonText: {
     textAlign: "center" 
   },
   mealsContainer: { 
-    marginTop: 8, 
     flex: 1,
-    paddingBottom: 20,
+    paddingHorizontal: 16,
+    paddingTop: 8,
+  },
+  mealsScrollContent: {
+    paddingBottom: 100, // Space for nutrition block
+  },
+  mealCard: {
+    marginBottom: 12,
+    borderRadius: 16,
+    borderWidth: 2,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
+    overflow: 'hidden',
+  },
+  mealCardContent: {
+    position: 'relative',
+  },
+  mealTypeBadge: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    zIndex: 1,
+  },
+  mealTypeBadgeText: {
+    fontSize: 10,
+    fontWeight: 'bold',
+    textTransform: 'uppercase',
+  },
+  mealImageContainer: {
+    height: 120,
+    width: '100%',
+  },
+  mealImage: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
+  },
+  mealImagePlaceholder: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  mealImagePlaceholderText: {
+    fontSize: 32,
+  },
+  mealInfo: {
+    padding: 12,
+  },
+  mealName: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  mealDescription: {
+    fontSize: 14,
+    lineHeight: 20,
+    marginBottom: 8,
+  },
+  nutritionPreview: {
+    marginTop: 4,
+  },
+  nutritionPreviewText: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  emptyMealsContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 40,
+  },
+  emptyMealsIcon: {
+    fontSize: 48,
+    marginBottom: 12,
+  },
+  emptyMealsText: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  emptyMealsSubtext: {
+    fontSize: 14,
+    textAlign: 'center',
   },
   mealButton: { 
     padding: 12, 
@@ -794,44 +1093,52 @@ pantryButtonText: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    padding: 20,
   },
   modalContent: {
-    width: "80%",
-    borderRadius: 8,
-    padding: 16,
+    width: "90%",
+    maxWidth: 400,
+    borderRadius: 16,
+    padding: 24,
     alignItems: "center",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 8,
   },
   modalTitle: { 
-    fontSize: 18, 
-    fontWeight: "bold", 
-    marginBottom: 16 
+    fontSize: 20, 
+    fontWeight: "800", 
+    marginBottom: 8,
+    textAlign: 'center',
   },
   modalButton: {
     width: "100%",
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 8,
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 12,
     alignItems: "center",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
   },
   modalButtonText: { 
     fontSize: 16, 
-    fontWeight: "bold" 
+    fontWeight: "700" 
   },
   modalCancelButton: {
     width: "100%",
-    padding: 12,
-    borderRadius: 8,
+    padding: 16,
+    borderRadius: 12,
     alignItems: "center",
+    borderWidth: 2,
+    marginTop: 8,
   },
   modalCancelButtonText: { 
     fontSize: 16, 
-    fontWeight: "bold" 
-  },
-  mealDescription: { 
-    fontSize: 12, 
-    textAlign: "center", 
-    marginTop: 4 
+    fontWeight: "600" 
   },
   mealTypeText: {
     fontSize: 10,

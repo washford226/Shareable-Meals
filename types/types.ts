@@ -40,5 +40,7 @@ export interface UserProfile {
   fat_goal?: number | null;
   dietary_restrictions?: string | null;
   allergies?: string | null;
+  ai_usage_count?: number | null;
+  ai_usage_last_date?: string | null;
   created_at?: string | null;
 }

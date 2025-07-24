@@ -12,6 +12,7 @@ import {
   Switch,
   RefreshControl,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "../../../../context/ThemeContext";
 import RNPickerSelect from "react-native-picker-select";
 import { supabase } from "utils/supabase";
@@ -38,10 +39,6 @@ export default function EditMealScreen() {
   const [name, setName] = useState<string>("");
   const [description, setDescription] = useState<string>("");
   const [ingredients, setIngredients] = useState<{ name: string; quantity: string; unit: string }[]>([]);
-  const [calories, setCalories] = useState<string>("");
-  const [protein, setProtein] = useState<string>("");
-  const [carbohydrates, setCarbohydrates] = useState<string>("");
-  const [fat, setFat] = useState<string>("");
   const [instructions, setInstructions] = useState<string>("");
   const [recipeLink, setRecipeLink] = useState<string>("");
   const [visibility, setVisibility] = useState<boolean>(true);
@@ -71,15 +68,16 @@ export default function EditMealScreen() {
 
     const maxRetries = 3;
     let attempt = 0;
+    let success = false;
 
-    while (attempt < maxRetries) {
+    while (attempt < maxRetries && !success) {
       try {
         if (!mealId) {
           throw new Error("Meal ID is missing. Cannot fetch meal details.");
         }
-
         const { data: userData, error: userError } = await supabase.auth.getUser();
         if (userError || !userData?.user) {
+          console.error(`[EditMeal] User authentication error:`, userError);
           throw new Error("User not authenticated. Please log in.");
         }
         const userId = userData.user.id;
@@ -100,8 +98,10 @@ export default function EditMealScreen() {
 
         if (mealResponse.error || !mealResponse.data) {
           if (mealResponse.error?.code === 'PGRST116') {
+            console.error(`[EditMeal] Meal not found or no permission`);
             throw new Error("Meal not found or you don't have permission to edit it.");
           }
+          console.error(`[EditMeal] Meal fetch error:`, mealResponse.error);
           throw mealResponse.error || new Error("Failed to fetch meal details.");
         }
 
@@ -125,10 +125,6 @@ export default function EditMealScreen() {
               }))
             : [{ name: "", quantity: "", unit: "" }]
         );
-        setCalories(mealData.calories?.toString() || "");
-        setProtein(mealData.protein?.toString() || "");
-        setCarbohydrates(mealData.carbohydrates?.toString() || "");
-        setFat(mealData.fat?.toString() || "");
         setInstructions(mealData.instructions || "");
         setRecipeLink(mealData.recipeLink || "");
         setVisibility(mealData.visibility ?? true);
@@ -137,14 +133,15 @@ export default function EditMealScreen() {
         
         setRetryCount(0);
         setHasUnsavedChanges(false);
-        return; // Success, exit retry loop
+        success = true;
 
       } catch (error) {
         attempt++;
-        console.error(`Error fetching meal details (attempt ${attempt}):`, error);
+        console.error(`[EditMeal] Error fetching meal details (attempt ${attempt}):`, error);
         
         if (attempt >= maxRetries) {
           const errorMessage = error instanceof Error ? error.message : "Failed to fetch meal details.";
+          console.error(`[EditMeal] Max retries reached. Final error:`, errorMessage);
           setError(errorMessage);
           
           if (errorMessage.includes("not found") || errorMessage.includes("permission")) {
@@ -161,6 +158,7 @@ export default function EditMealScreen() {
       }
     }
 
+    // Always set loading to false at the end
     setLoading(false);
   }, [mealId, router]);
 
@@ -181,21 +179,8 @@ export default function EditMealScreen() {
     });
     if (invalidQuantities) errors.push("All ingredient quantities must be positive numbers");
     
-    const nutritionFields = [
-      { value: calories, name: "Calories" },
-      { value: protein, name: "Protein" },
-      { value: carbohydrates, name: "Carbohydrates" },
-      { value: fat, name: "Fat" }
-    ];
-    
-    for (const field of nutritionFields) {
-      if (field.value && (isNaN(parseInt(field.value)) || parseInt(field.value) < 0)) {
-        errors.push(`${field.name} must be a non-negative number`);
-      }
-    }
-    
     return errors;
-  }, [name, description, ingredients, calories, protein, carbohydrates, fat]);
+  }, [name, description, ingredients]);
 
   // Add refresh functionality
   const handleRefresh = useCallback(async () => {
@@ -264,10 +249,6 @@ export default function EditMealScreen() {
           .update({
             name: name.trim(),
             description: description.trim(),
-            calories: calories ? parseInt(calories) : null,
-            protein: protein ? parseInt(protein) : null,
-            carbohydrates: carbohydrates ? parseInt(carbohydrates) : null,
-            fat: fat ? parseInt(fat) : null,
             instructions: instructions.trim() || null,
             recipeLink: recipeLink.trim() || null,
             visibility,
@@ -352,10 +333,6 @@ export default function EditMealScreen() {
     name,
     description,
     ingredients,
-    calories,
-    protein,
-    carbohydrates,
-    fat,
     instructions,
     recipeLink,
     visibility,
@@ -409,6 +386,7 @@ export default function EditMealScreen() {
 
   useEffect(() => {
     if (!mealId) {
+      console.error(`[EditMeal] No mealId provided, redirecting to meals list`);
       Alert.alert("Error", "Meal ID is missing. Returning to the previous screen.");
       router.push("/(app)/my-meals/meals");
       return;
@@ -419,29 +397,58 @@ export default function EditMealScreen() {
 
   if (loading) {
     return (
-      <View style={[styles.loadingContainer, { backgroundColor: theme.background }]}>
+      <View style={[styles.container, { backgroundColor: theme.background }]}>
         <View style={styles.centerContent}>
-          <ActivityIndicator size="large" color={theme.primary} />
-          <Text style={[styles.loadingText, { color: theme.text }]}>Loading meal details...</Text>
+          <View style={[styles.loadingCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+            <ActivityIndicator size="large" color={theme.primary} />
+            <Text style={[styles.loadingText, { color: theme.text }]}>
+              Loading meal details...
+            </Text>
+            <Text style={[styles.retryText, { color: theme.textSecondary }]}>
+              Please wait while we fetch your meal information
+            </Text>
+          </View>
+          
           {error && (
-            <View style={styles.errorContainer}>
-              <Text style={[styles.errorText, { color: theme.danger }]}>
+            <View style={[styles.errorContainer, { backgroundColor: theme.card, borderColor: theme.danger }]}>
+              <Ionicons name="alert-circle" size={48} color={theme.danger} />
+              <Text style={[styles.errorTitle, { color: theme.danger }]}>
+                Loading Failed
+              </Text>
+              <Text style={[styles.errorText, { color: theme.text }]}>
                 {error}
               </Text>
               <TouchableOpacity
                 style={[styles.retryButton, { backgroundColor: theme.primary }]}
                 onPress={() => fetchMealDetails()}
               >
-                <Text style={[styles.retryButtonText, { color: theme.buttonText }]}>
-                  Retry
-                </Text>
+                <View style={styles.buttonContent}>
+                  <Ionicons name="refresh" size={16} color={theme.buttonText} />
+                  <Text style={[styles.retryButtonText, { color: theme.buttonText }]}>
+                    Try Again
+                  </Text>
+                </View>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.backButton, { borderColor: theme.border, backgroundColor: theme.card }]}
+                onPress={() => router.back()}
+              >
+                <View style={styles.buttonContent}>
+                  <Ionicons name="arrow-back" size={16} color={theme.text} />
+                  <Text style={[styles.cancelButtonText, { color: theme.text }]}>
+                    Go Back
+                  </Text>
+                </View>
               </TouchableOpacity>
             </View>
           )}
+          
           {retryCount > 0 && (
-            <Text style={[styles.retryText, { color: theme.warning }]}>
-              Retry attempt {retryCount}/3...
-            </Text>
+            <View style={[styles.retryBanner, { backgroundColor: theme.card, borderColor: theme.warning }]}>
+              <Text style={[styles.retryBannerText, { color: theme.warning }]}>
+                Retry attempt {retryCount}/3...
+              </Text>
+            </View>
           )}
         </View>
       </View>
@@ -451,6 +458,7 @@ export default function EditMealScreen() {
   return (
     <ScrollView 
       style={[styles.container, { backgroundColor: theme.background }]}
+      contentContainerStyle={styles.scrollContainer}
       refreshControl={
         <RefreshControl
           refreshing={refreshing}
@@ -462,6 +470,7 @@ export default function EditMealScreen() {
     >
       {error && (
         <View style={[styles.errorBanner, { backgroundColor: theme.card, borderColor: theme.danger }]}>
+          <Ionicons name="warning" size={20} color={theme.danger} />
           <Text style={[styles.errorBannerText, { color: theme.danger }]}>
             {error}
           </Text>
@@ -478,6 +487,7 @@ export default function EditMealScreen() {
 
       {retryCount > 0 && (
         <View style={[styles.retryBanner, { backgroundColor: theme.card, borderColor: theme.warning }]}>
+          <Ionicons name="refresh-circle" size={20} color={theme.warning} />
           <Text style={[styles.retryBannerText, { color: theme.warning }]}>
             Retry attempt {retryCount}/3...
           </Text>
@@ -486,211 +496,571 @@ export default function EditMealScreen() {
 
       {hasUnsavedChanges && (
         <View style={[styles.unsavedBanner, { backgroundColor: theme.card, borderColor: theme.warning }]}>
+          <Ionicons name="create" size={20} color={theme.warning} />
           <Text style={[styles.unsavedBannerText, { color: theme.warning }]}>
             You have unsaved changes
           </Text>
         </View>
       )}
 
-      <Text style={[styles.label, { color: theme.text }]}>Name</Text>
-      <TextInput
-        style={[styles.input, { backgroundColor: theme.card, color: theme.text }]}
-        value={name}
-        onChangeText={(value) => handleFieldChange(setName, value)}
-        placeholder="Meal Name"
-        placeholderTextColor={theme.placeholder}
-      />
-
-      <Text style={[styles.label, { color: theme.text }]}>Description</Text>
-      <TextInput
-        style={[styles.input, { backgroundColor: theme.card, color: theme.text }]}
-        value={description}
-        onChangeText={(value) => handleFieldChange(setDescription, value)}
-        placeholder="Meal Description"
-        placeholderTextColor={theme.placeholder}
-        multiline
-      />
-
-      <Text style={[styles.label, { color: theme.text }]}>Ingredients</Text>
-      {ingredients.map((ingredient, idx) => (
-        <View key={idx} style={{ flexDirection: "row", marginBottom: 8, alignItems: "center" }}>
-          <TextInput
-            style={[styles.input, { flex: 2, marginRight: 4, backgroundColor: theme.card, color: theme.text }]}
-            value={ingredient.name}
-            onChangeText={text => updateIngredient(idx, "name", text)}
-            placeholder="Name"
-            placeholderTextColor={theme.placeholder}
-          />
-          <TextInput
-            style={[styles.input, { flex: 1, marginRight: 4, backgroundColor: theme.card, color: theme.text }]}
-            value={ingredient.quantity}
-            onChangeText={text => updateIngredient(idx, "quantity", text)}
-            placeholder="Qty"
-            placeholderTextColor={theme.placeholder}
-            keyboardType="numeric"
-          />
-          <TextInput
-            style={[styles.input, { flex: 1, marginRight: 4, backgroundColor: theme.card, color: theme.text }]}
-            value={ingredient.unit}
-            onChangeText={text => updateIngredient(idx, "unit", text)}
-            placeholder="Unit"
-            placeholderTextColor={theme.placeholder}
-          />
-          <TouchableOpacity onPress={() => removeIngredient(idx)}>
-            <Text style={{ color: theme.danger, fontWeight: "bold", fontSize: 18 }}>✕</Text>
-          </TouchableOpacity>
+      {/* Basic Information Card */}
+      <View style={[styles.formCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+        <View style={styles.cardHeader}>
+          <Ionicons name="restaurant" size={24} color={theme.primary} />
+          <Text style={[styles.cardTitle, { color: theme.text }]}>Basic Information</Text>
         </View>
-      ))}
-      <TouchableOpacity
-        onPress={addIngredient}
-        style={{ marginBottom: 12 }}
-      >
-        <Text style={{ color: theme.primary, fontWeight: "bold" }}>+ Add Ingredient</Text>
-      </TouchableOpacity>
+        
+        <View style={styles.inputGroup}>
+          <Text style={[styles.label, { color: theme.text }]}>Meal Name</Text>
+          <TextInput
+            style={[styles.input, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
+            value={name}
+            onChangeText={(value) => handleFieldChange(setName, value)}
+            placeholder="Enter meal name"
+            placeholderTextColor={theme.placeholder}
+          />
+        </View>
 
-      <Text style={[styles.label, { color: theme.text }]}>Calories</Text>
-      <TextInput
-        style={[styles.input, { backgroundColor: theme.card, color: theme.text }]}
-        value={calories}
-        onChangeText={(value) => handleFieldChange(setCalories, value)}
-        placeholder="Calories"
-        placeholderTextColor={theme.placeholder}
-        keyboardType="numeric"
-      />
-
-      <Text style={[styles.label, { color: theme.text }]}>Protein (g)</Text>
-      <TextInput
-        style={[styles.input, { backgroundColor: theme.card, color: theme.text }]}
-        value={protein}
-        onChangeText={(value) => handleFieldChange(setProtein, value)}
-        placeholder="Protein"
-        placeholderTextColor={theme.placeholder}
-        keyboardType="numeric"
-      />
-
-      <Text style={[styles.label, { color: theme.text }]}>Carbohydrates (g)</Text>
-      <TextInput
-        style={[styles.input, { backgroundColor: theme.card, color: theme.text }]}
-        value={carbohydrates}
-        onChangeText={(value) => handleFieldChange(setCarbohydrates, value)}
-        placeholder="Carbohydrates"
-        placeholderTextColor={theme.placeholder}
-        keyboardType="numeric"
-      />
-
-      <Text style={[styles.label, { color: theme.text }]}>Fat (g)</Text>
-      <TextInput
-        style={[styles.input, { backgroundColor: theme.card, color: theme.text }]}
-        value={fat}
-        onChangeText={(value) => handleFieldChange(setFat, value)}
-        placeholder="Fat"
-        placeholderTextColor={theme.placeholder}
-        keyboardType="numeric"
-      />
-
-      <Text style={[styles.label, { color: theme.text }]}>Instructions</Text>
-      <TextInput
-        style={[styles.input, { backgroundColor: theme.card, color: theme.text }]}
-        value={instructions}
-        onChangeText={(value) => handleFieldChange(setInstructions, value)}
-        placeholder="Instructions"
-        placeholderTextColor={theme.placeholder}
-        multiline
-      />
-
-      {/* Dietary Restriction Dropdown */}
-      <Text style={[styles.label, { color: theme.text }]}>Dietary Restriction</Text>
-      <RNPickerSelect
-        onValueChange={(value) => handleFieldChange(setDietaryRestriction, value)}
-        items={dietaryOptions}
-        placeholder={{ label: "Select Dietary Restriction (optional)", value: "" }}
-        style={{
-          inputIOS: [styles.input, { backgroundColor: theme.card, borderColor: theme.border, color: theme.text }],
-          inputAndroid: [styles.input, { backgroundColor: theme.card, borderColor: theme.border, color: theme.text }],
-        }}
-        value={dietaryRestriction}
-      />
-
-      <Text style={[styles.label, { color: theme.text }]}>Cuisine</Text>
-      <RNPickerSelect
-        onValueChange={(value) => handleFieldChange(setCuisine, value)}
-        items={cuisineOptions}
-        placeholder={{ label: "Select Cuisine (optional)", value: "" }}
-        style={{
-          inputIOS: [styles.input, { backgroundColor: theme.card, borderColor: theme.border, color: theme.text }],
-          inputAndroid: [styles.input, { backgroundColor: theme.card, borderColor: theme.border, color: theme.text }],
-        }}
-        value={cuisine}
-      />
-
-      <Text style={[styles.label, { color: theme.text }]}>Recipe Link</Text>
-      <TextInput
-        style={[styles.input, { backgroundColor: theme.card, color: theme.text }]}
-        value={recipeLink}
-        onChangeText={(value) => handleFieldChange(setRecipeLink, value)}
-        placeholder="Recipe Link (optional)"
-        placeholderTextColor={theme.placeholder}
-      />
-
-      <View style={styles.switchContainer}>
-        <Text style={[styles.switchLabel, { color: theme.text }]}>Visibility</Text>
-        <Switch
-          value={visibility}
-          onValueChange={(value) => handleFieldChange(setVisibility, value)}
-          trackColor={{ false: theme.border, true: theme.primary }}
-          thumbColor={visibility ? theme.primary : theme.border}
-        />
+        <View style={styles.inputGroup}>
+          <Text style={[styles.label, { color: theme.text }]}>Description</Text>
+          <TextInput
+            style={[styles.textArea, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
+            value={description}
+            onChangeText={(value) => handleFieldChange(setDescription, value)}
+            placeholder="Describe your meal"
+            placeholderTextColor={theme.placeholder}
+            multiline
+            numberOfLines={3}
+          />
+        </View>
       </View>
 
-      <TouchableOpacity
-        style={[styles.saveButton, { backgroundColor: theme.primary }]}
-        onPress={handleSave}
-        disabled={saving}
-      >
-        {saving ? (
-          <ActivityIndicator size="small" color={theme.buttonText} />
-        ) : (
-          <Text style={[styles.saveButtonText, { color: theme.buttonText }]}>Save Changes</Text>
-        )}
-      </TouchableOpacity>
+      {/* Ingredients Card */}
+      <View style={[styles.formCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+        <View style={styles.cardHeader}>
+          <Ionicons name="list" size={24} color={theme.primary} />
+          <Text style={[styles.cardTitle, { color: theme.text }]}>Ingredients</Text>
+        </View>
+        
+        {ingredients.map((ingredient, idx) => (
+          <View key={idx} style={styles.ingredientRow}>
+            <TextInput
+              style={[styles.ingredientInput, styles.ingredientName, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
+              value={ingredient.name}
+              onChangeText={text => updateIngredient(idx, "name", text)}
+              placeholder="Ingredient name"
+              placeholderTextColor={theme.placeholder}
+            />
+            <TextInput
+              style={[styles.ingredientInput, styles.ingredientQuantity, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
+              value={ingredient.quantity}
+              onChangeText={text => updateIngredient(idx, "quantity", text)}
+              placeholder="Qty"
+              placeholderTextColor={theme.placeholder}
+              keyboardType="numeric"
+            />
+            <TextInput
+              style={[styles.ingredientInput, styles.ingredientUnit, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
+              value={ingredient.unit}
+              onChangeText={text => updateIngredient(idx, "unit", text)}
+              placeholder="Unit"
+              placeholderTextColor={theme.placeholder}
+            />
+            <TouchableOpacity 
+              style={styles.removeButton}
+              onPress={() => removeIngredient(idx)}
+            >
+              <Ionicons name="close-circle" size={24} color={theme.danger} />
+            </TouchableOpacity>
+          </View>
+        ))}
+        
+        <TouchableOpacity
+          style={[styles.addButton, { borderColor: theme.primary }]}
+          onPress={addIngredient}
+        >
+          <Ionicons name="add-circle" size={20} color={theme.primary} />
+          <Text style={[styles.addButtonText, { color: theme.primary }]}>Add Ingredient</Text>
+        </TouchableOpacity>
+      </View>
 
-      <TouchableOpacity
-        style={[styles.cancelButton, { borderColor: theme.border }]}
-        onPress={handleCancel}
-        disabled={saving}
-      >
-        <Text style={[styles.cancelButtonText, { color: theme.text }]}>Cancel</Text>
-      </TouchableOpacity>
+      {/* Additional Details Card */}
+      <View style={[styles.formCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+        <View style={styles.cardHeader}>
+          <Ionicons name="information-circle" size={24} color={theme.primary} />
+          <Text style={[styles.cardTitle, { color: theme.text }]}>Additional Details</Text>
+        </View>
+        
+        <View style={styles.inputGroup}>
+          <Text style={[styles.label, { color: theme.text }]}>Instructions</Text>
+          <TextInput
+            style={[styles.textArea, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
+            value={instructions}
+            onChangeText={(value) => handleFieldChange(setInstructions, value)}
+            placeholder="Cooking instructions (optional)"
+            placeholderTextColor={theme.placeholder}
+            multiline
+            numberOfLines={4}
+          />
+        </View>
+
+        <View style={styles.inputGroup}>
+          <Text style={[styles.label, { color: theme.text }]}>Dietary Restriction</Text>
+          <View style={[styles.pickerContainer, { backgroundColor: theme.background, borderColor: theme.border }]}>
+            <Ionicons name="leaf" size={20} color={theme.primary} style={styles.pickerIcon} />
+            <RNPickerSelect
+              onValueChange={(value) => handleFieldChange(setDietaryRestriction, value)}
+              items={dietaryOptions}
+              placeholder={{ label: "Select dietary restriction (optional)", value: "" }}
+              style={{
+                inputIOS: [styles.picker, { color: dietaryRestriction ? theme.text : theme.placeholder }],
+                inputAndroid: [styles.picker, { color: dietaryRestriction ? theme.text : theme.placeholder }],
+                placeholder: { color: theme.placeholder },
+              }}
+              value={dietaryRestriction}
+              useNativeAndroidPickerStyle={false}
+              Icon={() => <Ionicons name="chevron-down" size={16} color={theme.text} style={styles.pickerArrow} />}
+            />
+          </View>
+        </View>
+
+        <View style={styles.inputGroup}>
+          <Text style={[styles.label, { color: theme.text }]}>Cuisine Type</Text>
+          <View style={[styles.pickerContainer, { backgroundColor: theme.background, borderColor: theme.border }]}>
+            <Ionicons name="globe" size={20} color={theme.primary} style={styles.pickerIcon} />
+            <RNPickerSelect
+              onValueChange={(value) => handleFieldChange(setCuisine, value)}
+              items={cuisineOptions}
+              placeholder={{ label: "Select cuisine type (optional)", value: "" }}
+              style={{
+                inputIOS: [styles.picker, { color: cuisine ? theme.text : theme.placeholder }],
+                inputAndroid: [styles.picker, { color: cuisine ? theme.text : theme.placeholder }],
+                placeholder: { color: theme.placeholder },
+              }}
+              value={cuisine}
+              useNativeAndroidPickerStyle={false}
+              Icon={() => <Ionicons name="chevron-down" size={16} color={theme.text} style={styles.pickerArrow} />}
+            />
+          </View>
+        </View>
+
+        <View style={styles.inputGroup}>
+          <Text style={[styles.label, { color: theme.text }]}>Recipe Link</Text>
+          <TextInput
+            style={[styles.input, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
+            value={recipeLink}
+            onChangeText={(value) => handleFieldChange(setRecipeLink, value)}
+            placeholder="Recipe link (optional)"
+            placeholderTextColor={theme.placeholder}
+            autoCapitalize="none"
+          />
+        </View>
+
+        <View style={styles.switchRow}>
+          <View style={styles.switchInfo}>
+            <Ionicons name="eye" size={20} color={theme.primary} />
+            <Text style={[styles.label, { color: theme.text, marginTop: 0, marginBottom: 0 }]}>Make Public</Text>
+            <Text style={[styles.switchSubtext, { color: theme.textSecondary }]}>
+              Allow other users to discover this meal
+            </Text>
+          </View>
+          <Switch
+            value={visibility}
+            onValueChange={(value) => handleFieldChange(setVisibility, value)}
+            trackColor={{ false: theme.border, true: theme.primary }}
+            thumbColor={visibility ? theme.buttonText : theme.textSecondary}
+          />
+        </View>
+      </View>
+
+      {/* Action Buttons */}
+      <View style={styles.actionContainer}>
+        <TouchableOpacity
+          style={[styles.primaryButton, { backgroundColor: theme.primary }]}
+          onPress={handleSave}
+          disabled={saving}
+        >
+          {saving ? (
+            <View style={styles.buttonContent}>
+              <ActivityIndicator size="small" color={theme.buttonText} />
+              <Text style={[styles.buttonText, { color: theme.buttonText }]}>Saving...</Text>
+            </View>
+          ) : (
+            <View style={styles.buttonContent}>
+              <Ionicons name="checkmark-circle" size={20} color={theme.buttonText} />
+              <Text style={[styles.buttonText, { color: theme.buttonText }]}>Save Changes</Text>
+            </View>
+          )}
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.secondaryButton, { borderColor: theme.border, backgroundColor: theme.card }]}
+          onPress={handleCancel}
+          disabled={saving}
+        >
+          <View style={styles.buttonContent}>
+            <Ionicons name="close-circle" size={20} color={theme.text} />
+            <Text style={[styles.secondaryButtonText, { color: theme.text }]}>Cancel</Text>
+          </View>
+        </TouchableOpacity>
+      </View>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    padding: 16,
     flex: 1,
+    backgroundColor: 'transparent',
+    paddingTop: 48, // Add top padding to avoid status bar overlap
   },
-  loadingContainer: {
+  scrollContainer: {
+    flexGrow: 1,
+    paddingBottom: 100, // Add bottom padding for proper scrolling
+  },
+  centerContent: {
     flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+
+  // Enhanced Loading Card
+  loadingCard: {
+    padding: 40,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 5,
+    maxWidth: '90%',
   },
   loadingText: {
     marginTop: 16,
     fontSize: 16,
+    textAlign: 'center',
+    fontWeight: '600',
+  },
+  retryText: {
+    fontSize: 14,
+    marginTop: 8,
+    textAlign: 'center',
+    fontWeight: '500',
+  },
+
+  // Enhanced Error Styles
+  errorContainer: {
+    padding: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    maxWidth: '90%',
+    borderWidth: 2,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 5,
+  },
+  errorTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 12,
+    marginTop: 16,
+    textAlign: 'center',
+  },
+  errorText: {
+    fontSize: 16,
+    marginBottom: 20,
+    textAlign: 'center',
+    lineHeight: 24,
+  },
+  retryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 12,
+    marginBottom: 12,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  retryButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  backButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+
+  // Enhanced Banners
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    marginHorizontal: 16,
+    marginBottom: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  errorBannerText: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+  errorBannerButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  errorBannerButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  retryBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    marginHorizontal: 16,
+    marginBottom: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: 8,
+  },
+  retryBannerText: {
+    fontSize: 14,
+    fontWeight: "bold",
+  },
+  unsavedBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    marginHorizontal: 16,
+    marginBottom: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: 8,
+  },
+  unsavedBannerText: {
+    fontSize: 14,
+    fontWeight: "bold",
+  },
+
+  // Form Cards
+  formCard: {
+    margin: 16,
+    padding: 20,
+    borderRadius: 16,
+    borderWidth: 1,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 5,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+    gap: 12,
+  },
+  cardTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+  },
+
+  // Form Elements
+  inputGroup: {
+    marginBottom: 16,
   },
   label: {
-    marginTop: 16,
-    marginBottom: 4,
     fontSize: 16,
-    fontWeight: "600",
+    fontWeight: '600',
+    marginBottom: 8,
   },
   input: {
-    borderRadius: 8,
-    padding: 12,
+    borderRadius: 12,
+    padding: 16,
     fontSize: 16,
     borderWidth: 1,
-    borderColor: "#ccc",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  textArea: {
+    borderRadius: 12,
+    padding: 16,
+    fontSize: 16,
+    borderWidth: 1,
+    minHeight: 100,
+    textAlignVertical: 'top',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+
+  // Ingredients
+  ingredientRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+    gap: 8,
+  },
+  ingredientInput: {
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 14,
+    borderWidth: 1,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  ingredientName: {
+    flex: 2,
+  },
+  ingredientQuantity: {
+    flex: 1,
+  },
+  ingredientUnit: {
+    flex: 1,
+  },
+  removeButton: {
+    padding: 4,
+  },
+  addButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    marginTop: 8,
+    gap: 8,
+  },
+  addButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+
+  // Nutrition Grid
+  nutritionGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  nutritionItem: {
+    flex: 1,
+    minWidth: '45%',
+  },
+
+  // Picker Styles
+  pickerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingLeft: 16,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  pickerIcon: {
+    marginRight: 12,
+  },
+  picker: {
+    flex: 1,
+    height: 50,
+  },
+  pickerArrow: {
+    position: 'absolute',
+    right: 12,
+  },
+
+  // Switch Styles
+  switchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 16,
+  },
+  switchInfo: {
+    flex: 1,
+    gap: 4,
+  },
+  switchSubtext: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+
+  // Action Buttons
+  actionContainer: {
+    padding: 16,
+    gap: 12,
+  },
+  primaryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  secondaryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    borderWidth: 1,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  buttonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  buttonText: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  secondaryButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+
+  // Legacy styles for compatibility
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
   },
   switchContainer: {
     flexDirection: "row",
@@ -720,83 +1090,5 @@ const styles = StyleSheet.create({
   },
   cancelButtonText: {
     fontSize: 16,
-  },
-  centerContent: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 20,
-  },
-  errorContainer: {
-    marginTop: 20,
-    alignItems: "center",
-  },
-  errorText: {
-    fontSize: 16,
-    textAlign: "center",
-    marginBottom: 10,
-  },
-  retryButton: {
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 6,
-    marginVertical: 5,
-  },
-  retryButtonText: {
-    fontSize: 16,
-    fontWeight: "bold",
-  },
-  retryText: {
-    fontSize: 14,
-    marginTop: 10,
-    textAlign: "center",
-  },
-  errorBanner: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: 12,
-    marginHorizontal: 16,
-    marginBottom: 10,
-    borderRadius: 8,
-    borderWidth: 1,
-  },
-  errorBannerText: {
-    flex: 1,
-    fontSize: 14,
-    marginRight: 12,
-  },
-  errorBannerButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 6,
-    borderRadius: 4,
-  },
-  errorBannerButtonText: {
-    fontSize: 12,
-    fontWeight: "bold",
-  },
-  retryBanner: {
-    padding: 12,
-    marginHorizontal: 16,
-    marginBottom: 10,
-    borderRadius: 8,
-    borderWidth: 1,
-    alignItems: "center",
-  },
-  retryBannerText: {
-    fontSize: 14,
-    fontWeight: "bold",
-  },
-  unsavedBanner: {
-    padding: 12,
-    marginHorizontal: 16,
-    marginBottom: 10,
-    borderRadius: 8,
-    borderWidth: 1,
-    alignItems: "center",
-  },
-  unsavedBannerText: {
-    fontSize: 14,
-    fontWeight: "bold",
   },
 });

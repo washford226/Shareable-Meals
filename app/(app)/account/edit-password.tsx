@@ -9,10 +9,12 @@ import {
   ActivityIndicator,
   ScrollView,
   RefreshControl,
+  Platform,
 } from "react-native";
 import { useTheme } from "../../../context/ThemeContext";
 import { useRouter } from "expo-router";
 import { supabase } from "utils/supabase";
+import { Ionicons } from '@expo/vector-icons';
 
 const EditPassword = () => {
   const [currentPassword, setCurrentPassword] = useState<string>("");
@@ -223,9 +225,27 @@ const EditPassword = () => {
   // Enhanced loading state
   if (fetchingUser) {
     return (
-      <View style={[styles.container, { backgroundColor: theme.background, justifyContent: 'center', alignItems: 'center' }]}>
-        <ActivityIndicator size="large" color={theme.primary} />
-        <Text style={[styles.loadingText, { color: theme.text }]}>Fetching user information...</Text>
+      <View style={[styles.container, { backgroundColor: theme.background }]}>
+        {/* Modern Header */}
+        <View style={[styles.header, { backgroundColor: theme.background }]}>
+          <TouchableOpacity
+            style={[styles.backButton, { backgroundColor: theme.card }]}
+            onPress={() => router.back()}
+          >
+            <Ionicons name="arrow-back" size={20} color={theme.text} />
+          </TouchableOpacity>
+          <Text style={[styles.headerTitle, { color: theme.text }]}>
+            Change Password
+          </Text>
+          <View style={styles.headerActions} />
+        </View>
+
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={theme.primary} />
+          <Text style={[styles.loadingText, { color: theme.subtext }]}>
+            Loading security settings...
+          </Text>
+        </View>
       </View>
     );
   }
@@ -233,196 +253,608 @@ const EditPassword = () => {
   const passwordStrength = getPasswordStrength();
 
   return (
-    <ScrollView 
-      style={[styles.container, { backgroundColor: theme.background }]}
-      refreshControl={
-        <RefreshControl
-          refreshing={refreshing}
-          onRefresh={() => fetchUser(true)}
-          colors={[theme.primary]}
-          tintColor={theme.primary}
-        />
-      }
-    >
+    <View style={[styles.container, { backgroundColor: theme.background }]}>
+      {/* Modern Header */}
+      <View style={[styles.header, { backgroundColor: theme.background }]}>
+        <TouchableOpacity
+          style={[styles.headerBackButton, { backgroundColor: theme.card }]}
+          onPress={() => router.back()}
+        >
+          <Ionicons name="arrow-back" size={20} color={theme.text} />
+        </TouchableOpacity>
+        <Text style={[styles.headerTitle, { color: theme.text }]}>
+          Change Password
+        </Text>
+        <View style={styles.headerActions} />
+      </View>
+
       {/* Error Banner */}
       {error && (
-        <View style={[styles.errorBanner, { backgroundColor: theme.card, borderColor: theme.danger }]}>
-          <Text style={[styles.errorBannerText, { color: theme.danger }]}>{error}</Text>
+        <View style={[styles.errorBanner, { 
+          backgroundColor: `${theme.danger}15`, 
+          borderColor: theme.danger 
+        }]}>
+          <Ionicons name="alert-circle" size={16} color={theme.danger} />
+          <Text style={[styles.errorBannerText, { color: theme.danger }]}>
+            {error}
+          </Text>
           <TouchableOpacity 
             style={[styles.errorBannerButton, { backgroundColor: theme.danger }]}
             onPress={handleRetry}
           >
-            <Text style={[styles.errorBannerButtonText, { color: theme.buttonText }]}>Retry</Text>
+            <Text style={[styles.errorBannerButtonText, { color: theme.buttonText }]}>
+              Retry
+            </Text>
           </TouchableOpacity>
         </View>
       )}
 
       {/* Retry Banner */}
       {retryCount > 0 && !error && (
-        <View style={[styles.retryBanner, { backgroundColor: theme.card, borderColor: theme.primary }]}>
-          <Text style={[styles.retryBannerText, { color: theme.primary }]}>
+        <View style={[styles.retryBanner, { 
+          backgroundColor: `${theme.warning}15`, 
+          borderColor: theme.warning 
+        }]}>
+          <ActivityIndicator size="small" color={theme.warning} />
+          <Text style={[styles.retryBannerText, { color: theme.warning }]}>
             Retrying... (Attempt {retryCount})
           </Text>
         </View>
       )}
 
-      <Text style={[styles.title, { color: theme.text }]}>Change Password</Text>
-      
-      <Text style={[styles.subtitle, { color: theme.subtext }]}>
-        For your security, please enter your current password to confirm your identity.
-      </Text>
+      <ScrollView 
+        style={styles.content}
+        contentContainerStyle={styles.contentContainer}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => fetchUser(true)}
+            colors={[theme.primary]}
+            tintColor={theme.primary}
+          />
+        }
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Security Info Card */}
+        <View style={[styles.securityCard, { backgroundColor: theme.card }]}>
+          <View style={styles.cardHeader}>
+            <Ionicons name="shield-checkmark" size={20} color={theme.primary} />
+            <Text style={[styles.cardTitle, { color: theme.text }]}>
+              Password Security
+            </Text>
+          </View>
+          <Text style={[styles.securityDescription, { color: theme.subtext }]}>
+            For your security, please enter your current password to confirm your identity before setting a new password.
+          </Text>
+        </View>
 
-      {/* Current Password Section */}
-      <View style={styles.formSection}>
-        <Text style={[styles.fieldLabel, { color: theme.text }]}>Current Password *</Text>
-        <TextInput
-          style={[
-            styles.input, 
-            { 
-              borderColor: validationErrors.currentPassword ? theme.danger : theme.border, 
-              color: theme.text,
-              backgroundColor: theme.card
-            }
-          ]}
-          placeholder="Enter your current password"
-          placeholderTextColor={theme.placeholder}
-          secureTextEntry
-          value={currentPassword}
-          onChangeText={handleCurrentPasswordChange}
-          autoCapitalize="none"
-          editable={!loading}
-        />
-        {validationErrors.currentPassword && (
-          <Text style={[styles.errorText, { color: theme.danger }]}>{validationErrors.currentPassword}</Text>
-        )}
-      </View>
-
-      {/* New Password Section */}
-      <View style={styles.formSection}>
-        <Text style={[styles.fieldLabel, { color: theme.text }]}>New Password *</Text>
-        <TextInput
-          style={[
-            styles.input, 
-            { 
-              borderColor: validationErrors.newPassword ? theme.danger : theme.border, 
-              color: theme.text,
-              backgroundColor: theme.card
-            }
-          ]}
-          placeholder="Enter your new password"
-          placeholderTextColor={theme.placeholder}
-          secureTextEntry
-          value={newPassword}
-          onChangeText={handleNewPasswordChange}
-          autoCapitalize="none"
-          editable={!loading}
-        />
-        {validationErrors.newPassword && (
-          <Text style={[styles.errorText, { color: theme.danger }]}>{validationErrors.newPassword}</Text>
-        )}
-        
-        {/* Password Strength Indicator */}
-        {newPassword && !validationErrors.newPassword && (
-          <View style={styles.strengthContainer}>
-            <Text style={[styles.strengthLabel, { color: theme.subtext }]}>Password Strength: </Text>
-            <View style={styles.strengthBarContainer}>
-              <View style={[
-                styles.strengthBar,
-                { backgroundColor: theme.border }
-              ]}>
-                <View style={[
-                  styles.strengthFill,
-                  { 
-                    width: `${(passwordStrength.strength / 6) * 100}%`,
-                    backgroundColor: passwordStrength.strength >= 4 ? '#4CAF50' : 
-                                   passwordStrength.strength >= 3 ? '#FF9800' : '#F44336'
-                  }
-                ]} />
-              </View>
-              <Text style={[
-                styles.strengthText, 
+        {/* Current Password Card */}
+        <View style={[styles.passwordCard, { backgroundColor: theme.card }]}>
+          <View style={styles.cardHeader}>
+            <Ionicons name="lock-closed" size={20} color={theme.primary} />
+            <Text style={[styles.cardTitle, { color: theme.text }]}>
+              Current Password
+            </Text>
+          </View>
+          <View style={styles.inputContainer}>
+            <TextInput
+              style={[
+                styles.passwordInput, 
                 { 
-                  color: passwordStrength.strength >= 4 ? '#4CAF50' : 
-                         passwordStrength.strength >= 3 ? '#FF9800' : '#F44336'
+                  borderColor: validationErrors.currentPassword ? theme.danger : theme.border, 
+                  color: theme.text,
+                  backgroundColor: theme.background
                 }
-              ]}>
-                {passwordStrength.label}
+              ]}
+              placeholder="Enter your current password"
+              placeholderTextColor={theme.placeholder}
+              secureTextEntry
+              value={currentPassword}
+              onChangeText={handleCurrentPasswordChange}
+              autoCapitalize="none"
+              editable={!loading}
+            />
+            {validationErrors.currentPassword && (
+              <View style={styles.errorContainer}>
+                <Ionicons name="alert-circle" size={14} color={theme.danger} />
+                <Text style={[styles.errorText, { color: theme.danger }]}>
+                  {validationErrors.currentPassword}
+                </Text>
+              </View>
+            )}
+          </View>
+        </View>
+
+        {/* New Password Card */}
+        <View style={[styles.passwordCard, { backgroundColor: theme.card }]}>
+          <View style={styles.cardHeader}>
+            <Ionicons name="key" size={20} color={theme.primary} />
+            <Text style={[styles.cardTitle, { color: theme.text }]}>
+              New Password
+            </Text>
+          </View>
+          <View style={styles.inputContainer}>
+            <TextInput
+              style={[
+                styles.passwordInput, 
+                { 
+                  borderColor: validationErrors.newPassword ? theme.danger : theme.border, 
+                  color: theme.text,
+                  backgroundColor: theme.background
+                }
+              ]}
+              placeholder="Enter your new password"
+              placeholderTextColor={theme.placeholder}
+              secureTextEntry
+              value={newPassword}
+              onChangeText={handleNewPasswordChange}
+              autoCapitalize="none"
+              editable={!loading}
+            />
+            {validationErrors.newPassword && (
+              <View style={styles.errorContainer}>
+                <Ionicons name="alert-circle" size={14} color={theme.danger} />
+                <Text style={[styles.errorText, { color: theme.danger }]}>
+                  {validationErrors.newPassword}
+                </Text>
+              </View>
+            )}
+            
+            {/* Password Strength Indicator */}
+            {newPassword && !validationErrors.newPassword && (
+              <View style={styles.strengthContainer}>
+                <View style={styles.strengthHeader}>
+                  <Text style={[styles.strengthLabel, { color: theme.subtext }]}>
+                    Password Strength
+                  </Text>
+                  <Text style={[
+                    styles.strengthText, 
+                    { 
+                      color: passwordStrength.strength >= 4 ? '#4CAF50' : 
+                             passwordStrength.strength >= 3 ? '#FF9800' : '#F44336'
+                    }
+                  ]}>
+                    {passwordStrength.label}
+                  </Text>
+                </View>
+                <View style={[styles.strengthBar, { backgroundColor: theme.border }]}>
+                  <View style={[
+                    styles.strengthFill,
+                    { 
+                      width: `${(passwordStrength.strength / 6) * 100}%`,
+                      backgroundColor: passwordStrength.strength >= 4 ? '#4CAF50' : 
+                                     passwordStrength.strength >= 3 ? '#FF9800' : '#F44336'
+                    }
+                  ]} />
+                </View>
+              </View>
+            )}
+          </View>
+        </View>
+
+        {/* Confirm Password Card */}
+        <View style={[styles.passwordCard, { backgroundColor: theme.card }]}>
+          <View style={styles.cardHeader}>
+            <Ionicons name="checkmark-circle" size={20} color={theme.primary} />
+            <Text style={[styles.cardTitle, { color: theme.text }]}>
+              Confirm New Password
+            </Text>
+          </View>
+          <View style={styles.inputContainer}>
+            <TextInput
+              style={[
+                styles.passwordInput, 
+                { 
+                  borderColor: validationErrors.confirmPassword ? theme.danger : theme.border, 
+                  color: theme.text,
+                  backgroundColor: theme.background
+                }
+              ]}
+              placeholder="Confirm your new password"
+              placeholderTextColor={theme.placeholder}
+              secureTextEntry
+              value={confirmPassword}
+              onChangeText={handleConfirmPasswordChange}
+              autoCapitalize="none"
+              editable={!loading}
+            />
+            {validationErrors.confirmPassword && (
+              <View style={styles.errorContainer}>
+                <Ionicons name="alert-circle" size={14} color={theme.danger} />
+                <Text style={[styles.errorText, { color: theme.danger }]}>
+                  {validationErrors.confirmPassword}
+                </Text>
+              </View>
+            )}
+          </View>
+        </View>
+
+        {/* Password Requirements Card */}
+        <View style={[styles.requirementsCard, { backgroundColor: theme.card }]}>
+          <View style={styles.cardHeader}>
+            <Ionicons name="information-circle" size={20} color={theme.primary} />
+            <Text style={[styles.cardTitle, { color: theme.text }]}>
+              Password Requirements
+            </Text>
+          </View>
+          <View style={styles.requirementsList}>
+            <View style={styles.requirementItem}>
+              <Ionicons 
+                name={newPassword.length >= 6 ? "checkmark-circle" : "ellipse-outline"} 
+                size={16} 
+                color={newPassword.length >= 6 ? '#4CAF50' : theme.subtext} 
+              />
+              <Text style={[styles.requirementText, { 
+                color: newPassword.length >= 6 ? '#4CAF50' : theme.subtext 
+              }]}>
+                At least 6 characters long
+              </Text>
+            </View>
+            <View style={styles.requirementItem}>
+              <Ionicons 
+                name={currentPassword && newPassword && currentPassword !== newPassword ? "checkmark-circle" : "ellipse-outline"} 
+                size={16} 
+                color={currentPassword && newPassword && currentPassword !== newPassword ? '#4CAF50' : theme.subtext} 
+              />
+              <Text style={[styles.requirementText, { 
+                color: currentPassword && newPassword && currentPassword !== newPassword ? '#4CAF50' : theme.subtext 
+              }]}>
+                Different from your current password
+              </Text>
+            </View>
+            <View style={styles.requirementItem}>
+              <Ionicons 
+                name={/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/.test(newPassword) ? "checkmark-circle" : "ellipse-outline"} 
+                size={16} 
+                color={/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/.test(newPassword) ? '#4CAF50' : theme.subtext} 
+              />
+              <Text style={[styles.requirementText, { 
+                color: /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/.test(newPassword) ? '#4CAF50' : theme.subtext 
+              }]}>
+                Mix of uppercase, lowercase, and numbers (recommended)
               </Text>
             </View>
           </View>
-        )}
-      </View>
+        </View>
 
-      {/* Confirm Password Section */}
-      <View style={styles.formSection}>
-        <Text style={[styles.fieldLabel, { color: theme.text }]}>Confirm New Password *</Text>
-        <TextInput
-          style={[
-            styles.input, 
-            { 
-              borderColor: validationErrors.confirmPassword ? theme.danger : theme.border, 
-              color: theme.text,
-              backgroundColor: theme.card
-            }
-          ]}
-          placeholder="Confirm your new password"
-          placeholderTextColor={theme.placeholder}
-          secureTextEntry
-          value={confirmPassword}
-          onChangeText={handleConfirmPasswordChange}
-          autoCapitalize="none"
-          editable={!loading}
-        />
-        {validationErrors.confirmPassword && (
-          <Text style={[styles.errorText, { color: theme.danger }]}>{validationErrors.confirmPassword}</Text>
-        )}
-      </View>
+        {/* Action Buttons */}
+        <View style={styles.buttonContainer}>
+          <TouchableOpacity
+            style={[
+              styles.updateButton, 
+              { 
+                backgroundColor: isFormValid() && !loading ? theme.primary : theme.border,
+                opacity: loading ? 0.6 : 1
+              }
+            ]}
+            onPress={handleUpdatePassword}
+            disabled={!isFormValid() || loading}
+          >
+            {loading ? (
+              <ActivityIndicator size="small" color={theme.buttonText} />
+            ) : (
+              <>
+                <Ionicons name="save" size={16} color={theme.buttonText} />
+                <Text style={[styles.updateButtonText, { color: theme.buttonText }]}>
+                  Update Password
+                </Text>
+              </>
+            )}
+          </TouchableOpacity>
 
-      {/* Password Requirements */}
-      <View style={styles.requirementsContainer}>
-        <Text style={[styles.requirementsTitle, { color: theme.text }]}>Password Requirements:</Text>
-        <Text style={[styles.requirementText, { color: theme.subtext }]}>• At least 6 characters long</Text>
-        <Text style={[styles.requirementText, { color: theme.subtext }]}>• Different from your current password</Text>
-        <Text style={[styles.requirementText, { color: theme.subtext }]}>• Recommended: Mix of letters, numbers, and symbols</Text>
-      </View>
-
-      {/* Button Container */}
-      <View style={styles.buttonContainer}>
-        <TouchableOpacity
-          style={[
-            styles.button, 
-            { 
-              backgroundColor: isFormValid() && !loading ? theme.primary : theme.border,
-              opacity: loading ? 0.6 : 1
-            }
-          ]}
-          onPress={handleUpdatePassword}
-          disabled={!isFormValid() || loading}
-        >
-          {loading ? (
-            <ActivityIndicator size="small" color={theme.buttonText} />
-          ) : (
-            <Text style={[styles.buttonText, { color: theme.buttonText }]}>Update Password</Text>
-          )}
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.cancelButton, { borderColor: theme.border, opacity: loading ? 0.6 : 1 }]}
-          onPress={() => router.back()}
-          disabled={loading}
-        >
-          <Text style={[styles.cancelButtonText, { color: theme.text }]}>Cancel</Text>
-        </TouchableOpacity>
-      </View>
-    </ScrollView>
+          <TouchableOpacity
+            style={[styles.cancelButton, { 
+              borderColor: theme.border, 
+              backgroundColor: theme.background,
+              opacity: loading ? 0.6 : 1 
+            }]}
+            onPress={() => router.back()}
+            disabled={loading}
+          >
+            <Ionicons name="close" size={16} color={theme.text} />
+            <Text style={[styles.cancelButtonText, { color: theme.text }]}>
+              Cancel
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 20,
   },
+  
+  // Header Styles
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    paddingTop: 60,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E5E5',
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 3,
+      },
+    }),
+  },
+  headerBackButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 3,
+      },
+    }),
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    flex: 1,
+    textAlign: 'center',
+  },
+  headerActions: {
+    width: 40,
+    height: 40,
+  },
+
+  // Banner Styles
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    marginHorizontal: 16,
+    marginTop: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  errorBannerText: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '500',
+    marginLeft: 8,
+  },
+  errorBannerButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    marginLeft: 8,
+  },
+  errorBannerButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  retryBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    marginHorizontal: 16,
+    marginTop: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  retryBannerText: {
+    fontSize: 14,
+    fontWeight: '500',
+    marginLeft: 8,
+  },
+
+  // Content Styles
+  content: {
+    flex: 1,
+  },
+  contentContainer: {
+    padding: 16,
+    paddingBottom: 40,
+  },
+
+  // Card Styles
+  securityCard: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 4,
+      },
+    }),
+  },
+  passwordCard: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 4,
+      },
+    }),
+  },
+  requirementsCard: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 4,
+      },
+    }),
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  cardTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+  securityDescription: {
+    fontSize: 14,
+    lineHeight: 20,
+  },
+
+  // Input Styles
+  inputContainer: {
+    marginTop: 8,
+  },
+  passwordInput: {
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    fontSize: 16,
+    marginBottom: 8,
+  },
+  errorContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+    gap: 6,
+  },
+  errorText: {
+    fontSize: 14,
+    flex: 1,
+  },
+
+  // Password Strength Styles
+  strengthContainer: {
+    marginTop: 12,
+  },
+  strengthHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  strengthLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  strengthText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  strengthBar: {
+    height: 6,
+    borderRadius: 3,
+    overflow: 'hidden',
+  },
+  strengthFill: {
+    height: '100%',
+    borderRadius: 3,
+  },
+
+  // Requirements Styles
+  requirementsList: {
+    gap: 8,
+  },
+  requirementItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  requirementText: {
+    fontSize: 14,
+    flex: 1,
+  },
+
+  // Button Styles
+  buttonContainer: {
+    marginTop: 24,
+    gap: 12,
+  },
+  updateButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    borderRadius: 8,
+    gap: 8,
+  },
+  updateButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  cancelButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: 8,
+  },
+  cancelButtonText: {
+    fontSize: 16,
+    fontWeight: '500',
+  },
+
+  // Loading States
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 32,
+  },
+  loadingText: {
+    fontSize: 16,
+    fontWeight: '500',
+    marginTop: 12,
+    textAlign: 'center',
+  },
+
+  // Legacy styles (keeping for compatibility)
   title: {
     fontSize: 24,
     fontWeight: 'bold',
@@ -433,40 +865,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginBottom: 24,
     lineHeight: 22,
-  },
-  errorBanner: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 16,
-    marginBottom: 16,
-    borderRadius: 8,
-    borderWidth: 1,
-  },
-  errorBannerText: {
-    flex: 1,
-    fontSize: 14,
-    marginRight: 12,
-  },
-  errorBannerButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 6,
-  },
-  errorBannerButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  retryBanner: {
-    padding: 16,
-    marginBottom: 16,
-    borderRadius: 8,
-    borderWidth: 1,
-    alignItems: 'center',
-  },
-  retryBannerText: {
-    fontSize: 14,
-    fontWeight: '500',
   },
   formSection: {
     marginBottom: 20,
@@ -483,38 +881,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginBottom: 8,
   },
-  errorText: {
-    fontSize: 14,
-    marginTop: 4,
-    marginLeft: 4,
-  },
-  strengthContainer: {
-    marginTop: 12,
-  },
-  strengthLabel: {
-    fontSize: 14,
-    marginBottom: 8,
-    fontWeight: '500',
-  },
   strengthBarContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-  },
-  strengthBar: {
-    flex: 1,
-    height: 6,
-    borderRadius: 3,
-    marginRight: 12,
-    overflow: 'hidden',
-  },
-  strengthFill: {
-    height: '100%',
-    borderRadius: 3,
-  },
-  strengthText: {
-    fontSize: 12,
-    fontWeight: '600',
-    minWidth: 60,
   },
   requirementsContainer: {
     marginBottom: 24,
@@ -528,15 +897,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginBottom: 8,
   },
-  requirementText: {
-    fontSize: 14,
-    marginBottom: 4,
-    lineHeight: 20,
-  },
-  buttonContainer: {
-    marginTop: 12,
-    marginBottom: 32,
-  },
   button: {
     padding: 16,
     borderRadius: 8,
@@ -548,23 +908,6 @@ const styles = StyleSheet.create({
   buttonText: {
     fontSize: 16,
     fontWeight: '600',
-  },
-  cancelButton: {
-    padding: 16,
-    borderRadius: 8,
-    alignItems: 'center',
-    borderWidth: 1,
-    minHeight: 52,
-    justifyContent: 'center',
-  },
-  cancelButtonText: {
-    fontSize: 16,
-    fontWeight: '500',
-  },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-    textAlign: 'center',
   },
 });
 

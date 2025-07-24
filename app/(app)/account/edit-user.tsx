@@ -9,13 +9,15 @@ import {
   Image, 
   ActivityIndicator, 
   ScrollView,
-  RefreshControl 
+  RefreshControl,
+  Platform
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import RNPickerSelect from 'react-native-picker-select';
 import { useTheme } from '../../../context/ThemeContext';
 import { supabase } from 'utils/supabase';
+import { Ionicons } from '@expo/vector-icons';
 
 const dietaryOptions = [
   { label: 'None', value: 'None' },
@@ -253,159 +255,406 @@ const EditUserScreen: React.FC = () => {
     }
   };
 
-  if (loading) {
+  if (fetchingUser) {
     return (
-      <View style={[styles.loadingContainer, { backgroundColor: theme.background }]}>
-        <ActivityIndicator size="large" color={theme.primary} />
-        <Text style={[styles.loadingText, { color: theme.text }]}>Loading...</Text>
+      <View style={[styles.container, { backgroundColor: theme.background }]}>
+        {/* Modern Header */}
+        <View style={[styles.header, { backgroundColor: theme.background }]}>
+          <TouchableOpacity
+            style={[styles.backButton, { backgroundColor: theme.card }]}
+            onPress={() => router.back()}
+          >
+            <Ionicons name="arrow-back" size={20} color={theme.text} />
+          </TouchableOpacity>
+          <Text style={[styles.headerTitle, { color: theme.text }]}>
+            Edit Profile
+          </Text>
+          <View style={styles.headerActions} />
+        </View>
+
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={theme.primary} />
+          <Text style={[styles.loadingText, { color: theme.subtext }]}>
+            Loading profile data...
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
+  if (error && !username) {
+    return (
+      <View style={[styles.container, { backgroundColor: theme.background }]}>
+        {/* Modern Header */}
+        <View style={[styles.header, { backgroundColor: theme.background }]}>
+          <TouchableOpacity
+            style={[styles.backButton, { backgroundColor: theme.card }]}
+            onPress={() => router.back()}
+          >
+            <Ionicons name="arrow-back" size={20} color={theme.text} />
+          </TouchableOpacity>
+          <Text style={[styles.headerTitle, { color: theme.text }]}>
+            Edit Profile
+          </Text>
+          <View style={styles.headerActions} />
+        </View>
+
+        <View style={styles.errorContainer}>
+          <View style={[styles.errorCard, { backgroundColor: theme.card }]}>
+            <View style={styles.errorContent}>
+              <Ionicons name="alert-circle" size={48} color={theme.danger} />
+              <Text style={[styles.errorTitle, { color: theme.text }]}>
+                Failed to Load Profile
+              </Text>
+              <Text style={[styles.errorText, { color: theme.subtext }]}>
+                {error}
+              </Text>
+              <TouchableOpacity 
+                style={[styles.errorButton, { backgroundColor: theme.primary }]}
+                onPress={handleRetry}
+              >
+                <Ionicons name="refresh" size={16} color={theme.buttonText} />
+                <Text style={[styles.errorButtonText, { color: theme.buttonText }]}>
+                  Try Again
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
       </View>
     );
   }
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
+      {/* Modern Header */}
+      <View style={[styles.header, { backgroundColor: theme.background }]}>
+        <TouchableOpacity
+          style={[styles.headerBackButton, { backgroundColor: theme.card }]}
+          onPress={() => router.back()}
+        >
+          <Ionicons name="arrow-back" size={20} color={theme.text} />
+        </TouchableOpacity>
+        <Text style={[styles.headerTitle, { color: theme.text }]}>
+          Edit Profile
+        </Text>
+        <View style={styles.headerActions} />
+      </View>
+
+      {/* Error Banner */}
+      {error && (
+        <View style={[styles.errorBanner, { 
+          backgroundColor: `${theme.danger}15`, 
+          borderColor: theme.danger 
+        }]}>
+          <Ionicons name="alert-circle" size={16} color={theme.danger} />
+          <Text style={[styles.errorBannerText, { color: theme.danger }]}>
+            {error}
+          </Text>
+          <TouchableOpacity 
+            style={[styles.errorBannerButton, { backgroundColor: theme.danger }]}
+            onPress={handleRetry}
+          >
+            <Text style={[styles.errorBannerButtonText, { color: theme.buttonText }]}>
+              Retry
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Retry Banner */}
+      {retryCount > 0 && !error && (
+        <View style={[styles.retryBanner, { 
+          backgroundColor: `${theme.warning}15`, 
+          borderColor: theme.warning 
+        }]}>
+          <ActivityIndicator size="small" color={theme.warning} />
+          <Text style={[styles.retryBannerText, { color: theme.warning }]}>
+            Retrying... (Attempt {retryCount}/3)
+          </Text>
+        </View>
+      )}
+
       <ScrollView
-        contentContainerStyle={{ paddingBottom: 40 }}
-        keyboardShouldPersistTaps="handled"
+        style={styles.content}
+        contentContainerStyle={styles.contentContainer}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[theme.primary]}
+            tintColor={theme.primary}
+          />
+        }
         showsVerticalScrollIndicator={false}
       >
-        {/* Profile Picture */}
-        <Text style={[styles.label, { color: theme.text }]}>Profile Picture</Text>
-        {profilePicture ? (
-          <Image source={{ uri: profilePicture }} style={styles.profilePicture} />
-        ) : (
-          <View style={[styles.profilePicturePlaceholder, { backgroundColor: theme.button }]}>
-            <Text style={[styles.profilePicturePlaceholderText, { color: theme.text }]}>No Picture</Text>
+        {/* Profile Picture Card */}
+        <View style={[styles.profileCard, { backgroundColor: theme.card }]}>
+          <View style={styles.cardHeader}>
+            <Ionicons name="person-circle" size={20} color={theme.primary} />
+            <Text style={[styles.cardTitle, { color: theme.text }]}>
+              Profile Picture
+            </Text>
           </View>
-        )}
-        <TouchableOpacity
-          style={[styles.saveButton, { backgroundColor: theme.primary }]}
-          onPress={handleUpdateProfilePicture}
-        >
-          <Text style={[styles.saveButtonText, { color: theme.buttonText }]}>Change Profile Picture</Text>
-        </TouchableOpacity>
+          <View style={styles.profilePictureContainer}>
+            {profilePicture ? (
+              <Image source={{ uri: profilePicture }} style={styles.profilePicture} />
+            ) : (
+              <View style={[styles.profilePicturePlaceholder, { backgroundColor: theme.border }]}>
+                <Ionicons name="person" size={40} color={theme.subtext} />
+              </View>
+            )}
+            <TouchableOpacity
+              style={[styles.changePictureButton, { backgroundColor: theme.primary }]}
+              onPress={handleUpdateProfilePicture}
+              disabled={loading}
+            >
+              {loading ? (
+                <ActivityIndicator size="small" color={theme.buttonText} />
+              ) : (
+                <>
+                  <Ionicons name="camera" size={16} color={theme.buttonText} />
+                  <Text style={[styles.changePictureButtonText, { color: theme.buttonText }]}>
+                    Change Picture
+                  </Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
 
-        {/* Calorie Goal */}
-        <Text style={[styles.label, { color: theme.text }]}>Calorie Goal</Text>
-        <TextInput
-          style={[styles.input, { borderColor: theme.border, color: theme.text }]}
-          placeholder="Enter new calorie goal"
-          placeholderTextColor={theme.placeholder}
-          value={caloriesGoal}
-          onChangeText={setCaloriesGoal}
-          keyboardType="numeric"
-        />
-        <TouchableOpacity
-          style={[styles.saveButton, { backgroundColor: theme.primary }]}
-          onPress={handleUpdateCaloriesGoal}
-        >
-          <Text style={[styles.saveButtonText, { color: theme.buttonText }]}>Save Calorie Goal</Text>
-        </TouchableOpacity>
+        {/* Nutrition Goals Card */}
+        <View style={[styles.nutritionCard, { backgroundColor: theme.card }]}>
+          <View style={styles.cardHeader}>
+            <Ionicons name="fitness" size={20} color={theme.primary} />
+            <Text style={[styles.cardTitle, { color: theme.text }]}>
+              Nutrition Goals
+            </Text>
+          </View>
 
-        {/* Protein Goal */}
-        <Text style={[styles.label, { color: theme.text }]}>Protein Goal (g)</Text>
-        <TextInput
-          style={[styles.input, { borderColor: theme.border, color: theme.text }]}
-          placeholder="Enter new protein goal"
-          placeholderTextColor={theme.placeholder}
-          value={proteinGoal}
-          onChangeText={setProteinGoal}
-          keyboardType="numeric"
-        />
-        <TouchableOpacity
-          style={[styles.saveButton, { backgroundColor: theme.primary }]}
-          onPress={handleUpdateProteinGoal}
-        >
-          <Text style={[styles.saveButtonText, { color: theme.buttonText }]}>Save Protein Goal</Text>
-        </TouchableOpacity>
+          {/* Calorie Goal */}
+          <View style={styles.inputGroup}>
+            <Text style={[styles.inputLabel, { color: theme.text }]}>
+              Daily Calorie Goal
+            </Text>
+            <View style={styles.inputRow}>
+              <TextInput
+                style={[styles.textInput, { 
+                  borderColor: theme.border, 
+                  color: theme.text,
+                  backgroundColor: theme.background 
+                }]}
+                placeholder="2000"
+                placeholderTextColor={theme.placeholder}
+                value={caloriesGoal}
+                onChangeText={setCaloriesGoal}
+                keyboardType="numeric"
+              />
+              <TouchableOpacity
+                style={[styles.saveButton, { backgroundColor: theme.primary }]}
+                onPress={handleUpdateCaloriesGoal}
+                disabled={loading}
+              >
+                {loading ? (
+                  <ActivityIndicator size="small" color={theme.buttonText} />
+                ) : (
+                  <Ionicons name="checkmark" size={16} color={theme.buttonText} />
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
 
-        {/* Carbs Goal */}
-        <Text style={[styles.label, { color: theme.text }]}>Carbs Goal (g)</Text>
-        <TextInput
-          style={[styles.input, { borderColor: theme.border, color: theme.text }]}
-          placeholder="Enter new carbs goal"
-          placeholderTextColor={theme.placeholder}
-          value={carbsGoal}
-          onChangeText={setCarbsGoal}
-          keyboardType="numeric"
-        />
-        <TouchableOpacity
-          style={[styles.saveButton, { backgroundColor: theme.primary }]}
-          onPress={handleUpdateCarbsGoal}
-        >
-          <Text style={[styles.saveButtonText, { color: theme.buttonText }]}>Save Carbs Goal</Text>
-        </TouchableOpacity>
+          {/* Protein Goal */}
+          <View style={styles.inputGroup}>
+            <Text style={[styles.inputLabel, { color: theme.text }]}>
+              Protein Goal (g)
+            </Text>
+            <View style={styles.inputRow}>
+              <TextInput
+                style={[styles.textInput, { 
+                  borderColor: theme.border, 
+                  color: theme.text,
+                  backgroundColor: theme.background 
+                }]}
+                placeholder="150"
+                placeholderTextColor={theme.placeholder}
+                value={proteinGoal}
+                onChangeText={setProteinGoal}
+                keyboardType="numeric"
+              />
+              <TouchableOpacity
+                style={[styles.saveButton, { backgroundColor: theme.primary }]}
+                onPress={handleUpdateProteinGoal}
+                disabled={loading}
+              >
+                {loading ? (
+                  <ActivityIndicator size="small" color={theme.buttonText} />
+                ) : (
+                  <Ionicons name="checkmark" size={16} color={theme.buttonText} />
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
 
-        {/* Fat Goal */}
-        <Text style={[styles.label, { color: theme.text }]}>Fat Goal (g)</Text>
-        <TextInput
-          style={[styles.input, { borderColor: theme.border, color: theme.text }]}
-          placeholder="Enter new fat goal"
-          placeholderTextColor={theme.placeholder}
-          value={fatGoal}
-          onChangeText={setFatGoal}
-          keyboardType="numeric"
-        />
-        <TouchableOpacity
-          style={[styles.saveButton, { backgroundColor: theme.primary }]}
-          onPress={handleUpdateFatGoal}
-        >
-          <Text style={[styles.saveButtonText, { color: theme.buttonText }]}>Save Fat Goal</Text>
-        </TouchableOpacity>
+          {/* Carbs Goal */}
+          <View style={styles.inputGroup}>
+            <Text style={[styles.inputLabel, { color: theme.text }]}>
+              Carbohydrates Goal (g)
+            </Text>
+            <View style={styles.inputRow}>
+              <TextInput
+                style={[styles.textInput, { 
+                  borderColor: theme.border, 
+                  color: theme.text,
+                  backgroundColor: theme.background 
+                }]}
+                placeholder="250"
+                placeholderTextColor={theme.placeholder}
+                value={carbsGoal}
+                onChangeText={setCarbsGoal}
+                keyboardType="numeric"
+              />
+              <TouchableOpacity
+                style={[styles.saveButton, { backgroundColor: theme.primary }]}
+                onPress={handleUpdateCarbsGoal}
+                disabled={loading}
+              >
+                {loading ? (
+                  <ActivityIndicator size="small" color={theme.buttonText} />
+                ) : (
+                  <Ionicons name="checkmark" size={16} color={theme.buttonText} />
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
 
-        {/* Dietary Restrictions */}
-        <Text style={[styles.label, { color: theme.text }]}>Dietary Restrictions</Text>
-        <RNPickerSelect
-          onValueChange={(value) => setDietaryRestrictions(value)}
-          items={dietaryOptions}
-          placeholder={{
-            label: 'Select Dietary Restrictions',
-            value: null,
-          }}
-          style={{
-            inputIOS: styles.pickerInput,
-            inputAndroid: styles.pickerInput,
-          }}
-          value={dietaryRestrictions}
-        />
-        <TouchableOpacity
-          style={[styles.saveButton, { backgroundColor: theme.primary }]}
-          onPress={handleUpdateDietaryRestrictions}
-        >
-          <Text style={[styles.saveButtonText, { color: theme.buttonText }]}>Save Dietary Restrictions</Text>
-        </TouchableOpacity>
+          {/* Fat Goal */}
+          <View style={styles.inputGroup}>
+            <Text style={[styles.inputLabel, { color: theme.text }]}>
+              Fat Goal (g)
+            </Text>
+            <View style={styles.inputRow}>
+              <TextInput
+                style={[styles.textInput, { 
+                  borderColor: theme.border, 
+                  color: theme.text,
+                  backgroundColor: theme.background 
+                }]}
+                placeholder="70"
+                placeholderTextColor={theme.placeholder}
+                value={fatGoal}
+                onChangeText={setFatGoal}
+                keyboardType="numeric"
+              />
+              <TouchableOpacity
+                style={[styles.saveButton, { backgroundColor: theme.primary }]}
+                onPress={handleUpdateFatGoal}
+                disabled={loading}
+              >
+                {loading ? (
+                  <ActivityIndicator size="small" color={theme.buttonText} />
+                ) : (
+                  <Ionicons name="checkmark" size={16} color={theme.buttonText} />
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
 
-        {/* Allergies */}
-        <Text style={[styles.label, { color: theme.text }]}>Allergies</Text>
-        <TextInput
-          style={[styles.input, { borderColor: theme.border, color: theme.text }]}
-          placeholder="Enter your allergies (comma-separated)"
-          placeholderTextColor={theme.placeholder}
-          value={allergies}
-          onChangeText={setAllergies}
-        />
-        <TouchableOpacity
-          style={[styles.saveButton, { backgroundColor: theme.primary }]}
-          onPress={handleUpdateAllergies}
-        >
-          <Text style={[styles.saveButtonText, { color: theme.buttonText }]}>Save Allergies</Text>
-        </TouchableOpacity>
+        {/* Dietary Preferences Card */}
+        <View style={[styles.dietaryCard, { backgroundColor: theme.card }]}>
+          <View style={styles.cardHeader}>
+            <Ionicons name="leaf" size={20} color={theme.primary} />
+            <Text style={[styles.cardTitle, { color: theme.text }]}>
+              Dietary Preferences
+            </Text>
+          </View>
 
-        {/* Navigation Buttons */}
-        <TouchableOpacity
-          style={[styles.navigationButton, { backgroundColor: theme.primary }]}
-          onPress={() => router.push('/account/edit-email')}
-        >
-          <Text style={[styles.navigationButtonText, { color: theme.buttonText }]}>Edit Email & Password</Text>
-        </TouchableOpacity>
+          {/* Dietary Restrictions */}
+          <View style={styles.inputGroup}>
+            <Text style={[styles.inputLabel, { color: theme.text }]}>
+              Dietary Restrictions
+            </Text>
+            <View style={styles.pickerContainer}>
+              <RNPickerSelect
+                onValueChange={(value) => setDietaryRestrictions(value)}
+                items={dietaryOptions}
+                placeholder={{
+                  label: 'Select Dietary Restrictions',
+                  value: null,
+                }}
+                style={{
+                  inputIOS: [styles.pickerInput, { color: theme.text }],
+                  inputAndroid: [styles.pickerInput, { color: theme.text }],
+                }}
+                value={dietaryRestrictions}
+              />
+              <TouchableOpacity
+                style={[styles.saveButton, { backgroundColor: theme.primary }]}
+                onPress={handleUpdateDietaryRestrictions}
+                disabled={loading}
+              >
+                {loading ? (
+                  <ActivityIndicator size="small" color={theme.buttonText} />
+                ) : (
+                  <Ionicons name="checkmark" size={16} color={theme.buttonText} />
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
 
-        {/* Back Button */}
-        <TouchableOpacity
-          style={[styles.backButton, { backgroundColor: theme.button, borderColor: theme.border }]}
-          onPress={() => router.push('/account/account')}
-        >
-          <Text style={[styles.backButtonText, { color: theme.text }]}>Back</Text>
-        </TouchableOpacity>
+          {/* Allergies */}
+          <View style={styles.inputGroup}>
+            <Text style={[styles.inputLabel, { color: theme.text }]}>
+              Allergies
+            </Text>
+            <View style={styles.inputRow}>
+              <TextInput
+                style={[styles.textInput, { 
+                  borderColor: theme.border, 
+                  color: theme.text,
+                  backgroundColor: theme.background 
+                }]}
+                placeholder="e.g., nuts, dairy, shellfish"
+                placeholderTextColor={theme.placeholder}
+                value={allergies}
+                onChangeText={setAllergies}
+                multiline
+              />
+              <TouchableOpacity
+                style={[styles.saveButton, { backgroundColor: theme.primary }]}
+                onPress={handleUpdateAllergies}
+                disabled={loading}
+              >
+                {loading ? (
+                  <ActivityIndicator size="small" color={theme.buttonText} />
+                ) : (
+                  <Ionicons name="checkmark" size={16} color={theme.buttonText} />
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+
+        {/* Account Settings Card */}
+        <View style={[styles.accountCard, { backgroundColor: theme.card }]}>
+          <View style={styles.cardHeader}>
+            <Ionicons name="settings" size={20} color={theme.primary} />
+            <Text style={[styles.cardTitle, { color: theme.text }]}>
+              Account Settings
+            </Text>
+          </View>
+          <TouchableOpacity
+            style={[styles.accountButton, { backgroundColor: theme.background, borderColor: theme.border }]}
+            onPress={() => router.push('/account/edit-email')}
+          >
+            <Ionicons name="mail" size={20} color={theme.text} />
+            <Text style={[styles.accountButtonText, { color: theme.text }]}>
+              Edit Email & Password
+            </Text>
+            <Ionicons name="chevron-forward" size={20} color={theme.subtext} />
+          </TouchableOpacity>
+        </View>
       </ScrollView>
     </View>
   );
@@ -414,10 +663,355 @@ const EditUserScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 20,
+  },
+  
+  // Header Styles
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    paddingTop: 60,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E5E5',
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 3,
+      },
+    }),
+  },
+  headerBackButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 3,
+      },
+    }),
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    flex: 1,
+    textAlign: 'center',
+  },
+  headerActions: {
+    width: 40,
+    height: 40,
+  },
+
+  // Banner Styles
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    marginHorizontal: 16,
+    marginTop: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  errorBannerText: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '500',
+    marginLeft: 8,
+  },
+  errorBannerButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    marginLeft: 8,
+  },
+  errorBannerButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  retryBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    marginHorizontal: 16,
+    marginTop: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  retryBannerText: {
+    fontSize: 14,
+    fontWeight: '500',
+    marginLeft: 8,
+  },
+
+  // Content Styles
+  content: {
+    flex: 1,
+  },
+  contentContainer: {
+    padding: 16,
+    paddingBottom: 40,
+  },
+
+  // Card Styles
+  profileCard: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 4,
+      },
+    }),
+  },
+  nutritionCard: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 4,
+      },
+    }),
+  },
+  dietaryCard: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 4,
+      },
+    }),
+  },
+  accountCard: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 4,
+      },
+    }),
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  cardTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+
+  // Profile Picture Styles
+  profilePictureContainer: {
+    alignItems: 'center',
+  },
+  profilePicture: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    marginBottom: 12,
+  },
+  profilePicturePlaceholder: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  changePictureButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    gap: 6,
+  },
+  changePictureButtonText: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+
+  // Input Styles
+  inputGroup: {
+    marginBottom: 16,
+  },
+  inputLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    marginBottom: 8,
+  },
+  inputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  textInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+  },
+  saveButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
   },
+  pickerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  pickerInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#ccc',
+    borderRadius: 8,
+    padding: 12,
+    backgroundColor: '#fff',
+    fontSize: 14,
+  },
+
+  // Account Button Styles
+  accountButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: 12,
+  },
+  accountButtonText: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '500',
+  },
+
+  // Loading & Error States
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 32,
+  },
+  loadingText: {
+    fontSize: 16,
+    fontWeight: '500',
+    marginTop: 12,
+    textAlign: 'center',
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 32,
+  },
+  errorCard: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 24,
+    alignItems: 'center',
+    maxWidth: 300,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 4,
+      },
+    }),
+  },
+  errorContent: {
+    alignItems: 'center',
+  },
+  errorTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    marginTop: 12,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  errorText: {
+    fontSize: 14,
+    textAlign: 'center',
+    marginBottom: 20,
+    lineHeight: 20,
+  },
+  errorButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+    gap: 6,
+  },
+  errorButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+
+  // Legacy styles (keeping for compatibility)
   navigationButton: {
     marginTop: 10,
     padding: 12,
@@ -426,29 +1020,6 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   navigationButtonText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    textAlign: 'center',
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    fontSize: 16,
-    marginTop: 10,
-    textAlign: 'center',
-  },
-  backButton: {
-    alignSelf: 'flex-start',
-    padding: 10,
-    borderRadius: 10,
-    borderWidth: 1,
-    marginBottom: 20,
-    width: '100%',
-  },
-  backButtonText: {
     fontSize: 16,
     fontWeight: 'bold',
     textAlign: 'center',
@@ -471,43 +1042,11 @@ const styles = StyleSheet.create({
     marginTop: 10,
     width: '100%',
   },
-  saveButton: {
-    marginTop: 10,
-    padding: 12,
-    borderRadius: 10,
-    alignItems: 'center',
-    width: '100%',
-  },
   saveButtonText: {
     fontSize: 16,
     fontWeight: 'bold',
   },
-  profilePicture: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    marginTop: 10,
-    marginBottom: 10,
-  },
-  profilePicturePlaceholder: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 10,
-    marginBottom: 10,
-  },
   profilePicturePlaceholderText: {
-    fontSize: 16,
-  },
-  pickerInput: {
-    borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 16,
-    backgroundColor: '#fff',
     fontSize: 16,
   },
 });

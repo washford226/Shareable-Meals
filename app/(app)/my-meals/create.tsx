@@ -13,6 +13,7 @@ import {
   ActivityIndicator,
   RefreshControl,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { useTheme } from "../../../context/ThemeContext";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -70,10 +71,6 @@ const CreateMealScreen = () => {
   const [mealDietaryRestriction, setMealDietaryRestriction] = useState("");
   const [mealCuisine, setMealCuisine] = useState("");
   const [mealServings, setMealServings] = useState("1");
-  const [calories, setCalories] = useState("");
-  const [protein, setProtein] = useState("");
-  const [carbohydrates, setCarbohydrates] = useState("");
-  const [fat, setFat] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -186,21 +183,8 @@ const CreateMealScreen = () => {
       errors.push("Servings must be a positive number");
     }
     
-    const nutritionFields = [
-      { value: calories, name: "Calories" },
-      { value: protein, name: "Protein" },
-      { value: carbohydrates, name: "Carbohydrates" },
-      { value: fat, name: "Fat" }
-    ];
-    
-    for (const field of nutritionFields) {
-      if (field.value && (isNaN(parseInt(field.value)) || parseInt(field.value) < 0)) {
-        errors.push(`${field.name} must be a non-negative number`);
-      }
-    }
-    
     return errors;
-  }, [mealName, mealDescription, ingredients, mealServings, calories, protein, carbohydrates, fat]);
+  }, [mealName, mealDescription, ingredients, mealServings]);
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -218,10 +202,6 @@ const CreateMealScreen = () => {
       setMealDietaryRestriction("");
       setMealCuisine("");
       setMealServings("1");
-      setCalories("");
-      setProtein("");
-      setCarbohydrates("");
-      setFat("");
       setRetryCount(0);
     } catch (error) {
       console.error("Error refreshing form:", error);
@@ -279,10 +259,6 @@ const CreateMealScreen = () => {
             dietary_restrictions: mealDietaryRestriction || null,
             servings: mealServings ? parseInt(mealServings) : 1,
             cuisine: mealCuisine || null,
-            calories: calories ? parseInt(calories) : null,
-            protein: protein ? parseInt(protein) : null,
-            carbohydrates: carbohydrates ? parseInt(carbohydrates) : null,
-            fat: fat ? parseInt(fat) : null,
             picture: pictureUrl,
           },
         ]).select("id").single();
@@ -361,17 +337,14 @@ const CreateMealScreen = () => {
     mealDietaryRestriction, 
     mealCuisine, 
     mealServings, 
-    calories, 
-    protein, 
-    carbohydrates, 
-    fat, 
     uploadImageToSupabase, 
     router
   ]);
 
   return (
     <ScrollView 
-      contentContainerStyle={[styles.container, { backgroundColor: theme.background }]}
+      style={{ backgroundColor: theme.background }}
+      contentContainerStyle={styles.scrollContainer}
       refreshControl={
         <RefreshControl
           refreshing={refreshing}
@@ -383,6 +356,7 @@ const CreateMealScreen = () => {
     >
       {error && (
         <View style={[styles.errorBanner, { backgroundColor: theme.card, borderColor: theme.danger }]}>
+          <Ionicons name="warning" size={20} color={theme.danger} />
           <Text style={[styles.errorBannerText, { color: theme.danger }]}>
             {error}
           </Text>
@@ -399,226 +373,291 @@ const CreateMealScreen = () => {
 
       {retryCount > 0 && (
         <View style={[styles.retryBanner, { backgroundColor: theme.card, borderColor: theme.warning }]}>
+          <Ionicons name="refresh-circle" size={20} color={theme.warning} />
           <Text style={[styles.retryBannerText, { color: theme.warning }]}>
             Retry attempt {retryCount}/3...
           </Text>
         </View>
       )}
 
-      <Text style={[styles.title, { color: theme.text }]}>Create a New Meal</Text>
-
-      <TextInput
-        style={[styles.input, { backgroundColor: theme.card, borderColor: theme.border, color: theme.text }]}
-        placeholder="Meal Name"
-        placeholderTextColor={theme.placeholder}
-        value={mealName}
-        onChangeText={setMealName}
-        multiline
-      />
-
-      <TextInput
-        style={[styles.input, { backgroundColor: theme.card, borderColor: theme.border, color: theme.text }]}
-        placeholder="Meal Description"
-        placeholderTextColor={theme.placeholder}
-        value={mealDescription}
-        onChangeText={setMealDescription}
-        multiline
-      />
-
-      <Text style={[styles.label, { color: theme.text }]}>Ingredients</Text>
-      {ingredients.map((ingredient, idx) => (
-        <View key={idx} style={{ flexDirection: "row", marginBottom: 10, alignItems: "center" }}>
-          <TextInput
-            style={[styles.input, { flex: 2, marginRight: 5, backgroundColor: theme.card, borderColor: theme.border, color: theme.text }]}
-            placeholder="Name"
-            placeholderTextColor={theme.placeholder}
-            value={ingredient.name}
-            onChangeText={text => updateIngredient(idx, "name", text)}
-          />
-          <TextInput
-            style={[styles.input, { flex: 1, marginRight: 5, backgroundColor: theme.card, borderColor: theme.border, color: theme.text }]}
-            placeholder="Qty"
-            placeholderTextColor={theme.placeholder}
-            value={ingredient.quantity}
-            onChangeText={text => updateIngredient(idx, "quantity", text)}
-            keyboardType="numeric"
-          />
-          <RNPickerSelect
-            onValueChange={value => updateIngredient(idx, "unit", value)}
-            items={unitOptions}
-            value={ingredient.unit}
-            placeholder={{ label: "Unit", value: "" }}
-            style={{
-              inputIOS: {
-                color: ingredient.unit ? theme.text : theme.placeholder,
-                height: 50,
-                paddingHorizontal: 10,
-                borderWidth: 1,
-                borderColor: theme.border,
-                borderRadius: 8,
-                backgroundColor: theme.card,
-                paddingRight: 30,
-                flex: 1,
-                marginRight: 5,
-              },
-              inputAndroid: {
-                color: ingredient.unit ? theme.text : theme.placeholder,
-                height: 50,
-                paddingHorizontal: 10,
-                borderWidth: 1,
-                borderColor: theme.border,
-                borderRadius: 8,
-                backgroundColor: theme.card,
-                paddingRight: 30,
-                flex: 1,
-                marginRight: 5,
-                marginTop: -13,
-              },
-              iconContainer: {
-                top: 16,
-                right: 12,
-              },
-              placeholder: {
-                color: theme.placeholder,
-              },
-            }}
-            useNativeAndroidPickerStyle={false}
-            Icon={() => <Text style={{ fontSize: 16, color: theme.text }}>▼</Text>}
-          />
-          <TouchableOpacity onPress={() => removeIngredient(idx)}>
-            <Text style={{ color: theme.danger, fontWeight: "bold", fontSize: 18 }}>✕</Text>
-          </TouchableOpacity>
+      {/* Header Card */}
+      <View style={[styles.headerCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+        <View style={styles.headerContent}>
+          <Ionicons name="add-circle" size={32} color={theme.primary} />
+          <View style={styles.headerText}>
+            <Text style={[styles.title, { color: theme.text }]}>Create New Meal</Text>
+            <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
+              Add a custom meal to your collection
+            </Text>
+          </View>
         </View>
-      ))}
-      <TouchableOpacity onPress={addIngredient} style={{ marginBottom: 15 }}>
-        <Text style={{ color: theme.primary, fontWeight: "bold" }}>+ Add Ingredient</Text>
-      </TouchableOpacity>
-
-      <TextInput
-        style={[styles.input, { backgroundColor: theme.card, borderColor: theme.border, color: theme.text }]}
-        placeholder="Instructions"
-        placeholderTextColor={theme.placeholder}
-        value={mealInstructions}
-        onChangeText={setMealInstructions}
-        multiline
-      />
-
-      {/* Dietary Restrictions Dropdown */}
-      <Text style={[styles.label, { color: theme.text }]}>Dietary Restrictions</Text>
-      <RNPickerSelect
-        onValueChange={setMealDietaryRestriction}
-        items={dietaryOptions}
-        placeholder={{ label: "Select Dietary Restriction (optional)", value: "" }}
-        style={{
-          inputIOS: [styles.input, { backgroundColor: theme.card, borderColor: theme.border, color: theme.text }],
-          inputAndroid: [styles.input, { backgroundColor: theme.card, borderColor: theme.border, color: theme.text }],
-        }}
-        value={mealDietaryRestriction}
-      />
-
-      <Text style={[styles.label, { color: theme.text }]}>Cuisine</Text>
-      <RNPickerSelect
-        onValueChange={setMealCuisine}
-        items={cuisineOptions}
-        placeholder={{ label: "Select Cuisine (optional)", value: "" }}
-        style={{
-          inputIOS: [styles.input, { backgroundColor: theme.card, borderColor: theme.border, color: theme.text }],
-          inputAndroid: [styles.input, { backgroundColor: theme.card, borderColor: theme.border, color: theme.text }],
-        }}
-        value={mealCuisine}
-      />
-
-      <TextInput
-        style={[styles.input, { backgroundColor: theme.card, borderColor: theme.border, color: theme.text }]}
-        placeholder="Servings"
-        placeholderTextColor={theme.placeholder}
-        value={mealServings}
-        onChangeText={setMealServings}
-        keyboardType="numeric"
-      />
-
-      <TextInput
-        style={[styles.input, { backgroundColor: theme.card, borderColor: theme.border, color: theme.text }]}
-        placeholder="Calories"
-        placeholderTextColor={theme.placeholder}
-        value={calories}
-        onChangeText={setCalories}
-        keyboardType="numeric"
-      />
-      <TextInput
-        style={[styles.input, { backgroundColor: theme.card, borderColor: theme.border, color: theme.text }]}
-        placeholder="Protein (g)"
-        placeholderTextColor={theme.placeholder}
-        value={protein}
-        onChangeText={setProtein}
-        keyboardType="numeric"
-      />
-      <TextInput
-        style={[styles.input, { backgroundColor: theme.card, borderColor: theme.border, color: theme.text }]}
-        placeholder="Carbohydrates (g)"
-        placeholderTextColor={theme.placeholder}
-        value={carbohydrates}
-        onChangeText={setCarbohydrates}
-        keyboardType="numeric"
-      />
-      <TextInput
-        style={[styles.input, { backgroundColor: theme.card, borderColor: theme.border, color: theme.text }]}
-        placeholder="Fat (g)"
-        placeholderTextColor={theme.placeholder}
-        value={fat}
-        onChangeText={setFat}
-        keyboardType="numeric"
-      />
-
-      <TextInput
-        style={[styles.input, { backgroundColor: theme.card, borderColor: theme.border, color: theme.text }]}
-        placeholder="Recipe Link"
-        placeholderTextColor={theme.placeholder}
-        value={mealRecipeLink}
-        onChangeText={setMealRecipeLink}
-        multiline
-      />
-
-      <View style={styles.switchContainer}>
-        <Text style={[styles.label, { color: theme.text }]}>Make Meal Public</Text>
-        <Switch
-          value={mealVisibility}
-          onValueChange={setMealVisibility}
-          thumbColor={mealVisibility ? theme.primary : theme.border}
-          trackColor={{ false: theme.border, true: theme.primary }}
-        />
       </View>
 
-      <TouchableOpacity 
-        style={[styles.imagePicker, { backgroundColor: theme.primary }]} 
-        onPress={pickMealImage}
-        disabled={uploadingImage}
-      >
-        {uploadingImage ? (
-          <ActivityIndicator color={theme.buttonText} />
-        ) : (
-          <Text style={[styles.imagePickerText, { color: theme.buttonText }]}>Pick a Meal Image</Text>
-        )}
-      </TouchableOpacity>
-      {mealPicture && <Image source={{ uri: mealPicture }} style={styles.mealPicture} />}
+      {/* Basic Information Card */}
+      <View style={[styles.formCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+        <View style={styles.cardHeader}>
+          <Ionicons name="restaurant" size={24} color={theme.primary} />
+          <Text style={[styles.cardTitle, { color: theme.text }]}>Basic Information</Text>
+        </View>
+        
+        <View style={styles.inputGroup}>
+          <Text style={[styles.label, { color: theme.text }]}>Meal Name</Text>
+          <TextInput
+            style={[styles.input, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
+            placeholder="Enter meal name"
+            placeholderTextColor={theme.placeholder}
+            value={mealName}
+            onChangeText={setMealName}
+          />
+        </View>
 
-      <View style={styles.buttonContainer}>
+        <View style={styles.inputGroup}>
+          <Text style={[styles.label, { color: theme.text }]}>Description</Text>
+          <TextInput
+            style={[styles.textArea, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
+            placeholder="Describe your meal"
+            placeholderTextColor={theme.placeholder}
+            value={mealDescription}
+            onChangeText={setMealDescription}
+            multiline
+            numberOfLines={3}
+          />
+        </View>
+      </View>
+
+      {/* Image Card */}
+      <View style={[styles.formCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+        <View style={styles.cardHeader}>
+          <Ionicons name="camera" size={24} color={theme.primary} />
+          <Text style={[styles.cardTitle, { color: theme.text }]}>Meal Image</Text>
+        </View>
+        
+        <TouchableOpacity 
+          style={[styles.imagePicker, { backgroundColor: theme.primary, borderColor: theme.primary }]} 
+          onPress={pickMealImage}
+          disabled={uploadingImage}
+        >
+          <View style={styles.imagePickerContent}>
+            {uploadingImage ? (
+              <>
+                <ActivityIndicator color={theme.buttonText} />
+                <Text style={[styles.imagePickerText, { color: theme.buttonText }]}>Uploading...</Text>
+              </>
+            ) : (
+              <>
+                <Ionicons name="image" size={24} color={theme.buttonText} />
+                <Text style={[styles.imagePickerText, { color: theme.buttonText }]}>
+                  {mealPicture ? "Change Image" : "Add Meal Image"}
+                </Text>
+              </>
+            )}
+          </View>
+        </TouchableOpacity>
+        
+        {mealPicture && (
+          <View style={styles.imagePreview}>
+            <Image source={{ uri: mealPicture }} style={[styles.mealPicture, { borderColor: theme.border }]} />
+            <TouchableOpacity 
+              style={[styles.removeImageButton, { backgroundColor: theme.danger }]}
+              onPress={() => setMealPicture(null)}
+            >
+              <Ionicons name="close" size={16} color={theme.buttonText} />
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
+
+      {/* Ingredients Card */}
+      <View style={[styles.formCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+        <View style={styles.cardHeader}>
+          <Ionicons name="list" size={24} color={theme.primary} />
+          <Text style={[styles.cardTitle, { color: theme.text }]}>Ingredients</Text>
+        </View>
+        
+        {ingredients.map((ingredient, idx) => (
+          <View key={idx} style={styles.ingredientRow}>
+            <TextInput
+              style={[styles.ingredientInput, styles.ingredientName, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
+              placeholder="Ingredient name"
+              placeholderTextColor={theme.placeholder}
+              value={ingredient.name}
+              onChangeText={text => updateIngredient(idx, "name", text)}
+            />
+            <TextInput
+              style={[styles.ingredientInput, styles.ingredientQuantity, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
+              placeholder="Qty"
+              placeholderTextColor={theme.placeholder}
+              value={ingredient.quantity}
+              onChangeText={text => updateIngredient(idx, "quantity", text)}
+              keyboardType="numeric"
+            />
+            <View style={[styles.ingredientInput, styles.ingredientUnit, { backgroundColor: theme.background, borderColor: theme.border }]}>
+              <RNPickerSelect
+                onValueChange={value => updateIngredient(idx, "unit", value)}
+                items={unitOptions}
+                value={ingredient.unit}
+                placeholder={{ label: "Unit", value: "" }}
+                style={{
+                  inputIOS: [styles.unitPickerInput, { color: ingredient.unit ? theme.text : theme.placeholder }],
+                  inputAndroid: [styles.unitPickerInput, { color: ingredient.unit ? theme.text : theme.placeholder }],
+                  placeholder: { color: theme.placeholder },
+                }}
+                useNativeAndroidPickerStyle={false}
+                Icon={() => <Ionicons name="chevron-down" size={16} color={theme.text} style={styles.unitPickerArrow} />}
+              />
+            </View>
+            <TouchableOpacity 
+              style={styles.removeButton}
+              onPress={() => removeIngredient(idx)}
+            >
+              <Ionicons name="close-circle" size={24} color={theme.danger} />
+            </TouchableOpacity>
+          </View>
+        ))}
+        
         <TouchableOpacity
-          style={[styles.createButton, { backgroundColor: theme.primary }]}
+          style={[styles.addButton, { borderColor: theme.primary }]}
+          onPress={addIngredient}
+        >
+          <Ionicons name="add-circle" size={20} color={theme.primary} />
+          <Text style={[styles.addButtonText, { color: theme.primary }]}>Add Ingredient</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Additional Details Card */}
+      <View style={[styles.formCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+        <View style={styles.cardHeader}>
+          <Ionicons name="information-circle" size={24} color={theme.primary} />
+          <Text style={[styles.cardTitle, { color: theme.text }]}>Additional Details</Text>
+        </View>
+        
+        <View style={styles.inputGroup}>
+          <Text style={[styles.label, { color: theme.text }]}>Instructions</Text>
+          <TextInput
+            style={[styles.textArea, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
+            placeholder="Cooking instructions (optional)"
+            placeholderTextColor={theme.placeholder}
+            value={mealInstructions}
+            onChangeText={setMealInstructions}
+            multiline
+            numberOfLines={4}
+          />
+        </View>
+
+        <View style={styles.inputGroup}>
+          <Text style={[styles.label, { color: theme.text }]}>Dietary Restrictions</Text>
+          <View style={[styles.pickerContainer, { backgroundColor: theme.background, borderColor: theme.border }]}>
+            <Ionicons name="leaf" size={20} color={theme.primary} style={styles.pickerIcon} />
+            <RNPickerSelect
+              onValueChange={setMealDietaryRestriction}
+              items={dietaryOptions}
+              placeholder={{ label: "Select dietary restriction (optional)", value: "" }}
+              style={{
+                inputIOS: [styles.picker, { color: mealDietaryRestriction ? theme.text : theme.placeholder }],
+                inputAndroid: [styles.picker, { color: mealDietaryRestriction ? theme.text : theme.placeholder }],
+                placeholder: { color: theme.placeholder },
+              }}
+              value={mealDietaryRestriction}
+              useNativeAndroidPickerStyle={false}
+              Icon={() => <Ionicons name="chevron-down" size={16} color={theme.text} style={styles.pickerArrow} />}
+            />
+          </View>
+        </View>
+
+        <View style={styles.inputGroup}>
+          <Text style={[styles.label, { color: theme.text }]}>Cuisine Type</Text>
+          <View style={[styles.pickerContainer, { backgroundColor: theme.background, borderColor: theme.border }]}>
+            <Ionicons name="globe" size={20} color={theme.primary} style={styles.pickerIcon} />
+            <RNPickerSelect
+              onValueChange={setMealCuisine}
+              items={cuisineOptions}
+              placeholder={{ label: "Select cuisine type (optional)", value: "" }}
+              style={{
+                inputIOS: [styles.picker, { color: mealCuisine ? theme.text : theme.placeholder }],
+                inputAndroid: [styles.picker, { color: mealCuisine ? theme.text : theme.placeholder }],
+                placeholder: { color: theme.placeholder },
+              }}
+              value={mealCuisine}
+              useNativeAndroidPickerStyle={false}
+              Icon={() => <Ionicons name="chevron-down" size={16} color={theme.text} style={styles.pickerArrow} />}
+            />
+          </View>
+        </View>
+
+        <View style={styles.twoColumnRow}>
+          <View style={styles.inputGroup}>
+            <Text style={[styles.label, { color: theme.text }]}>Servings</Text>
+            <TextInput
+              style={[styles.input, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
+              placeholder="1"
+              placeholderTextColor={theme.placeholder}
+              value={mealServings}
+              onChangeText={setMealServings}
+              keyboardType="numeric"
+            />
+          </View>
+          
+          <View style={styles.inputGroup}>
+            <Text style={[styles.label, { color: theme.text }]}>Recipe Link</Text>
+            <TextInput
+              style={[styles.input, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
+              placeholder="Recipe URL (optional)"
+              placeholderTextColor={theme.placeholder}
+              value={mealRecipeLink}
+              onChangeText={setMealRecipeLink}
+              autoCapitalize="none"
+            />
+          </View>
+        </View>
+
+        <View style={styles.switchRow}>
+          <View style={styles.switchInfo}>
+            <View style={styles.switchHeader}>
+              <Ionicons name="eye" size={20} color={theme.primary} />
+              <Text style={[styles.label, { color: theme.text, marginTop: 0, marginBottom: 0, marginLeft: 8 }]}>Make Public</Text>
+            </View>
+            <Text style={[styles.switchSubtext, { color: theme.textSecondary }]}>
+              Allow other users to discover this meal
+            </Text>
+          </View>
+          <Switch
+            value={mealVisibility}
+            onValueChange={setMealVisibility}
+            trackColor={{ false: theme.border, true: theme.primary }}
+            thumbColor={mealVisibility ? theme.buttonText : theme.textSecondary}
+          />
+        </View>
+      </View>
+
+      {/* Action Buttons */}
+      <View style={styles.actionContainer}>
+        <TouchableOpacity
+          style={[styles.primaryButton, { backgroundColor: theme.primary }]}
           onPress={handleAddMeal}
           disabled={loading}
         >
           {loading ? (
-            <ActivityIndicator color={theme.buttonText} />
+            <View style={styles.buttonContent}>
+              <ActivityIndicator size="small" color={theme.buttonText} />
+              <Text style={[styles.buttonText, { color: theme.buttonText }]}>Creating...</Text>
+            </View>
           ) : (
-            <Text style={[styles.createButtonText, { color: theme.buttonText }]}>Create Meal</Text>
+            <View style={styles.buttonContent}>
+              <Ionicons name="checkmark-circle" size={20} color={theme.buttonText} />
+              <Text style={[styles.buttonText, { color: theme.buttonText }]}>Create Meal</Text>
+            </View>
           )}
         </TouchableOpacity>
+
         <TouchableOpacity
-          style={[styles.cancelButton, { backgroundColor: theme.danger }]}
+          style={[styles.secondaryButton, { borderColor: theme.border, backgroundColor: theme.card }]}
           onPress={() => router.back()}
+          disabled={loading}
         >
-          <Text style={[styles.createButtonText, { color: theme.buttonText }]}>Cancel</Text>
+          <View style={styles.buttonContent}>
+            <Ionicons name="close-circle" size={20} color={theme.text} />
+            <Text style={[styles.secondaryButtonText, { color: theme.text }]}>Cancel</Text>
+          </View>
         </TouchableOpacity>
       </View>
     </ScrollView>
@@ -626,37 +665,304 @@ const CreateMealScreen = () => {
 };
 
 const styles = StyleSheet.create({
-  container: {
+  scrollContainer: {
     flexGrow: 1,
-    justifyContent: "flex-start",
-    alignItems: "center",
-    padding: 20,
+    padding: 16,
+    paddingTop: 48,
+    paddingBottom: 32,
   },
+  
+  // Header Card Styles
+  headerCard: {
+    marginBottom: 24,
+    padding: 20,
+    borderRadius: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  headerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  headerTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginLeft: 12,
+  },
+  headerSubtitle: {
+    fontSize: 16,
+    lineHeight: 22,
+  },
+
+  // Form Card Styles
+  formCard: {
+    marginBottom: 16,
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  cardTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    marginLeft: 8,
+    flex: 1,
+  },
+  cardSubtitle: {
+    fontSize: 12,
+    fontWeight: '500',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
+    textTransform: 'uppercase',
+  },
+
+  // Input Styles
+  inputGroup: {
+    marginBottom: 16,
+  },
+  label: {
+    fontSize: 16,
+    fontWeight: '500',
+    marginBottom: 8,
+  },
+  input: {
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+  },
+  textArea: {
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    textAlignVertical: 'top',
+    minHeight: 100,
+  },
+
+  // Two Column Layout
+  twoColumnRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+
+  // Picker Styles
+  pickerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    minHeight: 48,
+  },
+  pickerIcon: {
+    marginRight: 8,
+  },
+  picker: {
+    flex: 1,
+    fontSize: 16,
+    paddingVertical: 0,
+  },
+  pickerArrow: {
+    position: 'absolute',
+    right: 12,
+  },
+
+  // Nutrition Grid
+  nutritionGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  nutritionItem: {
+    flex: 1,
+    minWidth: '45%',
+  },
+
+  // Image Picker Styles
+  imagePickerContent: {
+    alignItems: 'center',
+    padding: 20,
+    borderWidth: 2,
+    borderStyle: 'dashed',
+    borderRadius: 12,
+    marginBottom: 16,
+  },
+  imagePickerButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+    marginTop: 12,
+  },
+  imagePickerText: {
+    fontSize: 16,
+    fontWeight: '500',
+    marginLeft: 8,
+  },
+  imagePreview: {
+    width: '100%',
+    height: 200,
+    borderRadius: 8,
+    marginBottom: 12,
+  },
+  imageActions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  imageActionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  imageActionText: {
+    fontSize: 14,
+    fontWeight: '500',
+    marginLeft: 6,
+  },
+
+  // Ingredients Styles
+  ingredientsContainer: {
+    marginTop: 16,
+  },
+  ingredientRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+    gap: 8,
+  },
+  ingredientInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: 6,
+    padding: 10,
+    fontSize: 14,
+  },
+  unitPicker: {
+    width: 100,
+    borderWidth: 1,
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  deleteButton: {
+    padding: 6,
+    borderRadius: 4,
+  },
+  addIngredientButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    marginTop: 8,
+  },
+  addIngredientText: {
+    fontSize: 14,
+    fontWeight: '500',
+    marginLeft: 6,
+  },
+
+  // Switch Styles
+  switchRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+  },
+  switchInfo: {
+    flex: 1,
+    marginRight: 16,
+  },
+  switchHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  switchSubtext: {
+    fontSize: 12,
+    lineHeight: 16,
+  },
+
+  // Action Buttons
+  actionContainer: {
+    gap: 12,
+    marginTop: 24,
+  },
+  primaryButton: {
+    borderRadius: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  secondaryButton: {
+    borderRadius: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    borderWidth: 1,
+  },
+  buttonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  buttonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+  secondaryButtonText: {
+    fontSize: 16,
+    fontWeight: '500',
+    marginLeft: 8,
+  },
+
+  // Legacy Styles (for compatibility)
   title: {
     fontSize: 24,
     fontWeight: "bold",
     marginBottom: 20,
     textAlign: "center",
   },
-  input: {
-    height: 50,
-    borderWidth: 1,
-    borderRadius: 8,
-    marginBottom: 15,
-    paddingHorizontal: 15,
-    width: "100%",
+  
+  // Header specific styles
+  headerText: {
+    flex: 1,
+    marginLeft: 12,
   },
-  switchContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    width: "100%",
-    marginBottom: 20,
-    paddingHorizontal: 10,
-  },
-  label: {
+  subtitle: {
     fontSize: 16,
+    lineHeight: 22,
   },
+  
+  // Image picker specific styles
   imagePicker: {
     padding: 12,
     borderRadius: 8,
@@ -664,9 +970,73 @@ const styles = StyleSheet.create({
     width: "100%",
     alignItems: "center",
   },
-  imagePickerText: {
-    fontSize: 16,
-    fontWeight: "bold",
+  removeImageButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 6,
+    marginTop: 8,
+  },
+  
+  // Ingredient specific styles
+  ingredientName: {
+    flex: 2,
+    marginRight: 8,
+  },
+  ingredientQuantity: {
+    flex: 1,
+    marginRight: 8,
+  },
+  ingredientUnit: {
+    width: 80,
+    marginRight: 8,
+  },
+  unitPickerInput: {
+    fontSize: 14,
+    paddingVertical: 0,
+    paddingRight: 20,
+  },
+  unitPickerArrow: {
+    position: 'absolute',
+    right: 8,
+    top: '50%',
+    transform: [{ translateY: -8 }],
+  },
+  unitPickerContainer: {
+    width: 100,
+    borderWidth: 1,
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    marginRight: 8,
+  },
+  removeButton: {
+    padding: 6,
+    borderRadius: 4,
+  },
+  addButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    marginTop: 8,
+  },
+  addButtonText: {
+    fontSize: 14,
+    fontWeight: '500',
+    marginLeft: 6,
+  },
+  
+  switchContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    width: "100%",
+    marginBottom: 20,
+    paddingHorizontal: 10,
   },
   mealPicture: {
     width: 200,

@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   ScrollView 
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../../context/ThemeContext';
 import BottomNav from 'components/bottomNav';
 import { useRouter } from 'expo-router';
@@ -164,9 +165,22 @@ const AccountScreen: React.FC = () => {
   // Show loading state
   if (loading) {
     return (
-      <View style={[styles.container, styles.centerContent, { backgroundColor: theme.background }]}>
-        <ActivityIndicator size="large" color={theme.primary} />
-        <Text style={[styles.loadingText, { color: theme.text }]}>Loading your profile...</Text>
+      <View style={[styles.container, { backgroundColor: theme.background }]}>
+        {/* Modern Header */}
+        <View style={[styles.header, { backgroundColor: theme.background }]}>
+          <View style={styles.headerLeft} />
+          <Text style={[styles.headerTitle, { color: theme.text }]}>
+            Account
+          </Text>
+          <View style={styles.headerActions} />
+        </View>
+
+        <View style={styles.centerContent}>
+          <ActivityIndicator size="large" color={theme.primary} />
+          <Text style={[styles.loadingText, { color: theme.subtext }]}>
+            Loading your profile...
+          </Text>
+        </View>
         <BottomNav />
       </View>
     );
@@ -175,52 +189,75 @@ const AccountScreen: React.FC = () => {
   // Show error state
   if (error) {
     return (
-      <View style={[styles.container, styles.centerContent, { backgroundColor: theme.background }]}>
-        <Text style={[styles.errorText, { color: theme.danger }]}>Failed to load profile</Text>
-        <Text style={[styles.errorSubtext, { color: theme.subtext }]}>{error}</Text>
-        <TouchableOpacity
-          style={[styles.retryButton, { backgroundColor: theme.primary }]}
-          onPress={() => {
-            setError(null);
-            // Trigger re-fetch by calling useEffect logic
-            const fetchData = async () => {
-              try {
-                setLoading(true);
-                setError(null);
-                
-                const { data: userData, error: userError } = await supabase.auth.getUser();
-                if (userError) throw new Error(`Authentication error: ${userError.message}`);
-                if (!userData?.user) throw new Error('No authenticated user found');
-                
-                const { data, error } = await supabase
-                  .from('user_profiles')
-                  .select('*')
-                  .eq('id', userData.user.id)
-                  .single();
+      <View style={[styles.container, { backgroundColor: theme.background }]}>
+        {/* Modern Header */}
+        <View style={[styles.header, { backgroundColor: theme.background }]}>
+          <View style={styles.headerLeft} />
+          <Text style={[styles.headerTitle, { color: theme.text }]}>
+            Account
+          </Text>
+          <View style={styles.headerActions} />
+        </View>
 
-                if (error) throw new Error(`Failed to fetch user profile: ${error.message}`);
-                if (!data) throw new Error('User profile not found');
+        <View style={styles.centerContent}>
+          <View style={[styles.errorCard, { backgroundColor: theme.card }]}>
+            <View style={styles.errorContent}>
+              <Ionicons name="alert-circle" size={48} color={theme.danger} />
+              <Text style={[styles.errorTitle, { color: theme.text }]}>
+                Failed to Load Profile
+              </Text>
+              <Text style={[styles.errorSubtext, { color: theme.subtext }]}>
+                {error}
+              </Text>
+              <TouchableOpacity
+                style={[styles.retryButton, { backgroundColor: theme.primary }]}
+                onPress={() => {
+                  setError(null);
+                  // Trigger re-fetch by calling useEffect logic
+                  const fetchData = async () => {
+                    try {
+                      setLoading(true);
+                      setError(null);
+                      
+                      const { data: userData, error: userError } = await supabase.auth.getUser();
+                      if (userError) throw new Error(`Authentication error: ${userError.message}`);
+                      if (!userData?.user) throw new Error('No authenticated user found');
+                      
+                      const { data, error } = await supabase
+                        .from('user_profiles')
+                        .select('*')
+                        .eq('id', userData.user.id)
+                        .single();
 
-                setUsername(data.username || 'Unknown User');
-                setCaloriesGoal(data.calories_goal);
-                setDietaryRestrictions(data.dietary_restrictions || 'None specified');
-                setEmail(data.email || 'No email provided');
-                setAllergies(data.allergies || 'None specified');
-                setProfilePicture(data.profile_picture);
-                setIsAdmin(data.is_admin || false);
-                
-              } catch (err) {
-                const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred';
-                setError(errorMessage);
-              } finally {
-                setLoading(false);
-              }
-            };
-            fetchData();
-          }}
-        >
-          <Text style={[styles.retryButtonText, { color: theme.buttonText }]}>Retry</Text>
-        </TouchableOpacity>
+                      if (error) throw new Error(`Failed to fetch user profile: ${error.message}`);
+                      if (!data) throw new Error('User profile not found');
+
+                      setUsername(data.username || 'Unknown User');
+                      setCaloriesGoal(data.calories_goal);
+                      setDietaryRestrictions(data.dietary_restrictions || 'None specified');
+                      setEmail(data.email || 'No email provided');
+                      setAllergies(data.allergies || 'None specified');
+                      setProfilePicture(data.profile_picture);
+                      setIsAdmin(data.is_admin || false);
+                      
+                    } catch (err) {
+                      const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred';
+                      setError(errorMessage);
+                    } finally {
+                      setLoading(false);
+                    }
+                  };
+                  fetchData();
+                }}
+              >
+                <Ionicons name="refresh" size={16} color={theme.buttonText} />
+                <Text style={[styles.retryButtonText, { color: theme.buttonText }]}>
+                  Try Again
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
         <BottomNav />
       </View>
     );
@@ -228,105 +265,193 @@ const AccountScreen: React.FC = () => {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
+      {/* Modern Header */}
+      <View style={[styles.header, { backgroundColor: theme.background }]}>
+        <View style={styles.headerLeft} />
+        <Text style={[styles.headerTitle, { color: theme.text }]}>
+          Account
+        </Text>
+        <TouchableOpacity
+          style={[styles.headerActionButton, { backgroundColor: theme.card }]}
+          onPress={() => router.push('./edit-user')}
+        >
+          <Ionicons name="pencil" size={20} color={theme.text} />
+        </TouchableOpacity>
+      </View>
+
       <ScrollView 
+        style={styles.scrollContainer}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* Profile Picture */}
-        {profilePicture ? (
-          <Image source={{ uri: profilePicture }} style={styles.profilePicture} />
-        ) : (
-          <View style={[styles.profilePicturePlaceholder, { backgroundColor: theme.button }]}>
-            <Text style={[styles.profilePicturePlaceholderText, { color: theme.text }]}>No Picture</Text>
+        {/* Profile Card */}
+        <View style={[styles.profileCard, { backgroundColor: theme.card }]}>
+          <View style={styles.profileHeader}>
+            {profilePicture ? (
+              <Image source={{ uri: profilePicture }} style={styles.profilePicture} />
+            ) : (
+              <View style={[styles.profilePicturePlaceholder, { backgroundColor: theme.primary }]}>
+                <Ionicons name="person" size={40} color={theme.buttonText} />
+              </View>
+            )}
+            <View style={styles.profileInfo}>
+              <Text style={[styles.profileName, { color: theme.text }]}>{username}</Text>
+              <Text style={[styles.profileEmail, { color: theme.subtext }]}>{email}</Text>
+              {isAdmin && (
+                <View style={[styles.adminBadge, { backgroundColor: theme.primary }]}>
+                  <Ionicons name="shield-checkmark" size={12} color={theme.buttonText} />
+                  <Text style={[styles.adminBadgeText, { color: theme.buttonText }]}>
+                    Admin
+                  </Text>
+                </View>
+              )}
+            </View>
           </View>
-        )}
-        <Text style={[styles.title, { color: theme.text, marginBottom: 4 }]}>{username}</Text>
-
-        {/* Email */}
-        <View style={styles.centeredRow}>
-          <Text style={[styles.email, { color: theme.text, marginVertical: 4 }]}>{email}</Text>
         </View>
 
-        <View style={styles.row}>
-          <Text style={[styles.title, { color: theme.text }]}>Meal Plan</Text>
-        </View>
-
-        {/* Calories Goal */}
-        <View style={[styles.borderRow, { backgroundColor: theme.button, borderColor: theme.border, borderWidth: 1, borderRadius: 8, padding: 15 }]}>
-          <Text style={[styles.leftAlignText, { color: theme.text, fontSize: 18 }]}>
-            Calories Goal: {caloriesGoal ? `${caloriesGoal} kcal` : 'Not set'}
-          </Text>
-        </View>
-
-        {/* Dietary Restrictions */}
-        <View style={[styles.borderRow, { backgroundColor: theme.button, borderColor: theme.border, borderWidth: 1, borderRadius: 8, padding: 15 }]}>
-          <Text style={[styles.leftAlignText, { color: theme.text, fontSize: 18 }]}>
-            Dietary Restrictions: {dietaryRestrictions}
-          </Text>
-        </View>
-
-        {/* Allergies */}
-        <View style={[styles.borderRow, { backgroundColor: theme.button, borderColor: theme.border, borderWidth: 1, borderRadius: 8, padding: 15 }]}>
-          <Text style={[styles.leftAlignText, { color: theme.text, fontSize: 18 }]}>
-            Allergies: {allergies}
-          </Text>
-        </View>
-
-        <View style={styles.row}>
-          <Text style={[styles.title, { color: theme.text }]}>Themes</Text>
-        </View>
-
-        {/* Dark Mode Toggle */}
-        <View style={[styles.borderRow, { backgroundColor: theme.button, borderColor: theme.border, borderWidth: 1, borderRadius: 10, padding: 15, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}>
-          <Text style={[styles.themeButtonText, { color: theme.text }]}>
-            {theme.background === '#121212' ? 'Dark Mode' : 'Light Mode'}
-          </Text>
-          <Switch
-            value={theme.background === '#121212'}
-            onValueChange={toggleTheme}
-            thumbColor={theme.primary}
-            trackColor={{ false: theme.border, true: theme.primary }}
-            style={styles.switch}
-          />
-        </View>
-
-        {/* Edit User Information Button */}
-        <TouchableOpacity
-          style={[styles.editButton, { backgroundColor: theme.button, borderColor: theme.border, borderWidth: 1, borderRadius: 10 }]}
-          onPress={() => router.push('./edit-user')}
-        >
-          <Text style={[styles.editButtonText, { color: theme.text, alignSelf: 'flex-start' }]}>
-            Edit Information
-          </Text>
-        </TouchableOpacity>
-
-        {/* Admin Panel Button - Only show for admins */}
-        {isAdmin && (
-          <TouchableOpacity
-            style={[styles.adminButton, { backgroundColor: theme.primary, borderColor: theme.border, borderWidth: 1, borderRadius: 10 }]}
-            onPress={() => router.push('./admin-reports')}
-          >
-            <Text style={[styles.adminButtonText, { color: theme.buttonText, alignSelf: 'flex-start' }]}>
-              Admin Reports
+        {/* Meal Plan Card */}
+        <View style={[styles.sectionCard, { backgroundColor: theme.card }]}>
+          <View style={styles.cardHeader}>
+            <Ionicons name="restaurant" size={20} color={theme.primary} />
+            <Text style={[styles.cardTitle, { color: theme.text }]}>
+              Meal Plan
             </Text>
+          </View>
+          
+          <View style={styles.infoItem}>
+            <View style={styles.infoItemHeader}>
+              <Ionicons name="flame" size={16} color={theme.warning} />
+              <Text style={[styles.infoItemLabel, { color: theme.text }]}>
+                Calories Goal
+              </Text>
+            </View>
+            <Text style={[styles.infoItemValue, { color: theme.subtext }]}>
+              {caloriesGoal ? `${caloriesGoal} kcal` : 'Not set'}
+            </Text>
+          </View>
+
+          <View style={styles.infoItem}>
+            <View style={styles.infoItemHeader}>
+              <Ionicons name="leaf" size={16} color={theme.primary} />
+              <Text style={[styles.infoItemLabel, { color: theme.text }]}>
+                Dietary Restrictions
+              </Text>
+            </View>
+            <Text style={[styles.infoItemValue, { color: theme.subtext }]}>
+              {dietaryRestrictions}
+            </Text>
+          </View>
+
+          <View style={styles.infoItem}>
+            <View style={styles.infoItemHeader}>
+              <Ionicons name="warning" size={16} color={theme.warning} />
+              <Text style={[styles.infoItemLabel, { color: theme.text }]}>
+                Allergies
+              </Text>
+            </View>
+            <Text style={[styles.infoItemValue, { color: theme.subtext }]}>
+              {allergies}
+            </Text>
+          </View>
+        </View>
+
+        {/* Settings Card */}
+        <View style={[styles.sectionCard, { backgroundColor: theme.card }]}>
+          <View style={styles.cardHeader}>
+            <Ionicons name="settings" size={20} color={theme.primary} />
+            <Text style={[styles.cardTitle, { color: theme.text }]}>
+              Settings
+            </Text>
+          </View>
+
+          {/* Dark Mode Toggle */}
+          <View style={styles.settingItem}>
+            <View style={styles.settingItemLeft}>
+              <Ionicons 
+                name={theme.background === '#0f172a' ? 'moon' : 'sunny'} 
+                size={16} 
+                color={theme.text} 
+              />
+              <Text style={[styles.settingItemLabel, { color: theme.text }]}>
+                {theme.background === '#0f172a' ? 'Dark Mode' : 'Light Mode'}
+              </Text>
+            </View>
+            <Switch
+              value={theme.background === '#0f172a'}
+              onValueChange={toggleTheme}
+              thumbColor={theme.buttonText}
+              trackColor={{ false: theme.border, true: theme.primary }}
+            />
+          </View>
+        </View>
+
+        {/* Actions Card */}
+        <View style={[styles.sectionCard, { backgroundColor: theme.card }]}>
+          <View style={styles.cardHeader}>
+            <Ionicons name="options" size={20} color={theme.primary} />
+            <Text style={[styles.cardTitle, { color: theme.text }]}>
+              Actions
+            </Text>
+          </View>
+
+          {/* Edit User Information */}
+          <TouchableOpacity
+            style={styles.actionItem}
+            onPress={() => router.push('./edit-user')}
+          >
+            <View style={styles.actionItemLeft}>
+              <Ionicons name="pencil" size={16} color={theme.primary} />
+              <Text style={[styles.actionItemLabel, { color: theme.text }]}>
+                Edit Information
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={16} color={theme.subtext} />
           </TouchableOpacity>
-        )}
 
-        {/* Logout Button */}
-        <TouchableOpacity
-          style={[styles.logoutButton, { backgroundColor: theme.button, borderColor: theme.border, borderWidth: 1, borderRadius: 10 }]}
-          onPress={handleLogout}
-        >
-          <Text style={[styles.logoutButtonText, { color: theme.buttonText, alignSelf: 'flex-start' }]}>Logout</Text>
-        </TouchableOpacity>
+          {/* Admin Panel - Only show for admins */}
+          {isAdmin && (
+            <TouchableOpacity
+              style={styles.actionItem}
+              onPress={() => router.push('./admin-reports')}
+            >
+              <View style={styles.actionItemLeft}>
+                <Ionicons name="shield-checkmark" size={16} color={theme.primary} />
+                <Text style={[styles.actionItemLabel, { color: theme.text }]}>
+                  Admin Reports
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color={theme.subtext} />
+            </TouchableOpacity>
+          )}
 
-        {/* Delete Account Button */}
-        <TouchableOpacity
-          style={[styles.deleteButton, { backgroundColor: theme.button, borderColor: theme.border, borderWidth: 1, borderRadius: 10 }]}
-          onPress={handleDeleteAccount}
-        >
-          <Text style={[styles.deleteButtonText, { color: theme.danger, alignSelf: 'flex-start' }]}>Delete Account</Text>
-        </TouchableOpacity>
+          {/* Logout */}
+          <TouchableOpacity
+            style={styles.actionItem}
+            onPress={handleLogout}
+          >
+            <View style={styles.actionItemLeft}>
+              <Ionicons name="log-out" size={16} color={theme.warning} />
+              <Text style={[styles.actionItemLabel, { color: theme.warning }]}>
+                Logout
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={16} color={theme.subtext} />
+          </TouchableOpacity>
+
+          {/* Delete Account */}
+          <TouchableOpacity
+            style={styles.actionItem}
+            onPress={handleDeleteAccount}
+          >
+            <View style={styles.actionItemLeft}>
+              <Ionicons name="trash" size={16} color={theme.danger} />
+              <Text style={[styles.actionItemLabel, { color: theme.danger }]}>
+                Delete Account
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={16} color={theme.subtext} />
+          </TouchableOpacity>
+        </View>
       </ScrollView>
       
       <BottomNav />
@@ -337,50 +462,232 @@ const AccountScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 20,
+  },
+  
+  // Header Styles
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    paddingTop: 44, // Account for status bar
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  headerLeft: {
+    width: 44, // Match action button width for centering
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  headerActionButton: {
+    padding: 8,
+    borderRadius: 8,
+    width: 44,
+    height: 44,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  headerActions: {
+    width: 44, // Match left side width for centering
+  },
+
+  // Scroll Container
+  scrollContainer: {
+    flex: 1,
   },
   scrollContent: {
-    flexGrow: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingBottom: 20,
+    padding: 16,
+    paddingBottom: 100, // Account for bottom nav
   },
-  centerContent: {
+
+  // Error State
+  errorCard: {
+    margin: 16,
+    padding: 20,
+    borderRadius: 16,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  errorContent: {
+    alignItems: 'center',
+    gap: 12,
+  },
+  errorTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  errorSubtext: {
+    fontSize: 14,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+
+  // Profile Card
+  profileCard: {
+    padding: 20,
+    borderRadius: 16,
+    marginBottom: 16,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  profileHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+  },
+  profilePicture: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+  },
+  profilePicturePlaceholder: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  profileInfo: {
+    flex: 1,
+  },
+  profileName: {
+    fontSize: 20,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  profileEmail: {
+    fontSize: 14,
+    marginBottom: 8,
+  },
+  adminBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    alignSelf: 'flex-start',
+    gap: 4,
+  },
+  adminBadgeText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+
+  // Section Cards
+  sectionCard: {
+    padding: 20,
+    borderRadius: 16,
+    marginBottom: 16,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+    gap: 8,
+  },
+  cardTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+
+  // Info Items
+  infoItem: {
+    marginBottom: 16,
+  },
+  infoItemHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+    gap: 6,
+  },
+  infoItemLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  infoItemValue: {
+    fontSize: 14,
+    lineHeight: 20,
+  },
+
+  // Setting Items
+  settingItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+  },
+  settingItemLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  settingItemLabel: {
+    fontSize: 16,
+    fontWeight: '500',
+  },
+
+  // Action Items
+  actionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.05)',
+  },
+  actionItemLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  actionItemLabel: {
+    fontSize: 16,
+    fontWeight: '500',
+  },
+
+  // Center Content
+  centerContent: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
   },
   loadingText: {
     fontSize: 16,
     marginTop: 16,
     textAlign: 'center',
   },
-  errorText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  errorSubtext: {
-    fontSize: 14,
-    marginBottom: 16,
-    textAlign: 'center',
-    paddingHorizontal: 20,
-  },
   retryButton: {
-    paddingHorizontal: 24,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
     paddingVertical: 12,
     borderRadius: 8,
-    marginBottom: 16,
+    gap: 6,
   },
   retryButtonText: {
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: '600',
   },
+
+  // Legacy styles (keeping for compatibility)
   themeButtonText: {
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: "bold",
   },
   switch: {
     transform: [{ scaleX: 1.5 }, { scaleY: 1.5 }],
@@ -437,19 +744,6 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginBottom: 10,
   },
-  profilePicture: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    marginBottom: 10,
-  },
-  profilePicturePlaceholder: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
   profilePicturePlaceholderText: {
     color: 'white',
   },
@@ -472,6 +766,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
     textAlign: 'center',
     marginVertical: 10,
+  },
+  errorText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 8,
+    textAlign: 'center',
   },
 });
 

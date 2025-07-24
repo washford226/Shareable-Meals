@@ -1,12 +1,15 @@
 import React, { useState, useEffect } from "react";
-import { View, Text, TextInput, StyleSheet, Alert, TouchableOpacity, Image, ActivityIndicator } from "react-native";
+import { View, Text, TextInput, StyleSheet, Alert, TouchableOpacity, Image, ActivityIndicator, ScrollView, Platform } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
 import RNPickerSelect from "react-native-picker-select";
 import { supabase } from "utils/supabase";
+import { Ionicons } from "@expo/vector-icons";
+import { useTheme } from "context/ThemeContext";
 
 const SignUpScreen: React.FC = () => {
   const router = useRouter();
+  const { theme } = useTheme();
 
   const [username, setUsername] = useState("");
   const [isUsernameAvailable, setIsUsernameAvailable] = useState<null | boolean>(null);
@@ -287,128 +290,353 @@ const SignUpScreen: React.FC = () => {
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Sign Up</Text>
-      
-      {/* Username Input */}
-      <View style={[styles.inputContainer, errors.username ? styles.inputError : null]}>
-        <TextInput
-          style={styles.input}
-          placeholder="Username"
-          value={username}
-          onChangeText={handleUsernameChange}
-          autoCapitalize="none"
-          editable={!isSigningUp}
-        />
-      </View>
-      {errors.username ? <Text style={styles.errorText}>{errors.username}</Text> : null}
-      {checkingUsername && (
-        <Text style={styles.infoText}>Checking username availability...</Text>
-      )}
-      {isUsernameAvailable === false && !errors.username && (
-        <Text style={styles.errorText}>Username is already taken</Text>
-      )}
-      {isUsernameAvailable === true && !errors.username && (
-        <Text style={styles.successText}>Username is available</Text>
-      )}
-
-      {/* Email Input */}
-      <View style={[styles.inputContainer, errors.email ? styles.inputError : null]}>
-        <TextInput
-          style={styles.input}
-          placeholder="Email"
-          value={email}
-          onChangeText={handleEmailChange}
-          keyboardType="email-address"
-          autoCapitalize="none"
-          editable={!isSigningUp}
-        />
-      </View>
-      {errors.email ? <Text style={styles.errorText}>{errors.email}</Text> : null}
-
-      {/* Password Input */}
-      <View style={[styles.passwordContainer, errors.password ? styles.inputError : null]}>
-        <TextInput
-          style={styles.passwordInput}
-          placeholder="Password"
-          value={password}
-          onChangeText={handlePasswordChange}
-          secureTextEntry={!isPasswordVisible}
-          editable={!isSigningUp}
-        />
-        <TouchableOpacity
-          style={styles.showPasswordButton}
-          onPress={() => setIsPasswordVisible(!isPasswordVisible)}
-          disabled={isSigningUp}
-        >
-          <Text style={styles.showPasswordText}>{isPasswordVisible ? "Hide" : "Show"}</Text>
-        </TouchableOpacity>
-      </View>
-      {errors.password ? <Text style={styles.errorText}>{errors.password}</Text> : null}
-
-      {/* Confirm Password Input */}
-      <View style={[styles.inputContainer, errors.confirmPassword ? styles.inputError : null]}>
-        <TextInput
-          style={styles.input}
-          placeholder="Confirm Password"
-          value={confirmPassword}
-          onChangeText={handleConfirmPasswordChange}
-          secureTextEntry={!isPasswordVisible}
-          editable={!isSigningUp}
-        />
-      </View>
-      {errors.confirmPassword ? <Text style={styles.errorText}>{errors.confirmPassword}</Text> : null}
-      <TextInput
-        style={styles.input}
-        placeholder="Calories Goal (optional)"
-        value={caloriesGoal}
-        onChangeText={setCaloriesGoal}
-        keyboardType="numeric"
-      />
-      <RNPickerSelect
-        onValueChange={(value) => setDietaryRestrictions(value)}
-        items={dietaryOptions}
-        placeholder={{
-          label: "Select Dietary Restrictions (optional)",
-          value: null,
-        }}
-        style={{
-          inputIOS: styles.pickerInput,
-          inputAndroid: styles.pickerInput,
-        }}
-        value={dietaryRestrictions}
-      />
-      <TextInput
-        style={styles.input}
-        placeholder="Allergies (optional)"
-        value={allergies}
-        onChangeText={setAllergies}
-      />
-      <TouchableOpacity style={styles.uploadButton} onPress={pickImage}>
-        <Text style={styles.uploadButtonText}>Upload Profile Picture (optional)</Text>
-      </TouchableOpacity>
-      {profilePicture && (
-        <Image source={{ uri: profilePicture }} style={styles.profilePicture} />
-      )}
-      {isSigningUp ? (
-        <ActivityIndicator size="large" color="#007bff" style={{ marginVertical: 20 }} />
-      ) : (
-        <TouchableOpacity
-          style={styles.button}
-          onPress={handleSignUp}
-          disabled={isUsernameAvailable === false}
-        >
-          <Text style={styles.buttonText}>Sign Up</Text>
-        </TouchableOpacity>
-      )}
-
-      <TouchableOpacity
-        style={styles.button}
-        onPress={() => router.replace("/login")}
-        disabled={isSigningUp}
+    <View style={[styles.container, { backgroundColor: theme.background }]}>
+      <ScrollView 
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
       >
-        <Text style={styles.buttonText}>Back to Login</Text>
-      </TouchableOpacity>
+        {/* Header Section */}
+        <View style={styles.headerSection}>
+          <Text style={[styles.title, { color: theme.text }]}>Create Account</Text>
+          <Text style={[styles.subtitle, { color: theme.subtext }]}>
+            Join us to start your meal planning journey
+          </Text>
+        </View>
+
+        {/* Account Information Card */}
+        <View style={[styles.accountCard, { backgroundColor: theme.card }]}>
+          <View style={styles.cardHeader}>
+            <Ionicons name="person-add" size={24} color={theme.primary} />
+            <Text style={[styles.cardTitle, { color: theme.text }]}>
+              Account Information
+            </Text>
+          </View>
+
+          {/* Username Input */}
+          <View style={styles.inputGroup}>
+            <Text style={[styles.inputLabel, { color: theme.text }]}>
+              Username
+            </Text>
+            <View style={styles.inputContainer}>
+              <Ionicons name="at" size={16} color={theme.subtext} style={styles.inputIcon} />
+              <TextInput
+                style={[styles.textInput, { 
+                  borderColor: errors.username ? theme.danger : theme.border, 
+                  color: theme.text,
+                  backgroundColor: theme.background 
+                }]}
+                placeholder="Choose a unique username"
+                placeholderTextColor={theme.placeholder}
+                value={username}
+                onChangeText={handleUsernameChange}
+                autoCapitalize="none"
+                editable={!isSigningUp}
+              />
+              {checkingUsername && (
+                <ActivityIndicator 
+                  size="small" 
+                  color={theme.primary} 
+                  style={styles.checkingIndicator}
+                />
+              )}
+            </View>
+            {errors.username && (
+              <View style={styles.errorContainer}>
+                <Ionicons name="alert-circle" size={14} color={theme.danger} />
+                <Text style={[styles.errorText, { color: theme.danger }]}>
+                  {errors.username}
+                </Text>
+              </View>
+            )}
+            {checkingUsername && !errors.username && (
+              <View style={[styles.infoContainer, { backgroundColor: `${theme.primary}15` }]}>
+                <Ionicons name="time" size={14} color={theme.primary} />
+                <Text style={[styles.infoText, { color: theme.primary }]}>
+                  Checking username availability...
+                </Text>
+              </View>
+            )}
+            {isUsernameAvailable === false && !errors.username && (
+              <View style={[styles.errorContainer, { backgroundColor: `${theme.danger}15` }]}>
+                <Ionicons name="close-circle" size={14} color={theme.danger} />
+                <Text style={[styles.errorText, { color: theme.danger }]}>
+                  Username is already taken
+                </Text>
+              </View>
+            )}
+            {isUsernameAvailable === true && !errors.username && (
+              <View style={[styles.successContainer, { backgroundColor: `${theme.success}15` }]}>
+                <Ionicons name="checkmark-circle" size={14} color={theme.success} />
+                <Text style={[styles.successText, { color: theme.success }]}>
+                  Username is available
+                </Text>
+              </View>
+            )}
+          </View>
+
+          {/* Email Input */}
+          <View style={styles.inputGroup}>
+            <Text style={[styles.inputLabel, { color: theme.text }]}>
+              Email Address
+            </Text>
+            <View style={styles.inputContainer}>
+              <Ionicons name="mail" size={16} color={theme.subtext} style={styles.inputIcon} />
+              <TextInput
+                style={[styles.textInput, { 
+                  borderColor: errors.email ? theme.danger : theme.border, 
+                  color: theme.text,
+                  backgroundColor: theme.background 
+                }]}
+                placeholder="Enter your email address"
+                placeholderTextColor={theme.placeholder}
+                value={email}
+                onChangeText={handleEmailChange}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                editable={!isSigningUp}
+              />
+            </View>
+            {errors.email && (
+              <View style={styles.errorContainer}>
+                <Ionicons name="alert-circle" size={14} color={theme.danger} />
+                <Text style={[styles.errorText, { color: theme.danger }]}>
+                  {errors.email}
+                </Text>
+              </View>
+            )}
+          </View>
+
+          {/* Password Input */}
+          <View style={styles.inputGroup}>
+            <Text style={[styles.inputLabel, { color: theme.text }]}>
+              Password
+            </Text>
+            <View style={styles.inputContainer}>
+              <Ionicons name="lock-closed" size={16} color={theme.subtext} style={styles.inputIcon} />
+              <TextInput
+                style={[styles.textInput, { 
+                  borderColor: errors.password ? theme.danger : theme.border, 
+                  color: theme.text,
+                  backgroundColor: theme.background,
+                  paddingRight: 48
+                }]}
+                placeholder="Create a secure password"
+                placeholderTextColor={theme.placeholder}
+                value={password}
+                onChangeText={handlePasswordChange}
+                secureTextEntry={!isPasswordVisible}
+                editable={!isSigningUp}
+              />
+              <TouchableOpacity
+                style={[styles.passwordToggle, { backgroundColor: theme.background }]}
+                onPress={() => setIsPasswordVisible(!isPasswordVisible)}
+                disabled={isSigningUp}
+              >
+                <Ionicons 
+                  name={isPasswordVisible ? "eye-off" : "eye"} 
+                  size={16} 
+                  color={theme.subtext} 
+                />
+              </TouchableOpacity>
+            </View>
+            {errors.password && (
+              <View style={styles.errorContainer}>
+                <Ionicons name="alert-circle" size={14} color={theme.danger} />
+                <Text style={[styles.errorText, { color: theme.danger }]}>
+                  {errors.password}
+                </Text>
+              </View>
+            )}
+          </View>
+
+          {/* Confirm Password Input */}
+          <View style={styles.inputGroup}>
+            <Text style={[styles.inputLabel, { color: theme.text }]}>
+              Confirm Password
+            </Text>
+            <View style={styles.inputContainer}>
+              <Ionicons name="checkmark-circle" size={16} color={theme.subtext} style={styles.inputIcon} />
+              <TextInput
+                style={[styles.textInput, { 
+                  borderColor: errors.confirmPassword ? theme.danger : theme.border, 
+                  color: theme.text,
+                  backgroundColor: theme.background 
+                }]}
+                placeholder="Confirm your password"
+                placeholderTextColor={theme.placeholder}
+                value={confirmPassword}
+                onChangeText={handleConfirmPasswordChange}
+                secureTextEntry={!isPasswordVisible}
+                editable={!isSigningUp}
+              />
+            </View>
+            {errors.confirmPassword && (
+              <View style={styles.errorContainer}>
+                <Ionicons name="alert-circle" size={14} color={theme.danger} />
+                <Text style={[styles.errorText, { color: theme.danger }]}>
+                  {errors.confirmPassword}
+                </Text>
+              </View>
+            )}
+          </View>
+        </View>
+
+        {/* Profile Information Card */}
+        <View style={[styles.profileCard, { backgroundColor: theme.card }]}>
+          <View style={styles.cardHeader}>
+            <Ionicons name="person" size={24} color={theme.primary} />
+            <Text style={[styles.cardTitle, { color: theme.text }]}>
+              Profile Information
+            </Text>
+          </View>
+          <Text style={[styles.cardDescription, { color: theme.subtext }]}>
+            Optional: Complete your profile to get personalized meal recommendations
+          </Text>
+
+          {/* Profile Picture */}
+          <View style={styles.inputGroup}>
+            <Text style={[styles.inputLabel, { color: theme.text }]}>
+              Profile Picture
+            </Text>
+            <TouchableOpacity 
+              style={[styles.imagePickerButton, { 
+                borderColor: theme.border,
+                backgroundColor: theme.background 
+              }]} 
+              onPress={pickImage}
+              disabled={isSigningUp}
+            >
+              {profilePicture ? (
+                <Image source={{ uri: profilePicture }} style={styles.profilePreview} />
+              ) : (
+                <View style={styles.imagePlaceholder}>
+                  <Ionicons name="camera" size={32} color={theme.subtext} />
+                  <Text style={[styles.imagePlaceholderText, { color: theme.subtext }]}>
+                    Tap to add photo
+                  </Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          </View>
+
+          {/* Calories Goal Input */}
+          <View style={styles.inputGroup}>
+            <Text style={[styles.inputLabel, { color: theme.text }]}>
+              Daily Calories Goal
+            </Text>
+            <View style={styles.inputContainer}>
+              <Ionicons name="flame" size={16} color={theme.subtext} style={styles.inputIcon} />
+              <TextInput
+                style={[styles.textInput, { 
+                  borderColor: theme.border, 
+                  color: theme.text,
+                  backgroundColor: theme.background 
+                }]}
+                placeholder="e.g., 2000"
+                placeholderTextColor={theme.placeholder}
+                value={caloriesGoal}
+                onChangeText={setCaloriesGoal}
+                keyboardType="numeric"
+                editable={!isSigningUp}
+              />
+            </View>
+          </View>
+
+          {/* Dietary Restrictions Picker */}
+          <View style={styles.inputGroup}>
+            <Text style={[styles.inputLabel, { color: theme.text }]}>
+              Dietary Restrictions
+            </Text>
+            <View style={[styles.pickerContainer, { 
+              borderColor: theme.border,
+              backgroundColor: theme.background 
+            }]}>
+              <Ionicons name="restaurant" size={16} color={theme.subtext} style={styles.inputIcon} />
+              <RNPickerSelect
+                onValueChange={(value) => setDietaryRestrictions(value)}
+                items={dietaryOptions}
+                placeholder={{
+                  label: "Select dietary restrictions",
+                  value: null,
+                  color: theme.placeholder,
+                }}
+                style={{
+                  inputIOS: [styles.pickerInput, { color: theme.text }],
+                  inputAndroid: [styles.pickerInput, { color: theme.text }],
+                  placeholder: { color: theme.placeholder },
+                }}
+                value={dietaryRestrictions}
+                disabled={isSigningUp}
+              />
+            </View>
+          </View>
+
+          {/* Allergies Input */}
+          <View style={styles.inputGroup}>
+            <Text style={[styles.inputLabel, { color: theme.text }]}>
+              Allergies
+            </Text>
+            <View style={styles.inputContainer}>
+              <Ionicons name="medical" size={16} color={theme.subtext} style={styles.inputIcon} />
+              <TextInput
+                style={[styles.textInput, { 
+                  borderColor: theme.border, 
+                  color: theme.text,
+                  backgroundColor: theme.background 
+                }]}
+                placeholder="e.g., nuts, dairy, shellfish"
+                placeholderTextColor={theme.placeholder}
+                value={allergies}
+                onChangeText={setAllergies}
+                editable={!isSigningUp}
+              />
+            </View>
+          </View>
+        </View>
+
+        {/* Action Buttons */}
+        <View style={styles.buttonContainer}>
+          <TouchableOpacity
+            style={[
+              styles.signupButton, 
+              { 
+                backgroundColor: (!username || !email || !password || !confirmPassword || isUsernameAvailable === false || isSigningUp) 
+                  ? theme.border 
+                  : theme.primary,
+                opacity: isSigningUp ? 0.8 : 1
+              }
+            ]}
+            onPress={handleSignUp}
+            disabled={!username || !email || !password || !confirmPassword || isUsernameAvailable === false || isSigningUp}
+          >
+            {isSigningUp ? (
+              <ActivityIndicator size="small" color={theme.buttonText} />
+            ) : (
+              <>
+                <Ionicons name="person-add" size={16} color={theme.buttonText} />
+                <Text style={[styles.signupButtonText, { color: theme.buttonText }]}>
+                  Create Account
+                </Text>
+              </>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.loginButton, { 
+              borderColor: theme.border,
+              backgroundColor: theme.background 
+            }]}
+            onPress={() => router.replace("/login")}
+            disabled={isSigningUp}
+          >
+            <Ionicons name="arrow-back" size={16} color={theme.text} />
+            <Text style={[styles.loginButtonText, { color: theme.text }]}>
+              Back to Sign In
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
     </View>
   );
 };
@@ -416,132 +644,229 @@ const SignUpScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 20,
-    width: "100%",
+  },
+  scrollContent: {
+    flexGrow: 1,
+    padding: 16,
+    paddingTop: Platform.OS === 'ios' ? 60 : 40,
+    paddingBottom: 32,
+  },
+  // Header Section
+  headerSection: {
+    alignItems: 'center',
+    marginBottom: 32,
   },
   title: {
-    fontSize: 24,
-    fontWeight: "bold",
-    textAlign: "center",
+    fontSize: 28,
+    fontWeight: '700',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  subtitle: {
+    fontSize: 16,
+    textAlign: 'center',
+    lineHeight: 22,
+  },
+  // Card Styles
+  accountCard: {
+    borderRadius: 16,
+    padding: 24,
+    marginBottom: 20,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.1,
+        shadowRadius: 12,
+      },
+      android: {
+        elevation: 6,
+      },
+    }),
+  },
+  profileCard: {
+    borderRadius: 16,
+    padding: 24,
+    marginBottom: 24,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.1,
+        shadowRadius: 12,
+      },
+      android: {
+        elevation: 6,
+      },
+    }),
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+    gap: 8,
+  },
+  cardTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+  },
+  cardDescription: {
+    fontSize: 14,
+    marginBottom: 20,
+    lineHeight: 20,
+  },
+  // Input Styles
+  inputGroup: {
     marginBottom: 20,
   },
-  inputContainer: {
-    width: "100%",
+  inputLabel: {
+    fontSize: 14,
+    fontWeight: '500',
     marginBottom: 8,
-    borderWidth: 1,
-    borderColor: "#ccc",
-    borderRadius: 8,
-    backgroundColor: "#fff",
-    paddingHorizontal: 8,
   },
-  inputError: {
-    borderColor: "#ff4444",
-    borderWidth: 2,
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    position: 'relative',
   },
-  input: {
-    width: "100%",
-    borderWidth: 1,
-    borderColor: "#ccc",
-    padding: 15,
-    marginBottom: 10,
-    borderRadius: 8,
-    backgroundColor: "#fff",
+  inputIcon: {
+    position: 'absolute',
+    left: 12,
+    zIndex: 1,
+  },
+  textInput: {
+    flex: 1,
+    height: 48,
+    paddingLeft: 40,
+    paddingRight: 12,
+    borderWidth: 1.5,
+    borderRadius: 12,
+    fontSize: 16,
+  },
+  checkingIndicator: {
+    position: 'absolute',
+    right: 12,
+  },
+  passwordToggle: {
+    position: 'absolute',
+    right: 12,
+    padding: 8,
+    borderRadius: 6,
+  },
+  // Status Container Styles
+  errorContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 6,
+    gap: 4,
+    padding: 8,
+    borderRadius: 6,
+  },
+  infoContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 6,
+    gap: 4,
+    padding: 8,
+    borderRadius: 6,
+  },
+  successContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 6,
+    gap: 4,
+    padding: 8,
+    borderRadius: 6,
   },
   errorText: {
-    color: "#ff4444",
-    fontSize: 14,
-    marginBottom: 8,
-    marginLeft: 4,
+    fontSize: 12,
+    flex: 1,
   },
   infoText: {
-    color: "#007bff",
-    fontSize: 14,
-    marginBottom: 8,
-    marginLeft: 4,
+    fontSize: 12,
+    flex: 1,
   },
   successText: {
-    color: "#28a745",
-    fontSize: 14,
-    marginBottom: 8,
-    marginLeft: 4,
-  },
-  passwordContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    width: "100%",
-    borderWidth: 1,
-    borderColor: "#ccc",
-    borderRadius: 8,
-    backgroundColor: "#fff",
-    marginBottom: 8,
-    paddingHorizontal: 8,
-  },
-  passwordInput: {
+    fontSize: 12,
     flex: 1,
-    paddingVertical: 12,
-    fontSize: 16,
   },
-  showPasswordButton: {
-    marginLeft: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 4,
-    backgroundColor: "#007bff",
+  // Profile Picture Styles
+  imagePickerButton: {
+    height: 120,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderStyle: 'dashed',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
   },
-  showPasswordText: {
-    color: "#fff",
+  profilePreview: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 10,
+  },
+  imagePlaceholder: {
+    alignItems: 'center',
+    gap: 8,
+  },
+  imagePlaceholderText: {
     fontSize: 14,
-    fontWeight: "bold",
+    fontWeight: '500',
+  },
+  // Picker Styles
+  pickerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 48,
+    borderWidth: 1.5,
+    borderRadius: 12,
+    paddingLeft: 40,
+    paddingRight: 12,
   },
   pickerInput: {
-    width: "100%",
-    borderWidth: 1,
-    borderColor: "#ccc",
-    padding: 15,
-    marginBottom: 10,
-    borderRadius: 8,
-    backgroundColor: "#fff",
+    flex: 1,
     fontSize: 16,
+    paddingVertical: 0,
   },
-  uploadButton: {
-    width: "100%",
-    backgroundColor: "#007bff",
-    padding: 15,
-    borderRadius: 8,
-    marginBottom: 10,
-    alignItems: "center",
+  // Button Styles
+  buttonContainer: {
+    gap: 12,
   },
-  uploadButtonText: {
-    color: "#fff",
+  signupButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 52,
+    borderRadius: 12,
+    gap: 8,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 3,
+      },
+    }),
+  },
+  signupButtonText: {
     fontSize: 16,
-    fontWeight: "bold",
+    fontWeight: '600',
   },
-  profilePicture: {
-    width: 150,
-    height: 150,
-    borderRadius: 75,
-    marginBottom: 10,
-    borderWidth: 2,
-    borderColor: "#ccc",
+  loginButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 48,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    gap: 8,
   },
-  button: {
-    width: "100%",
-    backgroundColor: "#007bff",
-    padding: 15,
-    borderRadius: 8,
-    alignItems: "center",
-    marginBottom: 10,
-    minHeight: 48,
-  },
-  buttonDisabled: {
-    backgroundColor: "#cccccc",
-  },
-  buttonText: {
-    color: "#fff",
+  loginButtonText: {
     fontSize: 16,
-    fontWeight: "bold",
+    fontWeight: '500',
   },
 });
 

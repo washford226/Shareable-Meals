@@ -11,6 +11,7 @@ import {
   Switch,
   RefreshControl,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useTheme } from "../../../context/ThemeContext";
 import { format, addDays } from "date-fns";
@@ -427,24 +428,30 @@ const GroceryListScreen = () => {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
-      <View style={styles.header}>
+      {/* Enhanced Header */}
+      <View style={[styles.header, { backgroundColor: theme.card }]}>
         <TouchableOpacity
-          style={[styles.backButton, { backgroundColor: theme.button }]}
+          style={[styles.backButton, { backgroundColor: theme.primary }]}
           onPress={() => router.push("/(app)/meal-plan/calendar")}
         >
-          <Text style={[styles.backButtonText, { color: theme.buttonText }]}>Back</Text>
+          <Ionicons name="arrow-back" size={20} color={theme.buttonText} />
         </TouchableOpacity>
-        <Text style={[styles.title, { color: theme.text }]}>Grocery List</Text>
+        <View style={styles.headerTitle}>
+          <Ionicons name="list-outline" size={28} color={theme.primary} />
+          <Text style={[styles.title, { color: theme.text }]}>Grocery List</Text>
+        </View>
+        <View style={styles.headerSpacer} />
       </View>
 
       {/* Error Banner */}
       {error && (
-        <View style={[styles.errorBanner, { backgroundColor: theme.danger }]}>
-          <Text style={[styles.errorBannerText, { color: theme.buttonText }]}>
+        <View style={[styles.errorBanner, { backgroundColor: theme.card, borderColor: theme.danger }]}>
+          <Ionicons name="warning" size={20} color={theme.danger} />
+          <Text style={[styles.errorBannerText, { color: theme.danger }]}>
             {error}
           </Text>
           <TouchableOpacity
-            style={styles.errorBannerRetry}
+            style={[styles.errorBannerRetry, { backgroundColor: theme.danger }]}
             onPress={handleRefresh}
           >
             <Text style={[styles.errorBannerRetryText, { color: theme.buttonText }]}>
@@ -455,40 +462,104 @@ const GroceryListScreen = () => {
       )}
 
       {/* Mode Toggle */}
-      <View style={styles.modeContainer}>
-        <Text style={[styles.modeLabel, { color: theme.text }]}>
-          {isShoppingMode ? "Shopping Mode" : "Planning Mode"}
-        </Text>
+      <View style={[styles.modeContainer, { backgroundColor: theme.card, borderColor: theme.border }]}>
+        <View style={styles.modeInfo}>
+          <Ionicons 
+            name={isShoppingMode ? "basket-outline" : "construct-outline"} 
+            size={24} 
+            color={theme.primary} 
+          />
+          <View style={styles.modeTextContainer}>
+            <Text style={[styles.modeLabel, { color: theme.text }]}>
+              {isShoppingMode ? "Shopping Mode" : "Planning Mode"}
+            </Text>
+            <Text style={[styles.modeDescription, { color: theme.subtext }]}>
+              {isShoppingMode ? "Check off items as you shop" : "Manage your grocery list"}
+            </Text>
+          </View>
+        </View>
         <Switch
           value={isShoppingMode}
           onValueChange={setIsShoppingMode}
           trackColor={{ false: theme.border, true: theme.primary }}
-          thumbColor={isShoppingMode ? theme.primary : theme.border}
+          thumbColor={isShoppingMode ? theme.background : theme.background}
         />
       </View>
 
       {/* Planning Mode Controls */}
       {!isShoppingMode && (
-        <>
-          <View style={styles.dateContainer}>
+        <View style={[styles.planningCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+          {/* Date Range Section */}
+          <View style={styles.dateSection}>
+            <View style={styles.dateSectionHeader}>
+              <Ionicons name="calendar-outline" size={20} color={theme.primary} />
+              <Text style={[styles.sectionTitle, { color: theme.text }]}>Date Range</Text>
+            </View>
+            <View style={styles.dateContainer}>
+              <TouchableOpacity
+                style={[styles.dateButton, { backgroundColor: theme.background, borderColor: theme.border }]}
+                onPress={() => setShowStartPicker(true)}
+              >
+                <Text style={[styles.dateLabel, { color: theme.subtext }]}>Start Date</Text>
+                <Text style={[styles.dateText, { color: theme.text }]}>
+                  {format(startDate, "MMM d, yyyy")}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.dateButton, { backgroundColor: theme.background, borderColor: theme.border }]}
+                onPress={() => setShowEndPicker(true)}
+              >
+                <Text style={[styles.dateLabel, { color: theme.subtext }]}>End Date</Text>
+                <Text style={[styles.dateText, { color: theme.text }]}>
+                  {format(endDate, "MMM d, yyyy")}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Actions Section */}
+          <View style={styles.actionsSection}>
             <TouchableOpacity
-              style={[styles.dateButton, { backgroundColor: theme.card, borderColor: theme.border }]}
-              onPress={() => setShowStartPicker(true)}
+              style={[
+                styles.generateButton, 
+                { 
+                  backgroundColor: theme.primary,
+                  opacity: generatingItems ? 0.7 : 1
+                }
+              ]}
+              onPress={generateFromMealPlan}
+              disabled={generatingItems}
             >
-              <Text style={[styles.dateButtonText, { color: theme.text }]}>
-                Start: {format(startDate, "MMM d, yyyy")}
-              </Text>
+              {generatingItems ? (
+                <ActivityIndicator size="small" color={theme.buttonText} />
+              ) : (
+                <View style={styles.buttonContent}>
+                  <Ionicons name="restaurant-outline" size={20} color={theme.buttonText} />
+                  <Text style={[styles.generateButtonText, { color: theme.buttonText }]}>Add From Meal Plan</Text>
+                </View>
+              )}
             </TouchableOpacity>
 
-            <TouchableOpacity
-              style={[styles.dateButton, { backgroundColor: theme.card, borderColor: theme.border }]}
-              onPress={() => setShowEndPicker(true)}
-            >
-              <Text style={[styles.dateButtonText, { color: theme.text }]}>
-                End: {format(endDate, "MMM d, yyyy")}
-              </Text>
-            </TouchableOpacity>
+            <View style={styles.actionButtons}>
+              <TouchableOpacity
+                style={[styles.actionButton, { backgroundColor: theme.success }]}
+                onPress={addNewItem}
+              >
+                <Ionicons name="add-circle-outline" size={18} color={theme.buttonText} />
+                <Text style={[styles.actionButtonText, { color: theme.buttonText }]}>Add Item</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.actionButton, { backgroundColor: theme.danger }]}
+                onPress={deleteAllItems}
+              >
+                <Ionicons name="trash-outline" size={18} color={theme.buttonText} />
+                <Text style={[styles.actionButtonText, { color: theme.buttonText }]}>Delete All</Text>
+              </TouchableOpacity>
+            </View>
           </View>
+        </View>
+      )}
 
           {showStartPicker && (
             <DateTimePicker value={startDate} mode="date" display="default" onChange={handleStartDateChange} />
@@ -497,75 +568,56 @@ const GroceryListScreen = () => {
             <DateTimePicker value={endDate} mode="date" display="default" onChange={handleEndDateChange} />
           )}
 
-          <TouchableOpacity
-            style={[
-              styles.generateButton, 
-              { 
-                backgroundColor: theme.primary,
-                opacity: generatingItems ? 0.7 : 1
-              }
-            ]}
-            onPress={generateFromMealPlan}
-            disabled={generatingItems}
-          >
-            {generatingItems ? (
-              <ActivityIndicator size="small" color={theme.buttonText} />
-            ) : (
-              <Text style={[styles.generateButtonText, { color: theme.buttonText }]}>Add From Meal Plan</Text>
-            )}
-          </TouchableOpacity>
-
-          {/* Planning Mode Action Buttons */}
-          <View style={styles.actionButtons}>
-            <TouchableOpacity
-              style={[styles.actionButton, { backgroundColor: theme.primary }]}
-              onPress={addNewItem}
-            >
-              <Text style={[styles.actionButtonText, { color: theme.buttonText }]}>Add Item</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.actionButton, { backgroundColor: theme.danger }]}
-              onPress={deleteAllItems}
-            >
-              <Text style={[styles.actionButtonText, { color: theme.buttonText }]}>Delete All</Text>
-            </TouchableOpacity>
-          </View>
-        </>
-      )}
-
       {/* Items List */}
-      <ScrollView 
-        style={styles.itemsContainer}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={handleRefresh}
-            colors={[theme.primary]}
-            tintColor={theme.primary}
-          />
-        }
-      >
+      <View style={styles.itemsSection}>
         {loading && groceryItems.length === 0 ? (
-          <View style={styles.centerContent}>
+          <View style={[styles.loadingCard, { backgroundColor: theme.card }]}>
             <ActivityIndicator size="large" color={theme.primary} />
             <Text style={[styles.loadingText, { color: theme.text }]}>
               Loading grocery list...
             </Text>
           </View>
         ) : groceryItems.length > 0 ? (
-          <>
-            <Text style={[styles.itemsTitle, { color: theme.text }]}>
-              Grocery Items ({groceryItems.length})
-            </Text>
+          <ScrollView 
+            style={styles.itemsContainer}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={handleRefresh}
+                colors={[theme.primary]}
+                tintColor={theme.primary}
+              />
+            }
+          >
+            <View style={[styles.itemsHeader, { backgroundColor: theme.card, borderColor: theme.border }]}>
+              <Ionicons name="receipt-outline" size={20} color={theme.primary} />
+              <Text style={[styles.itemsTitle, { color: theme.text }]}>
+                Grocery Items ({groceryItems.length})
+              </Text>
+              {isShoppingMode && (
+                <View style={styles.progressIndicator}>
+                  <Text style={[styles.progressText, { color: theme.success }]}>
+                    {groceryItems.filter(item => item.checked).length}/{groceryItems.length}
+                  </Text>
+                </View>
+              )}
+            </View>
             {groceryItems.map((item, index) => (
-              <View key={index} style={[styles.item, { backgroundColor: theme.card, borderColor: theme.border }]}>
-                {/* Shopping Mode - Checkbox */}
+              <View key={index} style={[styles.item, { 
+                backgroundColor: theme.card, 
+                borderColor: theme.border,
+                opacity: item.checked ? 0.7 : 1
+              }]}>
+                {/* Shopping Mode - Enhanced Checkbox */}
                 {isShoppingMode && (
                   <TouchableOpacity
-                    style={[styles.checkbox, item.checked && { backgroundColor: theme.primary }]}
+                    style={[
+                      styles.checkbox, 
+                      item.checked && { backgroundColor: theme.success, borderColor: theme.success }
+                    ]}
                     onPress={() => toggleItemChecked(index)}
                   >
-                    {item.checked && <Text style={styles.checkmark}>✓</Text>}
+                    {item.checked && <Ionicons name="checkmark" size={16} color={theme.buttonText} />}
                   </TouchableOpacity>
                 )}
 
@@ -573,33 +625,39 @@ const GroceryListScreen = () => {
                 {editingIndex === index ? (
                   // Edit Mode
                   <View style={styles.editContainer}>
-                    <TextInput
-                      style={[styles.editInput, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
-                      value={editName}
-                      onChangeText={setEditName}
-                      placeholder="Item name"
-                      placeholderTextColor={theme.placeholder}
-                    />
-                    <TextInput
-                      style={[styles.editInputSmall, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
-                      value={editQuantity}
-                      onChangeText={setEditQuantity}
-                      placeholder="Qty"
-                      placeholderTextColor={theme.placeholder}
-                      keyboardType="numeric"
-                    />
-                    <TextInput
-                      style={[styles.editInputSmall, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
-                      value={editUnit}
-                      onChangeText={setEditUnit}
-                      placeholder="Unit"
-                      placeholderTextColor={theme.placeholder}
-                    />
+                    <View style={styles.editRow}>
+                      <TextInput
+                        style={[styles.editInput, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
+                        value={editName}
+                        onChangeText={setEditName}
+                        placeholder="Item name"
+                        placeholderTextColor={theme.subtext}
+                      />
+                    </View>
+                    <View style={styles.editRow}>
+                      <TextInput
+                        style={[styles.editInputSmall, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
+                        value={editQuantity}
+                        onChangeText={setEditQuantity}
+                        placeholder="Qty"
+                        placeholderTextColor={theme.subtext}
+                        keyboardType="numeric"
+                      />
+                      <TextInput
+                        style={[styles.editInputSmall, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
+                        value={editUnit}
+                        onChangeText={setEditUnit}
+                        placeholder="Unit"
+                        placeholderTextColor={theme.subtext}
+                      />
+                    </View>
                     <View style={styles.editButtons}>
-                      <TouchableOpacity style={[styles.editButton, { backgroundColor: theme.primary }]} onPress={saveEdit}>
+                      <TouchableOpacity style={[styles.editButton, { backgroundColor: theme.success }]} onPress={saveEdit}>
+                        <Ionicons name="checkmark" size={16} color={theme.buttonText} />
                         <Text style={[styles.editButtonText, { color: theme.buttonText }]}>Save</Text>
                       </TouchableOpacity>
                       <TouchableOpacity style={[styles.editButton, { backgroundColor: theme.border }]} onPress={cancelEdit}>
+                        <Ionicons name="close" size={16} color={theme.text} />
                         <Text style={[styles.editButtonText, { color: theme.text }]}>Cancel</Text>
                       </TouchableOpacity>
                     </View>
@@ -608,7 +666,11 @@ const GroceryListScreen = () => {
                   // Display Mode
                   <View style={styles.itemContent}>
                     <View style={styles.itemInfo}>
-                      <Text style={[styles.itemName, { color: theme.text, textDecorationLine: item.checked ? 'line-through' : 'none' }]}>
+                      <Text style={[styles.itemName, { 
+                        color: theme.text, 
+                        textDecorationLine: item.checked ? 'line-through' : 'none',
+                        opacity: item.checked ? 0.7 : 1
+                      }]}>
                         {item.raw_name}
                       </Text>
                       <Text style={[styles.itemQuantity, { color: theme.subtext }]}>
@@ -620,16 +682,16 @@ const GroceryListScreen = () => {
                     {!isShoppingMode && (
                       <View style={styles.itemActions}>
                         <TouchableOpacity
-                          style={[styles.actionButtonSmall, { backgroundColor: theme.button }]}
+                          style={[styles.actionButtonSmall, { backgroundColor: theme.primary }]}
                           onPress={() => startEditing(index)}
                         >
-                          <Text style={[styles.actionButtonTextSmall, { color: theme.buttonText }]}>Edit</Text>
+                          <Ionicons name="create-outline" size={14} color={theme.buttonText} />
                         </TouchableOpacity>
                         <TouchableOpacity
                           style={[styles.actionButtonSmall, { backgroundColor: theme.danger }]}
                           onPress={() => deleteItem(index)}
                         >
-                          <Text style={[styles.actionButtonTextSmall, { color: theme.buttonText }]}>Delete</Text>
+                          <Ionicons name="trash-outline" size={14} color={theme.buttonText} />
                         </TouchableOpacity>
                       </View>
                     )}
@@ -637,9 +699,14 @@ const GroceryListScreen = () => {
                 )}
               </View>
             ))}
-          </>
+          </ScrollView>
         ) : (
-          <View style={styles.centerContent}>
+          <View style={[styles.emptyCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+            <Ionicons 
+              name={isShoppingMode ? "basket-outline" : "list-outline"} 
+              size={48} 
+              color={theme.subtext} 
+            />
             <Text style={[styles.emptyText, { color: theme.subtext }]}>
               {isShoppingMode 
                 ? "No items in your grocery list." 
@@ -651,6 +718,7 @@ const GroceryListScreen = () => {
                 style={[styles.emptyActionButton, { backgroundColor: theme.primary }]}
                 onPress={addNewItem}
               >
+                <Ionicons name="add-circle-outline" size={20} color={theme.buttonText} style={{ marginRight: 8 }} />
                 <Text style={[styles.emptyActionButtonText, { color: theme.buttonText }]}>
                   Add Your First Item
                 </Text>
@@ -658,14 +726,17 @@ const GroceryListScreen = () => {
             )}
           </View>
         )}
-      </ScrollView>
+      </View>
       
       {/* Bottom Back Button */}
       <TouchableOpacity
-        style={[styles.bottomBackButton, { backgroundColor: theme.button }]}
+        style={[styles.bottomBackButton, { backgroundColor: theme.primary }]}
         onPress={() => router.push("/(app)/meal-plan/calendar")}
       >
-        <Text style={[styles.bottomBackButtonText, { color: theme.buttonText }]}>Back to Calendar</Text>
+        <View style={styles.buttonContent}>
+          <Ionicons name="arrow-back" size={20} color={theme.buttonText} />
+          <Text style={[styles.bottomBackButtonText, { color: theme.buttonText }]}>Back to Calendar</Text>
+        </View>
       </TouchableOpacity>
     </View>
   );
@@ -674,17 +745,40 @@ const GroceryListScreen = () => {
 const styles = StyleSheet.create({
   container: { 
     flex: 1, 
-    padding: 16 
+    padding: 20
   },
+  
+  // Enhanced Header Styles
   header: { 
     flexDirection: "row", 
     alignItems: "center", 
-    marginBottom: 20 
+    marginBottom: 24,
+    padding: 16,
+    borderRadius: 16,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  headerTitle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    justifyContent: 'center',
+  },
+  headerSpacer: {
+    width: 40, // Same width as back button for centering
   },
   backButton: { 
-    padding: 10, 
-    borderRadius: 8, 
-    marginRight: 16 
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
   },
   backButtonText: { 
     fontSize: 16, 
@@ -692,31 +786,189 @@ const styles = StyleSheet.create({
   },
   title: { 
     fontSize: 24, 
-    fontWeight: "bold", 
-    flex: 1 
+    fontWeight: "800",
+    marginLeft: 12,
   },
+  
+  // Enhanced Error Banner
   errorBanner: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 12,
+    padding: 16,
     marginBottom: 16,
-    borderRadius: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   errorBannerText: {
     flex: 1,
     fontSize: 14,
-    fontWeight: '500',
+    fontWeight: '600',
+    marginLeft: 8,
   },
   errorBannerRetry: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    marginLeft: 12,
-    borderRadius: 6,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
   },
   errorBannerRetryText: {
     fontSize: 14,
+    fontWeight: '600',
+  },
+  
+  // Enhanced Mode Toggle
+  modeContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 20,
+    padding: 20,
+    borderRadius: 16,
+    borderWidth: 1,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 5,
+  },
+  modeInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  modeTextContainer: {
+    marginLeft: 12,
+  },
+  modeLabel: { 
+    fontSize: 18, 
+    fontWeight: "700" 
+  },
+  modeDescription: {
+    fontSize: 14,
+    fontWeight: '500',
+    marginTop: 2,
+  },
+  
+  // Enhanced Planning Card
+  planningCard: {
+    marginBottom: 20,
+    padding: 20,
+    borderRadius: 16,
+    borderWidth: 1,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 5,
+  },
+  dateSection: {
+    marginBottom: 20,
+  },
+  dateSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginLeft: 8,
+  },
+  dateContainer: { 
+    flexDirection: "row", 
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  dateButton: { 
+    flex: 1, 
+    padding: 16, 
+    borderRadius: 12, 
+    borderWidth: 1,
+    alignItems: "center",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  dateLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  dateText: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  dateButtonText: { 
+    fontSize: 16, 
+    fontWeight: "500" 
+  },
+  
+  // Enhanced Actions Section
+  actionsSection: {
+    gap: 16,
+  },
+  generateButton: { 
+    padding: 16, 
+    borderRadius: 12, 
+    alignItems: "center",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  generateButtonText: { 
+    fontSize: 16, 
+    fontWeight: "700",
+    marginLeft: 8,
+  },
+  buttonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  actionButtons: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  actionButton: {
+    flex: 1,
+    flexDirection: 'row',
+    padding: 12,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: 'center',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  actionButtonText: { 
+    fontSize: 14, 
+    fontWeight: "600",
+    marginLeft: 6,
+  },
+  
+  // Enhanced Items Section
+  itemsSection: {
+    flex: 1,
+  },
+  loadingCard: {
+    padding: 40,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 5,
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    textAlign: 'center',
     fontWeight: '600',
   },
   centerContent: {
@@ -725,91 +977,65 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 40,
   },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-    textAlign: 'center',
-  },
-  modeContainer: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 16,
-    padding: 12,
-    borderRadius: 8,
-  },
-  modeLabel: { 
-    fontSize: 18, 
-    fontWeight: "bold" 
-  },
-  dateContainer: { 
-    flexDirection: "row", 
-    justifyContent: "space-between", 
-    marginBottom: 16 
-  },
-  dateButton: { 
-    flex: 1, 
-    padding: 12, 
-    borderRadius: 8, 
-    borderWidth: 1, 
-    marginHorizontal: 4, 
-    alignItems: "center" 
-  },
-  dateButtonText: { 
-    fontSize: 16, 
-    fontWeight: "500" 
-  },
-  generateButton: { 
-    padding: 12, 
-    borderRadius: 8, 
-    alignItems: "center", 
-    marginBottom: 16 
-  },
-  generateButtonText: { 
-    fontSize: 16, 
-    fontWeight: "bold" 
-  },
-  actionButtons: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 16,
-  },
-  actionButton: {
-    flex: 1,
-    padding: 12,
-    borderRadius: 8,
-    alignItems: "center",
-    marginHorizontal: 4,
-  },
-  actionButtonText: { 
-    fontSize: 16, 
-    fontWeight: "bold" 
-  },
   itemsContainer: { 
     flex: 1 
   },
+  itemsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+    marginBottom: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
   itemsTitle: { 
     fontSize: 18, 
-    fontWeight: "bold", 
-    marginBottom: 12 
+    fontWeight: "700",
+    marginLeft: 8,
+    flex: 1,
   },
+  progressIndicator: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    backgroundColor: 'rgba(34, 197, 94, 0.1)',
+  },
+  progressText: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  
+  // Enhanced Item Styles
   item: {
     flexDirection: "row",
     alignItems: "center",
-    padding: 12,
-    borderRadius: 8,
+    padding: 16,
+    borderRadius: 12,
     borderWidth: 1,
-    marginBottom: 8,
+    marginBottom: 12,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
   },
   checkbox: {
-    width: 24,
-    height: 24,
-    borderRadius: 4,
+    width: 28,
+    height: 28,
+    borderRadius: 8,
     borderWidth: 2,
     borderColor: "#ccc",
-    marginRight: 12,
+    marginRight: 16,
     alignItems: "center",
     justifyContent: "center",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 1,
   },
   checkmark: {
     color: "white",
@@ -827,87 +1053,133 @@ const styles = StyleSheet.create({
   },
   itemName: { 
     fontSize: 16, 
-    fontWeight: "500" 
+    fontWeight: "600",
+    marginBottom: 4,
   },
   itemQuantity: { 
     fontSize: 14, 
-    fontWeight: "bold" 
+    fontWeight: "500" 
   },
   itemActions: {
     flexDirection: "row",
+    gap: 8,
   },
   actionButtonSmall: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6,
-    marginLeft: 8,
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 1,
   },
   actionButtonTextSmall: { 
     fontSize: 14, 
     fontWeight: "bold" 
   },
+  
+  // Enhanced Edit Styles
   editContainer: {
     flex: 1,
+    gap: 12,
+  },
+  editRow: {
+    flexDirection: 'row',
+    gap: 8,
   },
   editInput: {
+    flex: 1,
     borderWidth: 1,
-    borderRadius: 6,
-    padding: 8,
+    borderRadius: 8,
+    padding: 12,
     fontSize: 16,
-    marginBottom: 8,
+    fontWeight: '500',
   },
   editInputSmall: {
+    flex: 1,
     borderWidth: 1,
-    borderRadius: 6,
-    padding: 8,
+    borderRadius: 8,
+    padding: 12,
     fontSize: 14,
-    marginBottom: 8,
-    width: 80,
+    fontWeight: '500',
   },
   editButtons: {
     flexDirection: "row",
-    justifyContent: "space-between",
+    gap: 8,
   },
   editButton: {
     flex: 1,
-    padding: 8,
-    borderRadius: 6,
+    flexDirection: 'row',
+    padding: 10,
+    borderRadius: 8,
     alignItems: "center",
-    marginHorizontal: 4,
+    justifyContent: 'center',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 1,
   },
   editButtonText: { 
     fontSize: 14, 
-    fontWeight: "bold" 
+    fontWeight: "600",
+    marginLeft: 4,
+  },
+  
+  // Enhanced Empty State
+  emptyCard: {
+    padding: 40,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderStyle: 'dashed',
+    marginVertical: 20,
   },
   emptyText: { 
     fontSize: 16, 
     textAlign: "center", 
-    marginTop: 40, 
-    fontStyle: "italic",
+    fontWeight: '500',
     lineHeight: 24,
-    marginBottom: 20,
+    marginVertical: 16,
   },
   emptyActionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: 24,
     paddingVertical: 12,
-    borderRadius: 8,
+    borderRadius: 12,
     marginTop: 16,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
   },
   emptyActionButtonText: {
     fontSize: 16,
     fontWeight: '600',
     textAlign: 'center',
   },
+  
+  // Enhanced Bottom Button
   bottomBackButton: { 
-    padding: 12, 
-    borderRadius: 8, 
+    flexDirection: 'row',
+    padding: 16, 
+    borderRadius: 12, 
     alignItems: "center", 
+    justifyContent: 'center',
     marginTop: 16,
-    marginBottom: 8 
+    marginBottom: 8,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
   },
   bottomBackButtonText: { 
     fontSize: 16, 
-    fontWeight: "bold" 
+    fontWeight: "700",
+    marginLeft: 8,
   },
 });
 

@@ -9,10 +9,12 @@ import {
   ActivityIndicator,
   ScrollView,
   RefreshControl,
+  Platform,
 } from "react-native";
 import { useTheme } from "../../../context/ThemeContext";
 import { useRouter } from "expo-router";
 import { supabase } from "utils/supabase";
+import { Ionicons } from '@expo/vector-icons';
 
 const EditProfile = () => {
   const [email, setEmail] = useState<string>("");
@@ -288,243 +290,422 @@ const EditProfile = () => {
   // Enhanced loading state
   if (fetchingUser) {
     return (
-      <View style={[styles.container, { backgroundColor: theme.background, justifyContent: 'center', alignItems: 'center' }]}>
-        <ActivityIndicator size="large" color={theme.primary} />
-        <Text style={[styles.loadingText, { color: theme.text }]}>Fetching user information...</Text>
+      <View style={[styles.container, { backgroundColor: theme.background }]}>
+        {/* Modern Header */}
+        <View style={[styles.header, { backgroundColor: theme.background }]}>
+          <TouchableOpacity
+            style={[styles.headerBackButton, { backgroundColor: theme.card }]}
+            onPress={() => router.back()}
+          >
+            <Ionicons name="arrow-back" size={20} color={theme.text} />
+          </TouchableOpacity>
+          <Text style={[styles.headerTitle, { color: theme.text }]}>
+            Edit Profile
+          </Text>
+          <View style={styles.headerActions} />
+        </View>
+
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={theme.primary} />
+          <Text style={[styles.loadingText, { color: theme.subtext }]}>
+            Loading profile information...
+          </Text>
+        </View>
       </View>
     );
   }
 
   return (
-    <ScrollView 
-      style={[styles.container, { backgroundColor: theme.background }]}
-      refreshControl={
-        <RefreshControl
-          refreshing={refreshing}
-          onRefresh={() => fetchUser(true)}
-          colors={[theme.primary]}
-          tintColor={theme.primary}
-        />
-      }
-    >
+    <View style={[styles.container, { backgroundColor: theme.background }]}>
+      {/* Modern Header */}
+      <View style={[styles.header, { backgroundColor: theme.background }]}>
+        <TouchableOpacity
+          style={[styles.headerBackButton, { backgroundColor: theme.card }]}
+          onPress={() => router.back()}
+        >
+          <Ionicons name="arrow-back" size={20} color={theme.text} />
+        </TouchableOpacity>
+        <Text style={[styles.headerTitle, { color: theme.text }]}>
+          Edit Profile
+        </Text>
+        <View style={styles.headerActions} />
+      </View>
+
       {/* Error Banner */}
       {error && (
-        <View style={[styles.errorBanner, { backgroundColor: theme.card, borderColor: theme.danger }]}>
-          <Text style={[styles.errorBannerText, { color: theme.danger }]}>{error}</Text>
+        <View style={[styles.errorBanner, { 
+          backgroundColor: `${theme.danger}15`, 
+          borderColor: theme.danger 
+        }]}>
+          <Ionicons name="alert-circle" size={16} color={theme.danger} />
+          <Text style={[styles.errorBannerText, { color: theme.danger }]}>
+            {error}
+          </Text>
           <TouchableOpacity 
             style={[styles.errorBannerButton, { backgroundColor: theme.danger }]}
             onPress={handleRetry}
           >
-            <Text style={[styles.errorBannerButtonText, { color: theme.buttonText }]}>Retry</Text>
+            <Text style={[styles.errorBannerButtonText, { color: theme.buttonText }]}>
+              Retry
+            </Text>
           </TouchableOpacity>
         </View>
       )}
 
       {/* Retry Banner */}
       {retryCount > 0 && !error && (
-        <View style={[styles.retryBanner, { backgroundColor: theme.card, borderColor: theme.primary }]}>
-          <Text style={[styles.retryBannerText, { color: theme.primary }]}>
+        <View style={[styles.retryBanner, { 
+          backgroundColor: `${theme.warning}15`, 
+          borderColor: theme.warning 
+        }]}>
+          <ActivityIndicator size="small" color={theme.warning} />
+          <Text style={[styles.retryBannerText, { color: theme.warning }]}>
             Retrying... (Attempt {retryCount})
           </Text>
         </View>
       )}
 
-      <Text style={[styles.title, { color: theme.text }]}>Edit Profile</Text>
+      <ScrollView 
+        style={styles.content}
+        contentContainerStyle={styles.contentContainer}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => fetchUser(true)}
+            colors={[theme.primary]}
+            tintColor={theme.primary}
+          />
+        }
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Basic Information Card */}
+        <View style={[styles.basicInfoCard, { backgroundColor: theme.card }]}>
+          <View style={styles.cardHeader}>
+            <Ionicons name="person" size={20} color={theme.primary} />
+            <Text style={[styles.cardTitle, { color: theme.text }]}>
+              Basic Information
+            </Text>
+          </View>
 
-      <View style={styles.section}>
-        <Text style={[styles.sectionTitle, { color: theme.text }]}>Basic Information</Text>
-        
-        {/* Username Section */}
-        <View style={styles.formSection}>
-          <Text style={[styles.fieldLabel, { color: theme.text }]}>Username *</Text>
-          <Text style={[styles.characterCount, { color: theme.subtext }]}>
-            {username.length}/30
+          {/* Username Section */}
+          <View style={styles.inputGroup}>
+            <Text style={[styles.inputLabel, { color: theme.text }]}>
+              Username
+            </Text>
+            <View style={styles.inputWrapper}>
+              <View style={styles.inputContainer}>
+                <Ionicons name="at" size={16} color={theme.subtext} style={styles.inputIcon} />
+                <TextInput
+                  style={[styles.textInput, { 
+                    borderColor: validationErrors.username ? theme.danger : theme.border, 
+                    color: theme.text,
+                    backgroundColor: theme.background 
+                  }]}
+                  placeholder="Enter your username"
+                  placeholderTextColor={theme.placeholder}
+                  value={username}
+                  onChangeText={handleUsernameChange}
+                  autoCapitalize="none"
+                  maxLength={30}
+                  editable={!loading}
+                />
+              </View>
+              <Text style={[styles.characterCount, { color: theme.subtext }]}>
+                {username.length}/30
+              </Text>
+            </View>
+            {validationErrors.username && (
+              <View style={styles.errorContainer}>
+                <Ionicons name="alert-circle" size={14} color={theme.danger} />
+                <Text style={[styles.errorText, { color: theme.danger }]}>
+                  {validationErrors.username}
+                </Text>
+              </View>
+            )}
+          </View>
+
+          {/* Email Section */}
+          <View style={styles.inputGroup}>
+            <Text style={[styles.inputLabel, { color: theme.text }]}>
+              Email Address
+            </Text>
+            <View style={styles.inputContainer}>
+              <Ionicons name="mail" size={16} color={theme.subtext} style={styles.inputIcon} />
+              <TextInput
+                style={[styles.textInput, { 
+                  borderColor: validationErrors.email ? theme.danger : theme.border, 
+                  color: theme.text,
+                  backgroundColor: theme.background 
+                }]}
+                placeholder="Enter your email address"
+                placeholderTextColor={theme.placeholder}
+                value={email}
+                onChangeText={handleEmailChange}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                editable={!loading}
+              />
+            </View>
+            {validationErrors.email && (
+              <View style={styles.errorContainer}>
+                <Ionicons name="alert-circle" size={14} color={theme.danger} />
+                <Text style={[styles.errorText, { color: theme.danger }]}>
+                  {validationErrors.email}
+                </Text>
+              </View>
+            )}
+            {email !== originalEmail && (
+              <View style={[styles.infoContainer, { backgroundColor: `${theme.primary}15` }]}>
+                <Ionicons name="information-circle" size={14} color={theme.primary} />
+                <Text style={[styles.infoText, { color: theme.primary }]}>
+                  Email verification will be required for the new address
+                </Text>
+              </View>
+            )}
+          </View>
+        </View>
+
+        {/* Password Change Card */}
+        <View style={[styles.passwordCard, { backgroundColor: theme.card }]}>
+          <View style={styles.cardHeader}>
+            <Ionicons name="lock-closed" size={20} color={theme.primary} />
+            <Text style={[styles.cardTitle, { color: theme.text }]}>
+              Change Password
+            </Text>
+          </View>
+          <Text style={[styles.cardDescription, { color: theme.subtext }]}>
+            Leave blank if you don't want to change your password
           </Text>
-          <TextInput
-            style={[
-              styles.input, 
-              { 
-                borderColor: validationErrors.username ? theme.danger : theme.border, 
-                color: theme.text,
-                backgroundColor: theme.card
-              }
-            ]}
-            placeholder="Username"
-            placeholderTextColor={theme.placeholder}
-            value={username}
-            onChangeText={handleUsernameChange}
-            autoCapitalize="none"
-            maxLength={30}
-            editable={!loading}
-          />
-          {validationErrors.username && (
-            <Text style={[styles.errorText, { color: theme.danger }]}>{validationErrors.username}</Text>
-          )}
+
+          {/* Current Password */}
+          <View style={styles.inputGroup}>
+            <Text style={[styles.inputLabel, { color: theme.text }]}>
+              Current Password
+            </Text>
+            <View style={styles.inputContainer}>
+              <Ionicons name="key" size={16} color={theme.subtext} style={styles.inputIcon} />
+              <TextInput
+                style={[styles.textInput, { 
+                  borderColor: validationErrors.currentPassword ? theme.danger : theme.border, 
+                  color: theme.text,
+                  backgroundColor: theme.background 
+                }]}
+                placeholder="Enter current password"
+                placeholderTextColor={theme.placeholder}
+                value={currentPassword}
+                onChangeText={handleCurrentPasswordChange}
+                secureTextEntry={true}
+                autoCapitalize="none"
+                editable={!loading}
+              />
+            </View>
+            {validationErrors.currentPassword && (
+              <View style={styles.errorContainer}>
+                <Ionicons name="alert-circle" size={14} color={theme.danger} />
+                <Text style={[styles.errorText, { color: theme.danger }]}>
+                  {validationErrors.currentPassword}
+                </Text>
+              </View>
+            )}
+          </View>
+
+          {/* New Password */}
+          <View style={styles.inputGroup}>
+            <Text style={[styles.inputLabel, { color: theme.text }]}>
+              New Password
+            </Text>
+            <View style={styles.inputContainer}>
+              <Ionicons name="lock-open" size={16} color={theme.subtext} style={styles.inputIcon} />
+              <TextInput
+                style={[styles.textInput, { 
+                  borderColor: validationErrors.newPassword ? theme.danger : theme.border, 
+                  color: theme.text,
+                  backgroundColor: theme.background 
+                }]}
+                placeholder="Enter new password"
+                placeholderTextColor={theme.placeholder}
+                value={newPassword}
+                onChangeText={handleNewPasswordChange}
+                secureTextEntry={true}
+                autoCapitalize="none"
+                editable={!loading}
+              />
+            </View>
+            {validationErrors.newPassword && (
+              <View style={styles.errorContainer}>
+                <Ionicons name="alert-circle" size={14} color={theme.danger} />
+                <Text style={[styles.errorText, { color: theme.danger }]}>
+                  {validationErrors.newPassword}
+                </Text>
+              </View>
+            )}
+          </View>
+
+          {/* Confirm Password */}
+          <View style={styles.inputGroup}>
+            <Text style={[styles.inputLabel, { color: theme.text }]}>
+              Confirm New Password
+            </Text>
+            <View style={styles.inputContainer}>
+              <Ionicons name="checkmark-circle" size={16} color={theme.subtext} style={styles.inputIcon} />
+              <TextInput
+                style={[styles.textInput, { 
+                  borderColor: validationErrors.confirmPassword ? theme.danger : theme.border, 
+                  color: theme.text,
+                  backgroundColor: theme.background 
+                }]}
+                placeholder="Confirm new password"
+                placeholderTextColor={theme.placeholder}
+                value={confirmPassword}
+                onChangeText={handleConfirmPasswordChange}
+                secureTextEntry={true}
+                autoCapitalize="none"
+                editable={!loading}
+              />
+            </View>
+            {validationErrors.confirmPassword && (
+              <View style={styles.errorContainer}>
+                <Ionicons name="alert-circle" size={14} color={theme.danger} />
+                <Text style={[styles.errorText, { color: theme.danger }]}>
+                  {validationErrors.confirmPassword}
+                </Text>
+              </View>
+            )}
+          </View>
         </View>
 
-        {/* Email Section */}
-        <View style={styles.formSection}>
-          <Text style={[styles.fieldLabel, { color: theme.text }]}>Email Address *</Text>
-          <TextInput
+        {/* Action Buttons */}
+        <View style={styles.buttonContainer}>
+          <TouchableOpacity
             style={[
-              styles.input, 
+              styles.updateButton, 
               { 
-                borderColor: validationErrors.email ? theme.danger : theme.border, 
-                color: theme.text,
-                backgroundColor: theme.card
+                backgroundColor: isFormValid() && hasChanges() && !loading ? theme.primary : theme.border,
+                opacity: loading ? 0.6 : 1
               }
             ]}
-            placeholder="Email address"
-            placeholderTextColor={theme.placeholder}
-            value={email}
-            onChangeText={handleEmailChange}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            editable={!loading}
-          />
-          {validationErrors.email && (
-            <Text style={[styles.errorText, { color: theme.danger }]}>{validationErrors.email}</Text>
-          )}
+            onPress={handleUpdateProfile}
+            disabled={!isFormValid() || !hasChanges() || loading}
+          >
+            {loading ? (
+              <ActivityIndicator size="small" color={theme.buttonText} />
+            ) : (
+              <>
+                <Ionicons name="save" size={16} color={theme.buttonText} />
+                <Text style={[styles.updateButtonText, { color: theme.buttonText }]}>
+                  Update Profile
+                </Text>
+              </>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.cancelButton, { 
+              borderColor: theme.border, 
+              backgroundColor: theme.background,
+              opacity: loading ? 0.6 : 1 
+            }]}
+            onPress={() => router.back()}
+            disabled={loading}
+          >
+            <Ionicons name="close" size={16} color={theme.text} />
+            <Text style={[styles.cancelButtonText, { color: theme.text }]}>
+              Cancel
+            </Text>
+          </TouchableOpacity>
         </View>
-      </View>
-
-      <View style={styles.section}>
-        <Text style={[styles.sectionTitle, { color: theme.text }]}>Change Password (Optional)</Text>
-        <Text style={[styles.sectionSubtitle, { color: theme.placeholder }]}>
-          Leave blank if you don't want to change your password
-        </Text>
-
-        {/* Current Password Section */}
-        <View style={styles.formSection}>
-          <Text style={[styles.fieldLabel, { color: theme.text }]}>Current Password</Text>
-          <TextInput
-            style={[
-              styles.input, 
-              { 
-                borderColor: validationErrors.currentPassword ? theme.danger : theme.border, 
-                color: theme.text,
-                backgroundColor: theme.card
-              }
-            ]}
-            placeholder="Current password"
-            placeholderTextColor={theme.placeholder}
-            value={currentPassword}
-            onChangeText={handleCurrentPasswordChange}
-            secureTextEntry={true}
-            autoCapitalize="none"
-            editable={!loading}
-          />
-          {validationErrors.currentPassword && (
-            <Text style={[styles.errorText, { color: theme.danger }]}>{validationErrors.currentPassword}</Text>
-          )}
-        </View>
-
-        {/* New Password Section */}
-        <View style={styles.formSection}>
-          <Text style={[styles.fieldLabel, { color: theme.text }]}>New Password</Text>
-          <TextInput
-            style={[
-              styles.input, 
-              { 
-                borderColor: validationErrors.newPassword ? theme.danger : theme.border, 
-                color: theme.text,
-                backgroundColor: theme.card
-              }
-            ]}
-            placeholder="New password"
-            placeholderTextColor={theme.placeholder}
-            value={newPassword}
-            onChangeText={handleNewPasswordChange}
-            secureTextEntry={true}
-            autoCapitalize="none"
-            editable={!loading}
-          />
-          {validationErrors.newPassword && (
-            <Text style={[styles.errorText, { color: theme.danger }]}>{validationErrors.newPassword}</Text>
-          )}
-        </View>
-
-        {/* Confirm Password Section */}
-        <View style={styles.formSection}>
-          <Text style={[styles.fieldLabel, { color: theme.text }]}>Confirm New Password</Text>
-          <TextInput
-            style={[
-              styles.input, 
-              { 
-                borderColor: validationErrors.confirmPassword ? theme.danger : theme.border, 
-                color: theme.text,
-                backgroundColor: theme.card
-              }
-            ]}
-            placeholder="Confirm new password"
-            placeholderTextColor={theme.placeholder}
-            value={confirmPassword}
-            onChangeText={handleConfirmPasswordChange}
-            secureTextEntry={true}
-            autoCapitalize="none"
-            editable={!loading}
-          />
-          {validationErrors.confirmPassword && (
-            <Text style={[styles.errorText, { color: theme.danger }]}>{validationErrors.confirmPassword}</Text>
-          )}
-        </View>
-      </View>
-
-      {/* Button Container */}
-      <View style={styles.buttonContainer}>
-        <TouchableOpacity
-          style={[
-            styles.button, 
-            { 
-              backgroundColor: isFormValid() && hasChanges() && !loading ? theme.primary : theme.border,
-              opacity: loading ? 0.6 : 1
-            }
-          ]}
-          onPress={handleUpdateProfile}
-          disabled={!isFormValid() || !hasChanges() || loading}
-        >
-          {loading ? (
-            <ActivityIndicator size="small" color={theme.buttonText} />
-          ) : (
-            <Text style={[styles.buttonText, { color: theme.buttonText }]}>Update Profile</Text>
-          )}
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.cancelButton, { borderColor: theme.border, opacity: loading ? 0.6 : 1 }]}
-          onPress={() => router.back()}
-          disabled={loading}
-        >
-          <Text style={[styles.cancelButtonText, { color: theme.text }]}>Cancel</Text>
-        </TouchableOpacity>
-      </View>
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 16,
+  },
+  // Header Styles
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: Platform.OS === 'ios' ? 60 : 20,
+    paddingBottom: 12,
+    zIndex: 10,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 3,
+      },
+      android: {
+        elevation: 4,
+      },
+    }),
+  },
+  headerBackButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.1,
+        shadowRadius: 2,
+      },
+      android: {
+        elevation: 2,
+      },
+    }),
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    textAlign: 'center',
+    flex: 1,
+  },
+  headerActions: {
+    width: 36,
+  },
+  // Loading States
+  loadingContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingTop: 60,
   },
   loadingText: {
     fontSize: 16,
-    marginTop: 10,
-    textAlign: "center",
+    marginTop: 12,
+    textAlign: 'center',
   },
+  // Content Layout
+  content: {
+    flex: 1,
+  },
+  contentContainer: {
+    padding: 16,
+    paddingBottom: 32,
+  },
+  // Error and Banner Styles
   errorBanner: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    margin: 16,
     padding: 12,
-    marginBottom: 16,
     borderRadius: 8,
     borderWidth: 1,
+    gap: 8,
   },
   errorBannerText: {
     flex: 1,
     fontSize: 14,
-    marginRight: 12,
+    fontWeight: '500',
   },
   errorBannerButton: {
     paddingHorizontal: 12,
@@ -533,83 +714,168 @@ const styles = StyleSheet.create({
   },
   errorBannerButtonText: {
     fontSize: 12,
-    fontWeight: 'bold',
+    fontWeight: '600',
   },
   retryBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    margin: 16,
     padding: 12,
-    marginBottom: 16,
     borderRadius: 8,
     borderWidth: 1,
-    alignItems: 'center',
+    gap: 8,
   },
   retryBannerText: {
     fontSize: 14,
     fontWeight: '500',
   },
-  title: {
-    fontSize: 24,
-    fontWeight: "bold",
-    marginBottom: 24,
-    textAlign: "center",
+  // Card Styles
+  basicInfoCard: {
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 3,
+      },
+    }),
   },
-  section: {
+  passwordCard: {
+    borderRadius: 12,
+    padding: 16,
     marginBottom: 24,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 3,
+      },
+    }),
   },
-  sectionTitle: {
+  cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+    gap: 8,
+  },
+  cardTitle: {
     fontSize: 18,
-    fontWeight: "bold",
-    marginBottom: 8,
+    fontWeight: '600',
   },
-  sectionSubtitle: {
+  cardDescription: {
     fontSize: 14,
     marginBottom: 16,
-    fontStyle: "italic",
+    lineHeight: 20,
   },
-  formSection: {
+  // Form Input Styles
+  inputGroup: {
     marginBottom: 16,
   },
-  fieldLabel: {
+  inputLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    marginBottom: 8,
+  },
+  inputWrapper: {
+    gap: 4,
+  },
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    position: 'relative',
+  },
+  inputIcon: {
+    position: 'absolute',
+    left: 12,
+    zIndex: 1,
+  },
+  textInput: {
+    flex: 1,
+    height: 48,
+    paddingLeft: 40,
+    paddingRight: 12,
+    borderWidth: 1,
+    borderRadius: 8,
     fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 4,
   },
   characterCount: {
     fontSize: 12,
     textAlign: 'right',
-    marginBottom: 4,
+    marginTop: 4,
   },
-  input: {
-    borderWidth: 1,
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
+  // Error and Info Styles
+  errorContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+    gap: 4,
   },
   errorText: {
     fontSize: 12,
-    marginTop: 4,
+    flex: 1,
   },
+  infoContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+    padding: 8,
+    borderRadius: 6,
+    gap: 6,
+  },
+  infoText: {
+    fontSize: 12,
+    flex: 1,
+    lineHeight: 16,
+  },
+  // Button Styles
   buttonContainer: {
-    marginTop: 16,
     gap: 12,
   },
-  button: {
-    padding: 12,
+  updateButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 48,
     borderRadius: 8,
-    alignItems: "center",
+    gap: 8,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 2,
+      },
+    }),
   },
-  buttonText: {
+  updateButtonText: {
     fontSize: 16,
-    fontWeight: "bold",
+    fontWeight: '600',
   },
   cancelButton: {
-    padding: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 48,
     borderRadius: 8,
-    alignItems: "center",
     borderWidth: 1,
-    marginBottom: 24,
+    gap: 8,
   },
   cancelButtonText: {
     fontSize: 16,
+    fontWeight: '500',
   },
 });
 

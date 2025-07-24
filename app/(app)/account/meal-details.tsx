@@ -8,7 +8,8 @@ import {
   Alert, 
   Image,
   ActivityIndicator,
-  RefreshControl 
+  RefreshControl,
+  Platform
 } from 'react-native';
 import { useTheme } from '../../../context/ThemeContext';
 import { supabase } from '../../../utils/supabase';
@@ -247,71 +248,168 @@ const AdminMealDetailsScreen: React.FC = () => {
 
   if (loading) {
     return (
-      <View style={[styles.container, styles.centered, { backgroundColor: theme.background }]}>
-        <ActivityIndicator size="large" color={theme.primary} />
-        <Text style={[styles.loadingText, { color: theme.text }]}>Loading meal details...</Text>
+      <View style={[styles.container, { backgroundColor: theme.background }]}>
+        {/* Modern Header */}
+        <View style={[styles.header, { backgroundColor: theme.background }]}>
+          <TouchableOpacity
+            style={[styles.backButton, { backgroundColor: theme.card }]}
+            onPress={() => router.back()}
+          >
+            <Ionicons name="arrow-back" size={20} color={theme.text} />
+          </TouchableOpacity>
+          <Text style={[styles.headerTitle, { color: theme.text }]}>
+            Admin Meal Review
+          </Text>
+          <View style={styles.headerActions} />
+        </View>
+
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color={theme.primary} />
+          <Text style={[styles.loadingText, { color: theme.subtext }]}>
+            Loading meal details...
+          </Text>
+        </View>
       </View>
     );
   }
 
   if (error && !meal) {
     return (
-      <View style={[styles.container, styles.centered, { backgroundColor: theme.background }]}>
-        <Text style={[styles.errorText, { color: theme.danger }]}>{error}</Text>
-        <TouchableOpacity 
-          style={[styles.retryButton, { backgroundColor: theme.primary }]}
-          onPress={handleRetry}
-        >
-          <Text style={[styles.retryButtonText, { color: theme.buttonText }]}>Retry</Text>
-        </TouchableOpacity>
+      <View style={[styles.container, { backgroundColor: theme.background }]}>
+        {/* Modern Header */}
+        <View style={[styles.header, { backgroundColor: theme.background }]}>
+          <TouchableOpacity
+            style={[styles.backButton, { backgroundColor: theme.card }]}
+            onPress={() => router.back()}
+          >
+            <Ionicons name="arrow-back" size={20} color={theme.text} />
+          </TouchableOpacity>
+          <Text style={[styles.headerTitle, { color: theme.text }]}>
+            Admin Meal Review
+          </Text>
+          <View style={styles.headerActions} />
+        </View>
+
+        <View style={styles.centered}>
+          <View style={[styles.errorCard, { backgroundColor: theme.card }]}>
+            <View style={styles.errorContent}>
+              <Ionicons name="alert-circle" size={48} color={theme.danger} />
+              <Text style={[styles.errorTitle, { color: theme.text }]}>
+                Failed to Load Meal
+              </Text>
+              <Text style={[styles.errorText, { color: theme.subtext }]}>
+                {error}
+              </Text>
+              <TouchableOpacity 
+                style={[styles.retryButton, { backgroundColor: theme.primary }]}
+                onPress={handleRetry}
+              >
+                <Ionicons name="refresh" size={16} color={theme.buttonText} />
+                <Text style={[styles.retryButtonText, { color: theme.buttonText }]}>
+                  Try Again
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
       </View>
     );
   }
 
   if (!meal) {
     return (
-      <View style={[styles.container, styles.centered, { backgroundColor: theme.background }]}>
-        <Text style={[styles.errorText, { color: theme.danger }]}>Meal not found</Text>
-        <TouchableOpacity 
-          style={[styles.retryButton, { backgroundColor: theme.primary }]}
-          onPress={handleRetry}
-        >
-          <Text style={[styles.retryButtonText, { color: theme.buttonText }]}>Retry</Text>
-        </TouchableOpacity>
+      <View style={[styles.container, { backgroundColor: theme.background }]}>
+        {/* Modern Header */}
+        <View style={[styles.header, { backgroundColor: theme.background }]}>
+          <TouchableOpacity
+            style={[styles.backButton, { backgroundColor: theme.card }]}
+            onPress={() => router.back()}
+          >
+            <Ionicons name="arrow-back" size={20} color={theme.text} />
+          </TouchableOpacity>
+          <Text style={[styles.headerTitle, { color: theme.text }]}>
+            Admin Meal Review
+          </Text>
+          <View style={styles.headerActions} />
+        </View>
+
+        <View style={styles.centered}>
+          <View style={[styles.errorCard, { backgroundColor: theme.card }]}>
+            <View style={styles.errorContent}>
+              <Ionicons name="search" size={48} color={theme.subtext} />
+              <Text style={[styles.errorTitle, { color: theme.text }]}>
+                Meal Not Found
+              </Text>
+              <Text style={[styles.errorText, { color: theme.subtext }]}>
+                The requested meal could not be found or may have been deleted.
+              </Text>
+              <TouchableOpacity 
+                style={[styles.retryButton, { backgroundColor: theme.primary }]}
+                onPress={handleRetry}
+              >
+                <Ionicons name="refresh" size={16} color={theme.buttonText} />
+                <Text style={[styles.retryButtonText, { color: theme.buttonText }]}>
+                  Try Again
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
       </View>
     );
   }
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
-      <View style={styles.header}>
+      {/* Modern Header */}
+      <View style={[styles.header, { backgroundColor: theme.background }]}>
         <TouchableOpacity
-          style={styles.backButton}
+          style={[styles.backButton, { backgroundColor: theme.card }]}
           onPress={() => router.back()}
         >
-          <Ionicons name="arrow-back" size={24} color={theme.text} />
+          <Ionicons name="arrow-back" size={20} color={theme.text} />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: theme.text }]}>Admin Meal Review</Text>
+        <Text style={[styles.headerTitle, { color: theme.text }]}>
+          Admin Meal Review
+        </Text>
+        <TouchableOpacity
+          style={[styles.headerActionButton, { backgroundColor: theme.card }]}
+          onPress={() => fetchMealDetails()}
+        >
+          <Ionicons name="refresh" size={20} color={theme.text} />
+        </TouchableOpacity>
       </View>
 
       {/* Error Banner */}
       {error && (
-        <View style={[styles.errorBanner, { backgroundColor: theme.card, borderColor: theme.danger }]}>
-          <Text style={[styles.errorBannerText, { color: theme.danger }]}>{error}</Text>
+        <View style={[styles.errorBanner, { 
+          backgroundColor: `${theme.danger}15`, 
+          borderColor: theme.danger 
+        }]}>
+          <Ionicons name="alert-circle" size={16} color={theme.danger} />
+          <Text style={[styles.errorBannerText, { color: theme.danger }]}>
+            {error}
+          </Text>
           <TouchableOpacity 
             style={[styles.errorBannerButton, { backgroundColor: theme.danger }]}
             onPress={handleRetry}
           >
-            <Text style={[styles.errorBannerButtonText, { color: theme.buttonText }]}>Retry</Text>
+            <Text style={[styles.errorBannerButtonText, { color: theme.buttonText }]}>
+              Retry
+            </Text>
           </TouchableOpacity>
         </View>
       )}
 
       {/* Retry Banner */}
       {retryCount > 0 && !error && (
-        <View style={[styles.retryBanner, { backgroundColor: theme.card, borderColor: theme.primary }]}>
-          <Text style={[styles.retryBannerText, { color: theme.primary }]}>
-            Retrying... (Attempt {retryCount})
+        <View style={[styles.retryBanner, { 
+          backgroundColor: `${theme.warning}15`, 
+          borderColor: theme.warning 
+        }]}>
+          <ActivityIndicator size="small" color={theme.warning} />
+          <Text style={[styles.retryBannerText, { color: theme.warning }]}>
+            Retrying... (Attempt {retryCount}/3)
           </Text>
         </View>
       )}
@@ -328,88 +426,169 @@ const AdminMealDetailsScreen: React.FC = () => {
           />
         }
       >
-        {/* Meal Status Indicators */}
-        <View style={styles.statusContainer}>
-          {meal.forever_invis && (
-            <View style={[styles.statusBadge, { backgroundColor: theme.danger }]}>
-              <Text style={styles.statusBadgeText}>HIDDEN</Text>
+        {/* Status Card */}
+        {(meal.forever_invis || !meal.visibility) && (
+          <View style={[styles.statusCard, { backgroundColor: theme.card }]}>
+            <View style={styles.cardHeader}>
+              <Ionicons name="shield-checkmark" size={20} color={theme.warning} />
+              <Text style={[styles.cardTitle, { color: theme.text }]}>
+                Meal Status
+              </Text>
             </View>
-          )}
-          {!meal.visibility && (
-            <View style={[styles.statusBadge, { backgroundColor: theme.warning }]}>
-              <Text style={styles.statusBadgeText}>PRIVATE</Text>
+            <View style={styles.statusContainer}>
+              {meal.forever_invis && (
+                <View style={[styles.statusBadge, { backgroundColor: theme.danger }]}>
+                  <Ionicons name="eye-off" size={12} color="white" />
+                  <Text style={styles.statusBadgeText}>HIDDEN</Text>
+                </View>
+              )}
+              {!meal.visibility && (
+                <View style={[styles.statusBadge, { backgroundColor: theme.warning }]}>
+                  <Ionicons name="lock-closed" size={12} color="white" />
+                  <Text style={styles.statusBadgeText}>PRIVATE</Text>
+                </View>
+              )}
             </View>
-          )}
-        </View>
-
-        {/* Meal Image */}
-        {meal.picture && (
-          <Image source={{ uri: meal.picture }} style={styles.mealImage} />
-        )}
-
-        {/* Basic Info */}
-        <View style={[styles.section, { backgroundColor: theme.card, borderColor: theme.border }]}>
-          <Text style={[styles.mealName, { color: theme.text }]}>{meal.name}</Text>
-          <Text style={[styles.creatorInfo, { color: theme.subtext }]}>
-            Created by: {meal.creator_username}
-          </Text>
-          <Text style={[styles.creatorInfo, { color: theme.subtext }]}>
-            Created: {new Date(meal.created_at).toLocaleDateString()}
-          </Text>
-          {meal.created_by_ai && (
-            <Text style={[styles.aiTag, { color: theme.primary }]}>Generated by AI</Text>
-          )}
-        </View>
-
-        {/* Description */}
-        {meal.description && (
-          <View style={[styles.section, { backgroundColor: theme.card, borderColor: theme.border }]}>
-            <Text style={[styles.sectionTitle, { color: theme.text }]}>Description</Text>
-            <Text style={[styles.description, { color: theme.text }]}>{meal.description}</Text>
           </View>
         )}
 
-        {/* Nutrition Info */}
-        <View style={[styles.section, { backgroundColor: theme.card, borderColor: theme.border }]}>
-          <Text style={[styles.sectionTitle, { color: theme.text }]}>Nutrition Information</Text>
+        {/* Meal Image Card */}
+        {meal.picture && (
+          <View style={[styles.imageCard, { backgroundColor: theme.card }]}>
+            <Image source={{ uri: meal.picture }} style={styles.mealImage} />
+            {meal.created_by_ai && (
+              <View style={[styles.aiTag, { backgroundColor: '#8B5CF6' }]}>
+                <Ionicons name="sparkles" size={12} color="white" />
+                <Text style={styles.aiTagText}>AI Generated</Text>
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* Basic Info Card */}
+        <View style={[styles.infoCard, { backgroundColor: theme.card }]}>
+          <View style={styles.cardHeader}>
+            <Ionicons name="information-circle" size={20} color={theme.primary} />
+            <Text style={[styles.cardTitle, { color: theme.text }]}>
+              Meal Information
+            </Text>
+          </View>
+          <Text style={[styles.mealName, { color: theme.text }]}>{meal.name}</Text>
+          <View style={styles.infoRow}>
+            <Ionicons name="person" size={14} color={theme.subtext} />
+            <Text style={[styles.creatorInfo, { color: theme.subtext }]}>
+              Created by: {meal.creator_username}
+            </Text>
+          </View>
+          <View style={styles.infoRow}>
+            <Ionicons name="calendar" size={14} color={theme.subtext} />
+            <Text style={[styles.creatorInfo, { color: theme.subtext }]}>
+              Created: {new Date(meal.created_at).toLocaleDateString()}
+            </Text>
+          </View>
+        </View>
+
+        {/* Description Card */}
+        {meal.description && (
+          <View style={[styles.descriptionCard, { backgroundColor: theme.card }]}>
+            <View style={styles.cardHeader}>
+              <Ionicons name="document-text" size={20} color={theme.primary} />
+              <Text style={[styles.cardTitle, { color: theme.text }]}>
+                Description
+              </Text>
+            </View>
+            <Text style={[styles.description, { color: theme.text }]}>
+              {meal.description}
+            </Text>
+          </View>
+        )}
+
+        {/* Nutrition Card */}
+        <View style={[styles.nutritionCard, { backgroundColor: theme.card }]}>
+          <View style={styles.cardHeader}>
+            <Ionicons name="fitness" size={20} color={theme.primary} />
+            <Text style={[styles.cardTitle, { color: theme.text }]}>
+              Nutrition Information
+            </Text>
+          </View>
           <View style={styles.nutritionGrid}>
             <View style={styles.nutritionItem}>
+              <Ionicons name="flame" size={16} color="#FF6B6B" />
               <Text style={[styles.nutritionLabel, { color: theme.subtext }]}>Calories</Text>
-              <Text style={[styles.nutritionValue, { color: theme.text }]}>{meal.calories || 'N/A'}</Text>
+              <Text style={[styles.nutritionValue, { color: theme.text }]}>
+                {meal.calories || 'N/A'}
+              </Text>
             </View>
             <View style={styles.nutritionItem}>
+              <Ionicons name="fitness" size={16} color="#4ECDC4" />
               <Text style={[styles.nutritionLabel, { color: theme.subtext }]}>Protein</Text>
-              <Text style={[styles.nutritionValue, { color: theme.text }]}>{meal.protein || 'N/A'}g</Text>
+              <Text style={[styles.nutritionValue, { color: theme.text }]}>
+                {meal.protein || 'N/A'}g
+              </Text>
             </View>
             <View style={styles.nutritionItem}>
+              <Ionicons name="leaf" size={16} color="#45B7D1" />
               <Text style={[styles.nutritionLabel, { color: theme.subtext }]}>Carbs</Text>
-              <Text style={[styles.nutritionValue, { color: theme.text }]}>{meal.carbohydrates || 'N/A'}g</Text>
+              <Text style={[styles.nutritionValue, { color: theme.text }]}>
+                {meal.carbohydrates || 'N/A'}g
+              </Text>
             </View>
             <View style={styles.nutritionItem}>
+              <Ionicons name="water" size={16} color="#F7DC6F" />
               <Text style={[styles.nutritionLabel, { color: theme.subtext }]}>Fat</Text>
-              <Text style={[styles.nutritionValue, { color: theme.text }]}>{meal.fat || 'N/A'}g</Text>
+              <Text style={[styles.nutritionValue, { color: theme.text }]}>
+                {meal.fat || 'N/A'}g
+              </Text>
             </View>
           </View>
         </View>
 
-        {/* Additional Info */}
-        <View style={[styles.section, { backgroundColor: theme.card, borderColor: theme.border }]}>
-          <Text style={[styles.sectionTitle, { color: theme.text }]}>Additional Information</Text>
-          <Text style={[styles.infoText, { color: theme.text }]}>Servings: {meal.servings || 1}</Text>
+        {/* Additional Info Card */}
+        <View style={[styles.additionalCard, { backgroundColor: theme.card }]}>
+          <View style={styles.cardHeader}>
+            <Ionicons name="list" size={20} color={theme.primary} />
+            <Text style={[styles.cardTitle, { color: theme.text }]}>
+              Additional Information
+            </Text>
+          </View>
+          <View style={styles.infoRow}>
+            <Ionicons name="people" size={14} color={theme.subtext} />
+            <Text style={[styles.infoText, { color: theme.text }]}>
+              Servings: {meal.servings || 1}
+            </Text>
+          </View>
           {meal.cuisine && (
-            <Text style={[styles.infoText, { color: theme.text }]}>Cuisine: {meal.cuisine}</Text>
+            <View style={styles.infoRow}>
+              <Ionicons name="earth" size={14} color={theme.subtext} />
+              <Text style={[styles.infoText, { color: theme.text }]}>
+                Cuisine: {meal.cuisine}
+              </Text>
+            </View>
           )}
           {meal.dietary_restrictions && (
-            <Text style={[styles.infoText, { color: theme.text }]}>Dietary: {meal.dietary_restrictions}</Text>
+            <View style={styles.infoRow}>
+              <Ionicons name="leaf" size={14} color={theme.subtext} />
+              <Text style={[styles.infoText, { color: theme.text }]}>
+                Dietary: {meal.dietary_restrictions}
+              </Text>
+            </View>
           )}
         </View>
 
-        {/* Ingredients */}
+        {/* Ingredients Card */}
         {ingredients.length > 0 && (
-          <View style={[styles.section, { backgroundColor: theme.card, borderColor: theme.border }]}>
-            <Text style={[styles.sectionTitle, { color: theme.text }]}>Ingredients</Text>
+          <View style={[styles.ingredientsCard, { backgroundColor: theme.card }]}>
+            <View style={styles.cardHeader}>
+              <Ionicons name="nutrition" size={20} color={theme.primary} />
+              <Text style={[styles.cardTitle, { color: theme.text }]}>
+                Ingredients ({ingredients.length})
+              </Text>
+            </View>
             {ingredients.map((ingredient, index) => (
               <View key={ingredient.meal_ingredient_id} style={styles.ingredientItem}>
+                <View style={styles.ingredientBullet}>
+                  <Text style={[styles.bulletText, { color: theme.primary }]}>•</Text>
+                </View>
                 <Text style={[styles.ingredientText, { color: theme.text }]}>
                   {ingredient.quantity && ingredient.unit 
                     ? `${ingredient.quantity} ${ingredient.unit} `
@@ -424,19 +603,36 @@ const AdminMealDetailsScreen: React.FC = () => {
           </View>
         )}
 
-        {/* Instructions */}
+        {/* Instructions Card */}
         {meal.instructions && (
-          <View style={[styles.section, { backgroundColor: theme.card, borderColor: theme.border }]}>
-            <Text style={[styles.sectionTitle, { color: theme.text }]}>Instructions</Text>
-            <Text style={[styles.instructions, { color: theme.text }]}>{meal.instructions}</Text>
+          <View style={[styles.instructionsCard, { backgroundColor: theme.card }]}>
+            <View style={styles.cardHeader}>
+              <Ionicons name="book" size={20} color={theme.primary} />
+              <Text style={[styles.cardTitle, { color: theme.text }]}>
+                Instructions
+              </Text>
+            </View>
+            <Text style={[styles.instructions, { color: theme.text }]}>
+              {meal.instructions}
+            </Text>
           </View>
         )}
 
-        {/* Recipe Link */}
+        {/* Recipe Link Card */}
         {meal.recipeLink && (
-          <View style={[styles.section, { backgroundColor: theme.card, borderColor: theme.border }]}>
-            <Text style={[styles.sectionTitle, { color: theme.text }]}>Recipe Link</Text>
-            <Text style={[styles.link, { color: theme.primary }]}>{meal.recipeLink}</Text>
+          <View style={[styles.linkCard, { backgroundColor: theme.card }]}>
+            <View style={styles.cardHeader}>
+              <Ionicons name="link" size={20} color={theme.primary} />
+              <Text style={[styles.cardTitle, { color: theme.text }]}>
+                Recipe Link
+              </Text>
+            </View>
+            <TouchableOpacity style={styles.linkContainer}>
+              <Ionicons name="open" size={16} color={theme.primary} />
+              <Text style={[styles.link, { color: theme.primary }]}>
+                {meal.recipeLink}
+              </Text>
+            </TouchableOpacity>
           </View>
         )}
       </ScrollView>
@@ -446,19 +642,18 @@ const AdminMealDetailsScreen: React.FC = () => {
         <TouchableOpacity
           style={[
             styles.actionButton, 
-            { 
-              backgroundColor: theme.danger,
-              opacity: (meal.forever_invis || actionLoading) ? 0.6 : 1
-            }
+            styles.hideButton,
+            { opacity: (meal.forever_invis || actionLoading) ? 0.6 : 1 }
           ]}
           onPress={handleHideMeal}
           disabled={meal.forever_invis || actionLoading === 'hide'}
         >
+          <Ionicons name="eye-off" size={16} color="white" />
           {actionLoading === 'hide' ? (
             <ActivityIndicator size="small" color="white" />
           ) : (
             <Text style={styles.actionButtonText}>
-              {meal.forever_invis ? 'Already Hidden' : 'Hide Meal'}
+              {meal.forever_invis ? 'Hidden' : 'Hide Meal'}
             </Text>
           )}
         </TouchableOpacity>
@@ -466,36 +661,34 @@ const AdminMealDetailsScreen: React.FC = () => {
         <TouchableOpacity
           style={[
             styles.actionButton, 
-            { 
-              backgroundColor: theme.warning,
-              opacity: actionLoading ? 0.6 : 1
-            }
+            styles.dismissButton,
+            { opacity: actionLoading ? 0.6 : 1 }
           ]}
           onPress={handleDismissReport}
           disabled={actionLoading === 'dismiss'}
         >
+          <Ionicons name="close" size={16} color="white" />
           {actionLoading === 'dismiss' ? (
             <ActivityIndicator size="small" color="white" />
           ) : (
-            <Text style={styles.actionButtonText}>Dismiss Report</Text>
+            <Text style={styles.actionButtonText}>Dismiss</Text>
           )}
         </TouchableOpacity>
 
         <TouchableOpacity
           style={[
             styles.actionButton, 
-            { 
-              backgroundColor: theme.primary,
-              opacity: actionLoading ? 0.6 : 1
-            }
+            styles.resolveButton,
+            { opacity: actionLoading ? 0.6 : 1 }
           ]}
           onPress={handleResolveReport}
           disabled={actionLoading === 'resolve'}
         >
+          <Ionicons name="checkmark" size={16} color="white" />
           {actionLoading === 'resolve' ? (
             <ActivityIndicator size="small" color="white" />
           ) : (
-            <Text style={styles.actionButtonText}>Resolve Report</Text>
+            <Text style={styles.actionButtonText}>Resolve</Text>
           )}
         </TouchableOpacity>
       </View>
@@ -514,60 +707,111 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
-    paddingTop: 50,
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    paddingTop: 60,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E5E5',
   },
   backButton: {
-    marginRight: 16,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 3,
+      },
+    }),
   },
   headerTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
+    fontSize: 18,
+    fontWeight: '600',
+    flex: 1,
+    textAlign: 'center',
+  },
+  headerActions: {
+    width: 40,
+    height: 40,
+  },
+  headerActionButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 12,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 3,
+      },
+    }),
   },
   errorBanner: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 16,
+    padding: 12,
     marginHorizontal: 16,
-    marginBottom: 8,
+    marginTop: 8,
     borderRadius: 8,
     borderWidth: 1,
   },
   errorBannerText: {
     flex: 1,
     fontSize: 14,
-    marginRight: 12,
+    fontWeight: '500',
+    marginLeft: 8,
   },
   errorBannerButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     borderRadius: 6,
+    marginLeft: 8,
   },
   errorBannerButtonText: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '600',
   },
   retryBanner: {
-    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
     marginHorizontal: 16,
-    marginBottom: 8,
+    marginTop: 8,
     borderRadius: 8,
     borderWidth: 1,
-    alignItems: 'center',
   },
   retryBannerText: {
     fontSize: 14,
     fontWeight: '500',
+    marginLeft: 8,
   },
   retryButton: {
-    paddingHorizontal: 24,
-    paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
     borderRadius: 8,
     marginTop: 16,
+    gap: 6,
   },
   retryButtonText: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '600',
   },
   content: {
@@ -575,122 +819,425 @@ const styles = StyleSheet.create({
   },
   contentContainer: {
     padding: 16,
+    paddingBottom: 100,
+  },
+  
+  // Card Styles
+  statusCard: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 4,
+      },
+    }),
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  cardTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginLeft: 8,
   },
   statusContainer: {
     flexDirection: 'row',
-    marginBottom: 16,
+    flexWrap: 'wrap',
+    gap: 8,
   },
   statusBadge: {
-    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 12,
-    marginRight: 8,
+    borderRadius: 6,
+    gap: 4,
   },
   statusBadgeText: {
     color: 'white',
     fontSize: 12,
-    fontWeight: 'bold',
+    fontWeight: '600',
+  },
+
+  imageCard: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    position: 'relative',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 4,
+      },
+    }),
   },
   mealImage: {
     width: '100%',
     height: 200,
     borderRadius: 8,
-    marginBottom: 16,
   },
-  section: {
+  aiTag: {
+    position: 'absolute',
+    top: 24,
+    right: 24,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    gap: 4,
+  },
+  aiTagText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+
+  infoCard: {
+    backgroundColor: 'white',
+    borderRadius: 12,
     padding: 16,
-    borderRadius: 8,
-    borderWidth: 1,
     marginBottom: 16,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 4,
+      },
+    }),
   },
   mealName: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: 'bold',
     marginBottom: 8,
   },
+  infoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+    gap: 6,
+  },
   creatorInfo: {
     fontSize: 14,
-    marginBottom: 4,
   },
-  aiTag: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    marginTop: 4,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 12,
+
+  descriptionCard: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 4,
+      },
+    }),
   },
   description: {
-    fontSize: 16,
-    lineHeight: 24,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+
+  nutritionCard: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 4,
+      },
+    }),
   },
   nutritionGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'space-between',
+    gap: 12,
   },
   nutritionItem: {
-    width: '48%',
-    marginBottom: 12,
+    flex: 1,
+    minWidth: '45%',
+    alignItems: 'center',
+    padding: 12,
+    backgroundColor: '#F8F9FA',
+    borderRadius: 8,
+    gap: 4,
   },
   nutritionLabel: {
-    fontSize: 14,
-    marginBottom: 4,
+    fontSize: 12,
+    textAlign: 'center',
   },
   nutritionValue: {
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+
+  additionalCard: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 4,
+      },
+    }),
   },
   infoText: {
-    fontSize: 16,
-    marginBottom: 8,
+    fontSize: 14,
+    marginBottom: 4,
+  },
+
+  ingredientsCard: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 4,
+      },
+    }),
   },
   ingredientItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
     marginBottom: 8,
   },
-  ingredientText: {
+  ingredientBullet: {
+    width: 20,
+    alignItems: 'center',
+  },
+  bulletText: {
     fontSize: 16,
-    lineHeight: 22,
+    fontWeight: 'bold',
+  },
+  ingredientText: {
+    flex: 1,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+
+  instructionsCard: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 4,
+      },
+    }),
   },
   instructions: {
-    fontSize: 16,
-    lineHeight: 24,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+
+  linkCard: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 4,
+      },
+    }),
+  },
+  linkContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   link: {
-    fontSize: 16,
+    fontSize: 14,
     textDecorationLine: 'underline',
+    flex: 1,
   },
+
+  // Action Buttons
   actionContainer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
     flexDirection: 'row',
-    justifyContent: 'space-around',
     padding: 16,
+    paddingBottom: 32,
     borderTopWidth: 1,
+    gap: 12,
   },
   actionButton: {
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 8,
-    minWidth: 100,
-    minHeight: 44,
-    justifyContent: 'center',
+    flex: 1,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    borderRadius: 8,
+    gap: 6,
+  },
+  hideButton: {
+    backgroundColor: '#DC3545',
+  },
+  dismissButton: {
+    backgroundColor: '#FFC107',
+  },
+  resolveButton: {
+    backgroundColor: '#28A745',
   },
   actionButtonText: {
     color: 'white',
-    fontWeight: 'bold',
-    textAlign: 'center',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+
+  // Loading States
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 32,
   },
   loadingText: {
     fontSize: 16,
-    marginTop: 16,
+    fontWeight: '500',
+    marginTop: 12,
+  },
+
+  // Error States
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 32,
+  },
+  errorCard: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 24,
+    alignItems: 'center',
+    maxWidth: 300,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 4,
+      },
+    }),
+  },
+  errorContent: {
+    alignItems: 'center',
+  },
+  errorTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    marginTop: 12,
+    marginBottom: 8,
     textAlign: 'center',
   },
   errorText: {
-    fontSize: 16,
+    fontSize: 14,
     textAlign: 'center',
-    marginBottom: 8,
+    marginBottom: 20,
+    lineHeight: 20,
+  },
+  errorButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+    gap: 6,
+  },
+  errorButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+
+  // Legacy styles (keeping for compatibility)
+  section: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 4,
+      },
+    }),
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 12,
   },
 });
 

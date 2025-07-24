@@ -153,128 +153,201 @@ const AddPantryItem = () => {
 
   return (
     <ScrollView style={[styles.container, { backgroundColor: theme.background }]}>
-      {/* Error Banner */}
+      {/* Enhanced Error Banner */}
       {error && (
         <View style={[styles.errorBanner, { 
-          backgroundColor: `${theme.danger}15`, 
-          borderColor: theme.danger 
+          backgroundColor: theme.danger,
+          shadowColor: theme.shadow,
         }]}>
-          <Text style={[styles.errorBannerText, { color: theme.danger }]}>
-            {error}
+          <Text style={[styles.errorBannerText, { color: theme.buttonTextPrimary }]}>
+            ❌ {error}
           </Text>
           {!error.includes("authenticated") && (
             <TouchableOpacity
-              style={[styles.errorBannerButton, { backgroundColor: theme.danger }]}
+              style={[styles.errorBannerButton, { backgroundColor: theme.background }]}
               onPress={handleRetry}
+              activeOpacity={0.8}
             >
-              <Text style={[styles.errorBannerButtonText, { color: theme.buttonText }]}>
-                Retry
+              <Text style={[styles.errorBannerButtonText, { color: theme.danger }]}>
+                🔄 Retry
               </Text>
             </TouchableOpacity>
           )}
         </View>
       )}
 
-      {/* Retry Banner */}
+      {/* Enhanced Retry Banner */}
       {retryCount > 0 && (
         <View style={[styles.retryBanner, { 
-          backgroundColor: `${theme.warning}15`, 
-          borderColor: theme.warning 
+          backgroundColor: theme.warning,
+          shadowColor: theme.shadow,
         }]}>
-          <Text style={[styles.retryBannerText, { color: theme.warning }]}>
-            Retry attempt {retryCount}/3
+          <Text style={[styles.retryBannerText, { color: theme.buttonTextPrimary }]}>
+            📡 Retry attempt {retryCount}/3
           </Text>
         </View>
       )}
 
-      <Text style={[styles.title, { color: theme.text }]}>Add Pantry Item</Text>
-
-      <View style={styles.formSection}>
-        <Text style={[styles.sectionLabel, { color: theme.text }]}>Food Name *</Text>
-        <Text style={[styles.characterCount, { color: theme.subtext }]}>
-          {food.length}/100 characters
+      {/* Enhanced Header */}
+      <View style={{ alignItems: 'center', marginBottom: 32 }}>
+        <Text style={[styles.title, { color: theme.text }]}>
+          ➕ Add Pantry Item
         </Text>
+        <Text style={[{ fontSize: 16, color: theme.textSecondary, textAlign: 'center' }]}>
+          Track your ingredients and expiration dates
+        </Text>
+      </View>
+
+      {/* Enhanced Food Name Section */}
+      <View style={[styles.formCard, { 
+        backgroundColor: theme.card,
+        borderColor: theme.border,
+        shadowColor: theme.shadow,
+      }]}>
+        <View style={styles.formHeader}>
+          <Text style={[styles.sectionLabel, { color: theme.text }]}>
+            🥘 Food Name *
+          </Text>
+          <Text style={[styles.characterCount, { color: theme.textSecondary }]}>
+            {food.length}/100
+          </Text>
+        </View>
         <TextInput
           style={[
             styles.input, 
             { 
               borderColor: error && (food.length === 0 || food.length > 100) ? theme.danger : theme.border, 
-              color: theme.text 
+              color: theme.text,
+              backgroundColor: theme.background,
             }
           ]}
-          placeholder="Enter food name"
-          placeholderTextColor={theme.placeholder}
+          placeholder="Enter food name (e.g., Milk, Chicken Breast)"
+          placeholderTextColor={theme.textSecondary}
           value={food}
           onChangeText={handleFoodChange}
           maxLength={100}
         />
+        {error && (food.length === 0 || food.length > 100) && (
+          <Text style={[styles.errorText, { color: theme.danger }]}>
+            {food.length === 0 ? "Food name is required" : "Must be 100 characters or less"}
+          </Text>
+        )}
       </View>
 
-      <View style={styles.formSection}>
-        <Text style={[styles.sectionLabel, { color: theme.text }]}>Quantity (Optional)</Text>
-        <TextInput
-          style={[
-            styles.input, 
-            { 
-              borderColor: error && quantity && (isNaN(parseFloat(quantity)) || parseFloat(quantity) <= 0) ? theme.danger : theme.border, 
-              color: theme.text 
-            }
-          ]}
-          placeholder="Enter quantity (e.g., 2, 1.5)"
-          placeholderTextColor={theme.placeholder}
-          keyboardType="numeric"
-          value={quantity}
-          onChangeText={handleQuantityChange}
-        />
-      </View>
-
-      <View style={styles.formSection}>
-        <Text style={[styles.sectionLabel, { color: theme.text }]}>Unit (Optional)</Text>
-        <Text style={[styles.characterCount, { color: theme.subtext }]}>
-          {unit.length}/50 characters
+      {/* Enhanced Quantity Section */}
+      <View style={[styles.formCard, { 
+        backgroundColor: theme.card,
+        borderColor: theme.border,
+        shadowColor: theme.shadow,
+      }]}>
+        <Text style={[styles.sectionLabel, { color: theme.text }]}>
+          📊 Quantity (Optional)
         </Text>
         <TextInput
           style={[
             styles.input, 
             { 
+              borderColor: error && quantity && (isNaN(parseFloat(quantity)) || parseFloat(quantity) <= 0) ? theme.danger : theme.border, 
+              color: theme.text,
+              backgroundColor: theme.background,
+            }
+          ]}
+          placeholder="Enter quantity (e.g., 2, 1.5)"
+          placeholderTextColor={theme.textSecondary}
+          keyboardType="numeric"
+          value={quantity}
+          onChangeText={handleQuantityChange}
+        />
+        {error && quantity && (isNaN(parseFloat(quantity)) || parseFloat(quantity) <= 0) && (
+          <Text style={[styles.errorText, { color: theme.danger }]}>
+            Quantity must be a valid number greater than 0
+          </Text>
+        )}
+      </View>
+
+      {/* Enhanced Unit Section */}
+      <View style={[styles.formCard, { 
+        backgroundColor: theme.card,
+        borderColor: theme.border,
+        shadowColor: theme.shadow,
+      }]}>
+        <View style={styles.formHeader}>
+          <Text style={[styles.sectionLabel, { color: theme.text }]}>
+            📏 Unit (Optional)
+          </Text>
+          <Text style={[styles.characterCount, { color: theme.textSecondary }]}>
+            {unit.length}/50
+          </Text>
+        </View>
+        <TextInput
+          style={[
+            styles.input, 
+            { 
               borderColor: error && unit.length > 50 ? theme.danger : theme.border, 
-              color: theme.text 
+              color: theme.text,
+              backgroundColor: theme.background,
             }
           ]}
           placeholder="Enter unit (e.g., grams, cups, pieces)"
-          placeholderTextColor={theme.placeholder}
+          placeholderTextColor={theme.textSecondary}
           value={unit}
           onChangeText={handleUnitChange}
           maxLength={50}
         />
+        {error && unit.length > 50 && (
+          <Text style={[styles.errorText, { color: theme.danger }]}>
+            Unit must be 50 characters or less
+          </Text>
+        )}
       </View>
 
-      <View style={styles.formSection}>
-        <Text style={[styles.sectionLabel, { color: theme.text }]}>Expiration Date (Optional)</Text>
+      {/* Enhanced Expiration Date Section */}
+      <View style={[styles.formCard, { 
+        backgroundColor: theme.card,
+        borderColor: theme.border,
+        shadowColor: theme.shadow,
+      }]}>
+        <Text style={[styles.sectionLabel, { color: theme.text }]}>
+          📅 Expiration Date (Optional)
+        </Text>
         <TouchableOpacity
           style={[
             styles.datePickerButton, 
             { 
-              borderColor: error && expirationDate && expirationDate < new Date(new Date().setHours(0, 0, 0, 0)) ? theme.danger : theme.border 
+              borderColor: error && expirationDate && expirationDate < new Date(new Date().setHours(0, 0, 0, 0)) ? theme.danger : theme.border,
+              backgroundColor: theme.background,
             }
           ]}
           onPress={() => setShowDatePicker(true)}
+          activeOpacity={0.8}
         >
-          <Text style={{ color: expirationDate ? theme.text : theme.placeholder }}>
-            {expirationDate ? expirationDate.toDateString() : "Select Expiration Date"}
+          <Text style={{ color: expirationDate ? theme.text : theme.textSecondary }}>
+            {expirationDate ? `📅 ${expirationDate.toDateString()}` : "📅 Select Expiration Date"}
           </Text>
         </TouchableOpacity>
         
         {expirationDate && (
           <TouchableOpacity
-            style={[styles.clearDateButton, { backgroundColor: theme.border }]}
+            style={[styles.clearDateButton, { 
+              backgroundColor: theme.background,
+              borderColor: theme.border,
+            }]}
             onPress={() => {
               setExpirationDate(null);
               if (error) setError(null);
             }}
+            activeOpacity={0.8}
           >
-            <Text style={[styles.clearDateText, { color: theme.text }]}>Clear Date</Text>
+            <Text style={[styles.clearDateText, { color: theme.textSecondary }]}>
+              🗑️ Clear Date
+            </Text>
           </TouchableOpacity>
+        )}
+        
+        {error && expirationDate && expirationDate < new Date(new Date().setHours(0, 0, 0, 0)) && (
+          <Text style={[styles.errorText, { color: theme.danger }]}>
+            Expiration date cannot be in the past
+          </Text>
         )}
       </View>
 
@@ -294,27 +367,35 @@ const AddPantryItem = () => {
             styles.addButton, 
             { 
               backgroundColor: isFormValid() ? theme.primary : theme.border,
-              opacity: isFormValid() ? 1 : 0.5
+              opacity: isFormValid() ? 1 : 0.5,
+              shadowColor: theme.shadow,
             }
           ]}
           onPress={handleAddItem}
           disabled={loading || !isFormValid()}
+          activeOpacity={0.8}
         >
           {loading ? (
-            <ActivityIndicator size="small" color={theme.buttonText} />
+            <ActivityIndicator size="small" color={theme.buttonTextPrimary} />
           ) : (
-            <Text style={[styles.addButtonText, { color: theme.buttonText }]}>
-              Add Item
+            <Text style={[styles.addButtonText, { color: theme.buttonTextPrimary }]}>
+              ➕ Add to Pantry
             </Text>
           )}
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[styles.cancelButton, { backgroundColor: theme.border }]}
+          style={[styles.cancelButton, { 
+            backgroundColor: theme.background,
+            borderColor: theme.border,
+          }]}
           onPress={() => router.push("/pantry/pantry")}
           disabled={loading}
+          activeOpacity={0.8}
         >
-          <Text style={[styles.cancelButtonText, { color: theme.text }]}>Cancel</Text>
+          <Text style={[styles.cancelButtonText, { color: theme.text }]}>
+            ← Cancel
+          </Text>
         </TouchableOpacity>
       </View>
     </ScrollView>
@@ -324,103 +405,144 @@ const AddPantryItem = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 16,
+    padding: 20,
   },
   errorBanner: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 12,
+    padding: 16,
     marginBottom: 16,
-    borderRadius: 8,
-    borderWidth: 1,
+    borderRadius: 12,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   errorBannerText: {
     flex: 1,
     fontSize: 14,
+    fontWeight: '600',
     marginRight: 12,
   },
   errorBannerButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
   },
   errorBannerButtonText: {
     fontSize: 12,
     fontWeight: 'bold',
   },
   retryBanner: {
-    padding: 12,
+    padding: 16,
     marginBottom: 16,
-    borderRadius: 8,
-    borderWidth: 1,
+    borderRadius: 12,
     alignItems: 'center',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   retryBannerText: {
     fontSize: 14,
-    fontWeight: '500',
+    fontWeight: '600',
   },
   title: {
-    fontSize: 24,
-    fontWeight: "bold",
-    marginBottom: 24,
+    fontSize: 28,
+    fontWeight: "800",
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  
+  // Enhanced Form Styles
+  formCard: {
+    marginBottom: 20,
+    padding: 20,
+    borderRadius: 16,
+    borderWidth: 1,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 5,
+  },
+  formHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
   },
   formSection: {
     marginBottom: 20,
   },
   sectionLabel: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '700',
     marginBottom: 8,
   },
   characterCount: {
     fontSize: 12,
-    textAlign: 'right',
-    marginBottom: 4,
+    fontWeight: '500',
   },
   input: {
     borderWidth: 1,
-    borderRadius: 8,
-    padding: 12,
+    borderRadius: 12,
+    padding: 16,
     fontSize: 16,
+    fontWeight: '500',
+  },
+  errorText: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 8,
+    marginLeft: 4,
   },
   datePickerButton: {
     borderWidth: 1,
-    borderRadius: 8,
-    padding: 12,
+    borderRadius: 12,
+    padding: 16,
     justifyContent: "center",
   },
   clearDateButton: {
-    marginTop: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6,
+    marginTop: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
     alignSelf: 'flex-start',
+    borderWidth: 1,
   },
   clearDateText: {
     fontSize: 14,
+    fontWeight: '600',
   },
   buttonContainer: {
     marginTop: 32,
-    gap: 12,
+    gap: 16,
   },
   addButton: {
-    padding: 16,
-    borderRadius: 8,
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    borderRadius: 16,
     alignItems: "center",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
   },
   addButtonText: {
     fontSize: 16,
-    fontWeight: "bold",
+    fontWeight: "700",
   },
   cancelButton: {
-    padding: 16,
-    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 12,
     alignItems: "center",
+    borderWidth: 1,
   },
   cancelButtonText: {
     fontSize: 16,
-    fontWeight: "bold",
+    fontWeight: "600",
   },
 });
 

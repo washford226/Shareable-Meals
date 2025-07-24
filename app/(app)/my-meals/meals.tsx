@@ -14,12 +14,12 @@ import {
   RefreshControl,
   ScrollView,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Meal } from "../../../types/types";
 import { useTheme } from "../../../context/ThemeContext";
 import { useRouter } from "expo-router";  // Import Expo Router hook
 import BottomNav from "components/bottomNav";
-import Icon from "react-native-vector-icons/FontAwesome"
 import RNPickerSelect from "react-native-picker-select";
 import { supabase } from "utils/supabase";
 
@@ -465,19 +465,28 @@ const applyFilters = useCallback(async () => {
     return (
       <View style={[styles.container, { backgroundColor: theme.background }]}>
         <View style={styles.centerContent}>
-          <ActivityIndicator size="large" color={theme.primary} />
-          <Text style={[styles.loadingText, { color: theme.text }]}>Loading your meals...</Text>
+          <View style={[styles.loadingCard, { backgroundColor: theme.card }]}>
+            <ActivityIndicator size="large" color={theme.primary} />
+            <Text style={[styles.loadingText, { color: theme.text }]}>
+              Loading your meals...
+            </Text>
+          </View>
           {error && (
-            <View style={styles.errorContainer}>
-              <Text style={[styles.errorText, { color: theme.danger }]}>
+            <View style={[styles.errorContainer, { backgroundColor: theme.card, borderColor: theme.danger }]}>
+              <Ionicons name="warning-outline" size={32} color={theme.danger} />
+              <Text style={[styles.errorTitle, { color: theme.danger }]}>
+                Error Loading Meals
+              </Text>
+              <Text style={[styles.errorText, { color: theme.text }]}>
                 {error}
               </Text>
               <TouchableOpacity
                 style={[styles.retryButton, { backgroundColor: theme.primary }]}
                 onPress={handleRefresh}
               >
+                <Ionicons name="refresh-outline" size={20} color={theme.buttonText} style={{ marginRight: 8 }} />
                 <Text style={[styles.retryButtonText, { color: theme.buttonText }]}>
-                  Retry
+                  Try Again
                 </Text>
               </TouchableOpacity>
             </View>
@@ -492,6 +501,7 @@ const applyFilters = useCallback(async () => {
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       {error && (
         <View style={[styles.errorBanner, { backgroundColor: theme.card, borderColor: theme.danger }]}>
+          <Ionicons name="warning" size={20} color={theme.danger} />
           <Text style={[styles.errorBannerText, { color: theme.danger }]}>
             {error}
           </Text>
@@ -507,40 +517,81 @@ const applyFilters = useCallback(async () => {
       )}
 
       <View style={styles.searchBarContainer}>
-        <TextInput
-          style={[styles.searchBar, { borderColor: theme.border, color: theme.text }]}
-          placeholder="Search meals..."
-          placeholderTextColor={theme.placeholder}
-          value={searchQuery}
-          onChangeText={handleSearchChange} 
-        />
+        <View style={[styles.searchInputContainer, { backgroundColor: theme.card, borderColor: theme.border }]}>
+          <Ionicons name="search" size={20} color={theme.subtext} style={styles.searchIcon} />
+          <TextInput
+            style={[styles.searchBar, { color: theme.text }]}
+            placeholder="Search meals..."
+            placeholderTextColor={theme.placeholder}
+            value={searchQuery}
+            onChangeText={handleSearchChange} 
+          />
+        </View>
         <TouchableOpacity
           style={[
             styles.filterButton,
-            { backgroundColor: isFilterActive ? theme.primary : theme.button }
+            { 
+              backgroundColor: isFilterActive ? theme.primary : theme.card,
+              borderColor: theme.border
+            }
           ]}
           onPress={() => {
             setTempAiFilter(aiFilter);
             setTempDietaryRestrictionFilter(dietaryRestrictionFilter);
+            setTempCuisineFilter(cuisineFilter);
             setIsFilterModalVisible(true);
           }}
         >
-          <Text style={[styles.filterButtonText, { color: theme.buttonText }]}>Filter</Text>
+          <Ionicons 
+            name="filter" 
+            size={20} 
+            color={isFilterActive ? theme.buttonText : theme.text} 
+          />
+          <Text style={[
+            styles.filterButtonText, 
+            { color: isFilterActive ? theme.buttonText : theme.text }
+          ]}>
+            Filter
+          </Text>
+          {isFilterActive && (
+            <View style={[styles.filterActiveDot, { backgroundColor: theme.warning }]} />
+          )}
         </TouchableOpacity>
       </View>
 
       <TouchableOpacity
-        style={[styles.createMealButton, { backgroundColor: theme.button }]}
+        style={[styles.createMealButton, { backgroundColor: theme.primary }]}
         onPress={() => setIsCreateMealModalVisible(true)}
       >
-        <Text style={[styles.createMealButtonText, { color: theme.buttonText }]}>Create Meal</Text>
+        <Ionicons name="add-circle-outline" size={24} color={theme.buttonText} style={{ marginRight: 8 }} />
+        <Text style={[styles.createMealButtonText, { color: theme.buttonText }]}>Create New Meal</Text>
       </TouchableOpacity>
 
       {filteredMeals.length === 0 ? (
-        <View style={{ flex: 1, justifyContent: "center", alignItems: "center", width: "100%" }}>
-          <Text style={[styles.noMealsText, { color: theme.text, marginTop: 32 }]}>
-            No meals found. Please create a meal.
-          </Text>
+        <View style={styles.emptyStateContainer}>
+          <View style={[styles.emptyStateCard, { backgroundColor: theme.card }]}>
+            <Ionicons name="restaurant-outline" size={64} color={theme.subtext} />
+            <Text style={[styles.emptyStateTitle, { color: theme.text }]}>
+              No Meals Found
+            </Text>
+            <Text style={[styles.emptyStateText, { color: theme.subtext }]}>
+              {searchQuery || isFilterActive 
+                ? "Try adjusting your search or filters to find meals."
+                : "Create your first meal to get started with meal planning!"
+              }
+            </Text>
+            {!searchQuery && !isFilterActive && (
+              <TouchableOpacity
+                style={[styles.emptyStateButton, { backgroundColor: theme.primary }]}
+                onPress={() => setIsCreateMealModalVisible(true)}
+              >
+                <Ionicons name="add" size={20} color={theme.buttonText} style={{ marginRight: 8 }} />
+                <Text style={[styles.emptyStateButtonText, { color: theme.buttonText }]}>
+                  Create Your First Meal
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
       ) : (
         <FlatList
@@ -564,30 +615,72 @@ const applyFilters = useCallback(async () => {
               <TouchableOpacity
                 style={styles.favoriteIcon}
                 onPress={() => toggleFavorite(item.id)}
+                disabled={favoriteLoading[item.id]}
               >
-                <Icon
-                  name="star"
-                  size={24}
-                  color={item.favorite ? "#FFD700" : "#ccc"}
-                />
+                {favoriteLoading[item.id] ? (
+                  <ActivityIndicator size="small" color={theme.warning} />
+                ) : (
+                  <Ionicons
+                    name={item.favorite ? "star" : "star-outline"}
+                    size={24}
+                    color={item.favorite ? theme.warning : theme.subtext}
+                  />
+                )}
               </TouchableOpacity>
+
+              {/* AI Tag */}
+              {item.created_by_ai === true && (
+                <View style={[styles.aiTag, { backgroundColor: theme.aiAccent }]}>
+                  <Ionicons name="sparkles" size={12} color={theme.buttonText} />
+                  <Text style={[styles.aiTagText, { color: theme.buttonText }]}>AI</Text>
+                </View>
+              )}
+
+              {/* Meal Image */}
               {item.picture && typeof item.picture === "string" ? (
                 <Image source={{ uri: item.picture }} style={styles.mealPicture} />
               ) : (
-                <View style={styles.mealPicturePlaceholder}>
-                  <Text style={styles.mealPicturePlaceholderText}>No Image</Text>
+                <View style={[styles.mealPicturePlaceholder, { backgroundColor: theme.cardSecondary }]}>
+                  <Ionicons name="image-outline" size={32} color={theme.subtext} />
+                  <Text style={[styles.mealPicturePlaceholderText, { color: theme.subtext }]}>
+                    No Image
+                  </Text>
                 </View>
               )}
-              <Text style={[styles.mealDescription, { color: theme.subtext }]}>
-                {item.description.length > 100
-                  ? `${item.description.slice(0, 100)}...`
-                  : item.description}
-              </Text>
-              {item.created_by_ai == true && (
-                <View style={styles.aiTag}>
-                  <Text style={styles.aiTagText}>AI Generated</Text>
+
+              {/* Meal Info */}
+              <View style={styles.mealInfo}>
+                <Text style={[styles.mealName, { color: theme.text }]} numberOfLines={2}>
+                  {item.name}
+                </Text>
+                <Text style={[styles.mealDescription, { color: theme.subtext }]} numberOfLines={3}>
+                  {item.description.length > 80
+                    ? `${item.description.slice(0, 80)}...`
+                    : item.description}
+                </Text>
+                
+                {/* Nutrition Preview */}
+                <View style={styles.nutritionPreview}>
+                  <View style={styles.nutritionItem}>
+                    <Ionicons name="flame-outline" size={14} color={theme.warning} />
+                    <Text style={[styles.nutritionText, { color: theme.subtext }]}>
+                      {item.calories}
+                    </Text>
+                  </View>
+                  <View style={styles.nutritionItem}>
+                    <Ionicons name="barbell-outline" size={14} color={theme.protein} />
+                    <Text style={[styles.nutritionText, { color: theme.subtext }]}>
+                      {item.protein}g
+                    </Text>
+                  </View>
+                  <View style={styles.nutritionItem}>
+                    <Ionicons name="analytics-outline" size={14} color={theme.carbs} />
+                    <Text style={[styles.nutritionText, { color: theme.subtext }]}>
+                      {item.carbohydrates}g
+                    </Text>
+                  </View>
                 </View>
-              )}
+              </View>
             </TouchableOpacity>
           )}
           contentContainerStyle={styles.mealsGrid}
@@ -597,7 +690,20 @@ const applyFilters = useCallback(async () => {
       <Modal visible={isCreateMealModalVisible} transparent animationType="slide">
         <View style={styles.modalContainer}>
           <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
-            <Text style={[styles.modalTitle, { color: theme.text }]}>Select Meal Creation Type</Text>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: theme.text }]}>Create New Meal</Text>
+              <TouchableOpacity
+                style={styles.modalCloseButton}
+                onPress={() => setIsCreateMealModalVisible(false)}
+              >
+                <Ionicons name="close" size={24} color={theme.subtext} />
+              </TouchableOpacity>
+            </View>
+            
+            <Text style={[styles.modalSubtitle, { color: theme.subtext }]}>
+              Choose how you'd like to create your meal
+            </Text>
+
             <TouchableOpacity
               style={[styles.modalButton, { backgroundColor: theme.primary }]}
               onPress={() => {
@@ -605,31 +711,55 @@ const applyFilters = useCallback(async () => {
                 router.push("/my-meals/create");
               }}
             >
-              <Text style={[styles.modalButtonText, { color: theme.buttonText }]}>Manual</Text>
+              <Ionicons name="create-outline" size={24} color={theme.buttonText} />
+              <View style={styles.modalButtonContent}>
+                <Text style={[styles.modalButtonText, { color: theme.buttonText }]}>Manual Entry</Text>
+                <Text style={[styles.modalButtonSubtext, { color: theme.buttonText, opacity: 0.8 }]}>
+                  Enter meal details yourself
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color={theme.buttonText} />
             </TouchableOpacity>
+
             <TouchableOpacity
-              style={[styles.modalButton, { backgroundColor: theme.primary }]}
+              style={[styles.modalButton, { backgroundColor: theme.aiAccent }]}
               onPress={() => {
                 setIsCreateMealModalVisible(false);
                 router.push("../AI/AICreateMeal");
               }}
             >
-              <Text style={[styles.modalButtonText, { color: theme.buttonText }]}>AI</Text>
+              <Ionicons name="sparkles" size={24} color={theme.buttonText} />
+              <View style={styles.modalButtonContent}>
+                <Text style={[styles.modalButtonText, { color: theme.buttonText }]}>AI Generated</Text>
+                <Text style={[styles.modalButtonSubtext, { color: theme.buttonText, opacity: 0.8 }]}>
+                  Let AI create a meal for you
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color={theme.buttonText} />
             </TouchableOpacity>
+
             <TouchableOpacity
-              style={[styles.modalButton, { backgroundColor: theme.primary }]}
+              style={[styles.modalButton, { backgroundColor: theme.info }]}
               onPress={() => {
                 setIsCreateMealModalVisible(false);
                 router.push("./url-create");
               }}
             >
-              <Text style={[styles.modalButtonText, { color: theme.buttonText }]}>URL</Text>
+              <Ionicons name="link-outline" size={24} color={theme.buttonText} />
+              <View style={styles.modalButtonContent}>
+                <Text style={[styles.modalButtonText, { color: theme.buttonText }]}>From URL</Text>
+                <Text style={[styles.modalButtonSubtext, { color: theme.buttonText, opacity: 0.8 }]}>
+                  Import from recipe website
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color={theme.buttonText} />
             </TouchableOpacity>
+
             <TouchableOpacity
-              style={[styles.cancelButton, { backgroundColor: theme.danger }]}
+              style={[styles.cancelButton, { backgroundColor: theme.background, borderColor: theme.border }]}
               onPress={() => setIsCreateMealModalVisible(false)}
             >
-              <Text style={[styles.cancelButtonText, { color: theme.buttonText }]}>Cancel</Text>
+              <Text style={[styles.cancelButtonText, { color: theme.text }]}>Cancel</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -637,183 +767,205 @@ const applyFilters = useCallback(async () => {
 
       <Modal visible={isFilterModalVisible} transparent animationType="slide">
         <View style={styles.modalContainer}>
-          <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
-            <Text style={[styles.modalTitle, { color: theme.text }]}>Filter Meals</Text>
-            {tempFilters.map((filter, index) => (
-              <View key={index} style={styles.filterRow}>
-                <Text style={[styles.filterLabel, { color: theme.text }]}>
-                  {filter.type.charAt(0).toUpperCase() + filter.type.slice(1)}
-                </Text>
-                <TextInput
-                  style={[styles.input, { borderColor: theme.border, color: theme.text }]}
-                  placeholder="Greater than"
-                  placeholderTextColor={theme.placeholder}
-                  value={filter.greaterThan}
-                  onChangeText={(text) => {
-                    const updatedFilters = [...tempFilters];
-                    updatedFilters[index].greaterThan = text;
-                    setTempFilters(updatedFilters);
+          <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }}>
+            <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
+              <View style={styles.modalHeader}>
+                <Text style={[styles.modalTitle, { color: theme.text }]}>Filter Meals</Text>
+                <TouchableOpacity
+                  style={styles.modalCloseButton}
+                  onPress={() => {
+                    setTempFilters(filters);
+                    setTempDietaryRestrictionFilter(dietaryRestrictionFilter);
+                    setTempAiFilter(aiFilter);
+                    setTempCuisineFilter(cuisineFilter);
+                    setIsFilterModalVisible(false);
                   }}
-                  keyboardType="numeric"
-                />
-                <TextInput
-                  style={[styles.input, { borderColor: theme.border, color: theme.text }]}
-                  placeholder="Less than"
-                  placeholderTextColor={theme.placeholder}
-                  value={filter.lessThan}
-                  onChangeText={(text) => {
-                    const updatedFilters = [...tempFilters];
-                    updatedFilters[index].lessThan = text;
-                    setTempFilters(updatedFilters);
+                >
+                  <Ionicons name="close" size={24} color={theme.subtext} />
+                </TouchableOpacity>
+              </View>
+
+              <Text style={[styles.modalSubtitle, { color: theme.subtext }]}>
+                Refine your meal search with these filters
+              </Text>
+
+              {/* Nutrition Filters */}
+              <Text style={[styles.label, { color: theme.text }]}>Nutrition Ranges</Text>
+              {tempFilters.map((filter, index) => (
+                <View key={index} style={styles.filterRow}>
+                  <Text style={[styles.filterLabel, { color: theme.text }]}>
+                    {filter.type.charAt(0).toUpperCase() + filter.type.slice(1)}
+                  </Text>
+                  <View style={{ flexDirection: 'row', gap: 8 }}>
+                    <TextInput
+                      style={[styles.input, { borderColor: theme.border, color: theme.text, backgroundColor: theme.background, flex: 1 }]}
+                      placeholder="Min"
+                      placeholderTextColor={theme.placeholder}
+                      value={filter.greaterThan}
+                      onChangeText={(text) => {
+                        const updatedFilters = [...tempFilters];
+                        updatedFilters[index].greaterThan = text;
+                        setTempFilters(updatedFilters);
+                      }}
+                      keyboardType="numeric"
+                    />
+                    <TextInput
+                      style={[styles.input, { borderColor: theme.border, color: theme.text, backgroundColor: theme.background, flex: 1 }]}
+                      placeholder="Max"
+                      placeholderTextColor={theme.placeholder}
+                      value={filter.lessThan}
+                      onChangeText={(text) => {
+                        const updatedFilters = [...tempFilters];
+                        updatedFilters[index].lessThan = text;
+                        setTempFilters(updatedFilters);
+                      }}
+                      keyboardType="numeric"
+                    />
+                  </View>
+                </View>
+              ))}
+
+              {/* Dietary Restrictions */}
+              <Text style={[styles.label, { color: theme.text }]}>Dietary Restrictions</Text>
+              <View style={{ marginBottom: 16 }}>
+                <RNPickerSelect
+                  onValueChange={setTempDietaryRestrictionFilter}
+                  items={dietaryOptions}
+                  value={tempDietaryRestrictionFilter}
+                  style={{
+                    inputIOS: {
+                      color: tempDietaryRestrictionFilter ? theme.text : theme.placeholder,
+                      paddingVertical: 16,
+                      paddingHorizontal: 16,
+                      borderWidth: 1,
+                      borderColor: theme.border,
+                      borderRadius: 12,
+                      backgroundColor: theme.background,
+                      fontSize: 16,
+                      fontWeight: '500',
+                    },
+                    inputAndroid: {
+                      color: tempDietaryRestrictionFilter ? theme.text : theme.placeholder,
+                      paddingVertical: 16,
+                      paddingHorizontal: 16,
+                      borderWidth: 1,
+                      borderColor: theme.border,
+                      borderRadius: 12,
+                      backgroundColor: theme.background,
+                      fontSize: 16,
+                      fontWeight: '500',
+                    },
                   }}
-                  keyboardType="numeric"
+                  useNativeAndroidPickerStyle={false}
+                  placeholder={{ label: "Select dietary restriction", value: "" }}
                 />
               </View>
-            ))}
-            <Text style={[styles.label, { color: theme.text }]}>Dietary Restriction</Text>
-            <View style={{ marginBottom: 12 }}>
-              <RNPickerSelect
-                onValueChange={setTempDietaryRestrictionFilter}
-                items={dietaryOptions}
-                value={tempDietaryRestrictionFilter}
-                style={{
-                  inputIOS: {
-                    color: dietaryRestrictionFilter ? theme.text : theme.placeholder,
-                    paddingVertical: 12,
-                    paddingHorizontal: 10,
-                    borderWidth: 1,
-                    borderColor: theme.border,
-                    borderRadius: 8,
-                    backgroundColor: theme.card,
-                    paddingRight: 30, // to ensure the dropdown icon doesn't overlap text
-                  },
-                  inputAndroid: {
-                    color: dietaryRestrictionFilter ? theme.text : theme.placeholder,
-                    paddingVertical: 12,
-                    paddingHorizontal: 10,
-                    borderWidth: 1,
-                    borderColor: theme.border,
-                    borderRadius: 8,
-                    backgroundColor: theme.card,
-                    paddingRight: 30,
-                  },
-                  iconContainer: {
-                    top: 16,
-                    right: 12,
-                  },
-                  placeholder: {
-                    color: theme.placeholder,
-                  },
+
+              {/* Cuisine Filter */}
+              <Text style={[styles.label, { color: theme.text }]}>Cuisine Type</Text>
+              <View style={{ marginBottom: 16 }}>
+                <RNPickerSelect
+                  onValueChange={setTempCuisineFilter}
+                  items={cuisineOptions}
+                  value={tempCuisineFilter}
+                  style={{
+                    inputIOS: {
+                      color: tempCuisineFilter ? theme.text : theme.placeholder,
+                      paddingVertical: 16,
+                      paddingHorizontal: 16,
+                      borderWidth: 1,
+                      borderColor: theme.border,
+                      borderRadius: 12,
+                      backgroundColor: theme.background,
+                      fontSize: 16,
+                      fontWeight: '500',
+                    },
+                    inputAndroid: {
+                      color: tempCuisineFilter ? theme.text : theme.placeholder,
+                      paddingVertical: 16,
+                      paddingHorizontal: 16,
+                      borderWidth: 1,
+                      borderColor: theme.border,
+                      borderRadius: 12,
+                      backgroundColor: theme.background,
+                      fontSize: 16,
+                      fontWeight: '500',
+                    },
+                  }}
+                  useNativeAndroidPickerStyle={false}
+                  placeholder={{ label: "Select cuisine type", value: "" }}
+                />
+              </View>
+
+              {/* AI Generation Filter */}
+              <Text style={[styles.label, { color: theme.text }]}>AI Generation</Text>
+              <View style={{ marginBottom: 24 }}>
+                <RNPickerSelect
+                  onValueChange={setTempAiFilter}
+                  items={aiOptions}
+                  value={tempAiFilter}
+                  style={{
+                    inputIOS: {
+                      color: theme.text,
+                      paddingVertical: 16,
+                      paddingHorizontal: 16,
+                      borderWidth: 1,
+                      borderColor: theme.border,
+                      borderRadius: 12,
+                      backgroundColor: theme.background,
+                      fontSize: 16,
+                      fontWeight: '500',
+                    },
+                    inputAndroid: {
+                      color: theme.text,
+                      paddingVertical: 16,
+                      paddingHorizontal: 16,
+                      borderWidth: 1,
+                      borderColor: theme.border,
+                      borderRadius: 12,
+                      backgroundColor: theme.background,
+                      fontSize: 16,
+                      fontWeight: '500',
+                    },
+                  }}
+                  useNativeAndroidPickerStyle={false}
+                  placeholder={{ label: "All meals", value: "" }}
+                />
+              </View>
+
+              {/* Action Buttons */}
+              <TouchableOpacity 
+                style={[styles.applyButton, { backgroundColor: theme.primary }]} 
+                onPress={applyFilters}
+              >
+                <Text style={[styles.applyButtonText, { color: theme.buttonText }]}>
+                  Apply Filters
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.clearButton, { backgroundColor: theme.background, borderColor: theme.border }]}
+                onPress={clearFilters}
+              >
+                <Text style={[styles.clearButtonText, { color: theme.text }]}>
+                  Clear All Filters
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.cancelButton, { backgroundColor: theme.background, borderColor: theme.border }]}
+                onPress={() => {
+                  setTempFilters(filters);
+                  setTempDietaryRestrictionFilter(dietaryRestrictionFilter);
+                  setTempAiFilter(aiFilter);
+                  setTempCuisineFilter(cuisineFilter);
+                  setIsFilterModalVisible(false);
                 }}
-                useNativeAndroidPickerStyle={false}
-                Icon={() => <Text style={{ fontSize: 16, color: theme.text }}>▼</Text>}
-              />
+              >
+                <Text style={[styles.cancelButtonText, { color: theme.text }]}>Cancel</Text>
+              </TouchableOpacity>
             </View>
-
-            <Text style={[styles.label, { color: theme.text }]}>Cuisine</Text>
-<View style={{ marginBottom: 12 }}>
-  <RNPickerSelect
-    onValueChange={setTempCuisineFilter}
-    items={cuisineOptions}
-    value={tempCuisineFilter}
-    style={{
-      inputIOS: {
-        color: tempCuisineFilter ? theme.text : theme.placeholder,
-        paddingVertical: 12,
-        paddingHorizontal: 10,
-        borderWidth: 1,
-        borderColor: theme.border,
-        borderRadius: 8,
-        backgroundColor: theme.card,
-        paddingRight: 30,
-      },
-      inputAndroid: {
-        color: tempCuisineFilter ? theme.text : theme.placeholder,
-        paddingVertical: 12,
-        paddingHorizontal: 10,
-        borderWidth: 1,
-        borderColor: theme.border,
-        borderRadius: 8,
-        backgroundColor: theme.card,
-        paddingRight: 30,
-      },
-      iconContainer: {
-        top: 16,
-        right: 12,
-      },
-      placeholder: {
-        color: theme.placeholder,
-      },
-    }}
-    useNativeAndroidPickerStyle={false}
-    Icon={() => <Text style={{ fontSize: 16, color: theme.text }}>▼</Text>}
-    placeholder={{ label: "Select Cuisine", value: "" }}
-  />
-</View>
-
-            {/* AI Generated Switch */}
-            <Text style={[styles.label, { color: theme.text }]}>AI Generation</Text>
-            <View style={{ marginBottom: 12 }}>
-              <RNPickerSelect
-                onValueChange={setTempAiFilter}
-                items={aiOptions}
-                value={tempAiFilter}
-                style={{
-                  inputIOS: {
-                    color: theme.text,
-                    paddingVertical: 12,
-                    paddingHorizontal: 10,
-                    borderWidth: 1,
-                    borderColor: theme.border,
-                    borderRadius: 8,
-                    backgroundColor: theme.card,
-                    paddingRight: 30,
-                  },
-                  inputAndroid: {
-                    color: theme.text,
-                    paddingVertical: 12,
-                    paddingHorizontal: 10,
-                    borderWidth: 1,
-                    borderColor: theme.border,
-                    borderRadius: 8,
-                    backgroundColor: theme.card,
-                    paddingRight: 30,
-                  },
-                  iconContainer: {
-                    top: 16,
-                    right: 12,
-                  },
-                  placeholder: {
-                    color: theme.placeholder,
-                  },
-                }}
-                useNativeAndroidPickerStyle={false}
-                Icon={() => <Text style={{ fontSize: 16, color: theme.text }}>▼</Text>}
-              />
-            </View>
-            <TouchableOpacity style={[styles.applyButton, { backgroundColor: theme.button }]} onPress={applyFilters}>
-              <Text style={[styles.applyButtonText, { color: theme.buttonText }]}>Apply Filters</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-  style={[styles.clearButton, { backgroundColor: theme.button, marginTop: 8 }]}
-  onPress={clearFilters}
->
-  <Text style={[styles.clearButtonText, { color: theme.buttonText }]}>Clear Filters</Text>
-</TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.cancelButton, { backgroundColor: theme.danger }]}
-              onPress={() => {
-                setTempFilters(filters);
-                setTempDietaryRestrictionFilter(dietaryRestrictionFilter);
-                setTempAiFilter(aiFilter);
-                setIsFilterModalVisible(false); 
-              }}
-            >
-              <Text style={[styles.cancelButtonText, { color: theme.buttonText }]}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
+          </ScrollView>
         </View>
       </Modal>
       
@@ -825,250 +977,458 @@ const applyFilters = useCallback(async () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 16,
-    paddingBottom: 16,
-    width: "100%",
-    height: "100%",
+    backgroundColor: 'transparent',
+    paddingTop: 25, // Add top padding to avoid status bar overlap
   },
-  label: {
+  centerContent: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+
+  // Enhanced Loading Card
+  loadingCard: {
+    padding: 40,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 5,
+    maxWidth: '90%',
+  },
+  loadingText: {
+    marginTop: 16,
     fontSize: 16,
-    fontWeight: "bold",
-    marginBottom: 4,
+    textAlign: 'center',
+    fontWeight: '600',
   },
-  favoriteIcon: {
-    position: "absolute",
-    top: 8,
-    right: 8,
-    zIndex: 1,
+
+  // Enhanced Error Styles
+  errorContainer: {
+    padding: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    maxWidth: '90%',
+    borderWidth: 2,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 5,
+    marginTop: 20,
   },
-  mealItem: {
-    flex: 1, // Ensure items take up equal space
-    margin: 8, // Add spacing between items
-    padding: 16,
-    borderWidth: 1,
-    borderRadius: 8,
-    alignItems: "center",
-    justifyContent: "flex-start", // Align content to the top
-  },
-  clearButton: {
-  padding: 12,
-  borderRadius: 8,
-  alignItems: "center",
-  marginVertical: 4,
-},
-clearButtonText: {
-  fontWeight: "bold",
-  fontSize: 16,
-},
-  mealPicture: {
-    width: "100%", // Make the picture take up the full width of the item
-    height: 100, // Set a fixed height for the picture
-    borderRadius: 8,
+  errorTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
     marginBottom: 8,
+    marginTop: 12,
+    textAlign: 'center',
   },
-  mealPicturePlaceholder: {
-    width: "100%",
-    height: 100,
-    borderRadius: 8,
-    backgroundColor: "#e0e0e0",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 8,
-  },
-  mealPicturePlaceholderText: {
-    fontSize: 12,
-    color: "#888",
-  },
-  mealName: {
-    fontSize: 16,
-    fontWeight: "bold",
-    textAlign: "center",
-    marginBottom: 4,
-  },
-  mealDescription: {
+  errorText: {
     fontSize: 14,
-    textAlign: "center",
-    color: "#666",
+    marginBottom: 16,
+    textAlign: 'center',
+    lineHeight: 20,
   },
-  mealsGrid: {
-    paddingBottom: 60,
+  retryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
   },
+  retryButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+
+  // Error Banner
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    marginHorizontal: 16,
+    marginBottom: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  errorBannerText: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+  errorBannerButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  errorBannerButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+
+  // Enhanced Search Bar
   searchBarContainer: {
     flexDirection: "row",
     alignItems: "center",
     marginBottom: 16,
+    marginHorizontal: 16,
+    gap: 12,
+  },
+  searchInputContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingHorizontal: 16,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  searchIcon: {
+    marginRight: 12,
   },
   searchBar: {
     flex: 1,
-    height: 40,
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 10,
+    height: 48,
     fontSize: 16,
+    fontWeight: '500',
   },
   filterButton: {
-    marginLeft: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 8,
-    alignItems: "center",
-    justifyContent: "center",
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+    position: 'relative',
   },
   filterButtonText: {
-    fontSize: 16,
-    fontWeight: "bold",
+    fontSize: 14,
+    fontWeight: '600',
+    marginLeft: 8,
   },
-  loadingText: {
-    marginTop: 10,
-    fontSize: 16,
-    textAlign: "center",
+  filterActiveDot: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
-  noMealsText: {
-    fontSize: 16,
-    textAlign: "center",
+
+  // Enhanced Create Button
+  createMealButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    marginHorizontal: 16,
+    marginBottom: 20,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
   },
+  createMealButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+
+  // Enhanced Empty State
+  emptyStateContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 32,
+  },
+  emptyStateCard: {
+    padding: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    maxWidth: '100%',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.1,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  emptyStateTitle: {
+    fontSize: 24,
+    fontWeight: '800',
+    marginTop: 20,
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  emptyStateText: {
+    fontSize: 16,
+    textAlign: 'center',
+    lineHeight: 24,
+    marginBottom: 24,
+    maxWidth: 280,
+  },
+  emptyStateButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+    borderRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  emptyStateButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+
+  // Enhanced Meal Cards
+  mealItem: {
+    flex: 1,
+    margin: 8,
+    borderRadius: 16,
+    borderWidth: 1,
+    overflow: 'hidden',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 6,
+    maxWidth: '46%',
+  },
+  favoriteIcon: {
+    position: "absolute",
+    top: 12,
+    right: 12,
+    zIndex: 2,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    borderRadius: 20,
+    padding: 6,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  aiTag: {
+    position: "absolute",
+    top: 12,
+    left: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    zIndex: 2,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  aiTagText: {
+    fontSize: 10,
+    fontWeight: '700',
+    marginLeft: 4,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  mealPicture: {
+    width: "100%",
+    height: 140,
+    resizeMode: 'cover',
+  },
+  mealPicturePlaceholder: {
+    width: "100%",
+    height: 140,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  mealPicturePlaceholderText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  mealInfo: {
+    padding: 16,
+  },
+  mealName: {
+    fontSize: 16,
+    fontWeight: "700",
+    marginBottom: 8,
+    lineHeight: 22,
+  },
+  mealDescription: {
+    fontSize: 14,
+    lineHeight: 20,
+    marginBottom: 12,
+    fontWeight: '500',
+  },
+  nutritionPreview: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  nutritionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  nutritionText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+
+  // Enhanced Modals
   modalContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    padding: 20,
   },
   modalContent: {
-    width: "93%",
-    height: "70%",
-    padding: 16,
-    borderRadius: 8,
+    width: "100%",
+    maxWidth: 400,
+    padding: 24,
+    borderRadius: 20,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.2,
+    shadowRadius: 16,
+    elevation: 10,
   },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: 16,
   },
-  filterRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  filterLabel: {
+  modalTitle: {
+    fontSize: 22,
+    fontWeight: "800",
     flex: 1,
+  },
+  modalCloseButton: {
+    padding: 4,
+  },
+  modalSubtitle: {
     fontSize: 16,
-    fontWeight: "bold",
+    marginBottom: 24,
+    lineHeight: 22,
   },
-  input: {
+  modalButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 20,
+    borderRadius: 16,
+    marginBottom: 12,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  modalButtonContent: {
     flex: 1,
-    height: 40,
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 8,
-    marginHorizontal: 4,
+    marginLeft: 16,
+  },
+  modalButtonText: {
+    fontSize: 16,
+    fontWeight: "700",
+    marginBottom: 4,
+  },
+  modalButtonSubtext: {
     fontSize: 14,
-  },
-  applyButton: {
-    padding: 12,
-    borderRadius: 8,
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  applyButtonText: {
-    fontSize: 16,
-    fontWeight: "bold",
+    fontWeight: '500',
   },
   cancelButton: {
-    padding: 12,
-    borderRadius: 8,
+    padding: 16,
+    borderRadius: 12,
     alignItems: "center",
+    marginTop: 8,
+    borderWidth: 1,
   },
   cancelButtonText: {
     fontSize: 16,
-    fontWeight: "bold",
+    fontWeight: "600",
   },
-  createMealButton: {
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 8,
-    alignItems: "center",
-    alignSelf: "center", // Center the button horizontally
-    width: "100%", // Set a width for the button
-  },
-  createMealButtonText: {
-    fontSize: 18,
-    fontWeight: "bold",
-  },
-  aiTag: {
-  position: "absolute",
-  top: 8,
-  left: 8,
-  backgroundColor: "#FFD700", // Gold color for the tag
-  paddingHorizontal: 8,
-  paddingVertical: 4,
-  borderRadius: 8,
-  zIndex: 1, // Ensure the tag appears above other elements
-},
-aiTagText: {
-  fontSize: 12,
-  fontWeight: "bold",
-  color: "#000", // Black text for contrast
-},
-modalButton: {
-  width: "100%",
-  padding: 12,
-  borderRadius: 8,
-  alignItems: "center",
-  marginBottom: 8,
-},
-modalButtonText: {
-  fontSize: 16,
-  fontWeight: "bold",
-},
-centerContent: {
-  flex: 1,
-  justifyContent: "center",
-  alignItems: "center",
-  padding: 20,
-},
-errorContainer: {
-  marginTop: 20,
-  alignItems: "center",
-},
-errorText: {
-  fontSize: 16,
-  textAlign: "center",
-  marginBottom: 10,
-},
-retryButton: {
-  paddingHorizontal: 20,
-  paddingVertical: 10,
-  borderRadius: 6,
-},
-retryButtonText: {
-  fontSize: 16,
-  fontWeight: "bold",
-},
-errorBanner: {
-  flexDirection: "row",
-  justifyContent: "space-between",
-  alignItems: "center",
-  padding: 12,
-  marginHorizontal: 16,
-  marginTop: 10,
-  borderRadius: 8,
-  borderWidth: 1,
-},
-errorBannerText: {
-  flex: 1,
-  fontSize: 14,
-  marginRight: 12,
-},
-errorBannerButton: {
-  paddingHorizontal: 16,
-  paddingVertical: 6,
-  borderRadius: 4,
-},
-errorBannerButtonText: {
-  fontSize: 12,
-  fontWeight: "bold",
-},
 
+  // Filter Modal Styles
+  filterRow: {
+    marginBottom: 16,
+  },
+  filterLabel: {
+    fontSize: 16,
+    fontWeight: "700",
+    marginBottom: 8,
+  },
+  input: {
+    height: 48,
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    fontSize: 16,
+    marginBottom: 8,
+    fontWeight: '500',
+  },
+  label: {
+    fontSize: 16,
+    fontWeight: "700",
+    marginBottom: 8,
+    marginTop: 8,
+  },
+  applyButton: {
+    padding: 16,
+    borderRadius: 12,
+    alignItems: "center",
+    marginVertical: 8,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  applyButtonText: {
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  clearButton: {
+    padding: 16,
+    borderRadius: 12,
+    alignItems: "center",
+    marginVertical: 4,
+    borderWidth: 1,
+  },
+  clearButtonText: {
+    fontWeight: "600",
+    fontSize: 16,
+  },
+
+  // Grid Layout
+  mealsGrid: {
+    paddingHorizontal: 8,
+    paddingBottom: 100,
+  },
+
+  // Legacy compatibility
+  noMealsText: {
+    fontSize: 16,
+    textAlign: "center",
+  },
 });
 
 export default MyMeals;

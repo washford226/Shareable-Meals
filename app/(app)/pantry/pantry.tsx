@@ -18,7 +18,7 @@ const PantryScreen = () => {
   const router = useRouter();
 
   interface PantryItem {
-    id: number;
+    pantry_id: number;
     food: string;
     quantity: number | null;
     unit?: string;
@@ -80,9 +80,15 @@ const PantryScreen = () => {
   }, [retryCount]);
 
   // Delete a pantry item from Supabase
-  const deletePantryItem = useCallback(async (id: number) => {
+  const deletePantryItem = useCallback(async (pantry_id: number) => {
+    // Safety check - don't try to delete if pantry_id is invalid
+    if (!pantry_id || typeof pantry_id !== 'number') {
+      Alert.alert("Error", "Invalid item ID. Cannot delete item.");
+      return;
+    }
+    
     try {
-      setDeletingId(id);
+      setDeletingId(pantry_id);
       setError(null);
 
       const { data: userData, error: userError } = await supabase.auth.getUser();
@@ -94,7 +100,7 @@ const PantryScreen = () => {
       const { error } = await supabase
         .from("pantry")
         .delete()
-        .eq("id", id)
+        .eq("pantry_id", pantry_id)
         .eq("user_id", userId);
 
       if (error) {
@@ -102,7 +108,7 @@ const PantryScreen = () => {
       }
 
       // Optimistic update - remove item from local state immediately
-      setPantryItems(prev => prev.filter(item => item.id !== id));
+      setPantryItems(prev => prev.filter(item => item.pantry_id !== pantry_id));
       
       Alert.alert("Success", "Pantry item deleted successfully.");
     } catch (error: any) {
@@ -157,17 +163,17 @@ const PantryScreen = () => {
         {/* Error Banner */}
         {error && (
           <View style={[styles.errorBanner, { 
-            backgroundColor: `${theme.danger}15`, 
-            borderColor: theme.danger 
+            backgroundColor: theme.danger,
+            shadowColor: theme.shadow,
           }]}>
-            <Text style={[styles.errorBannerText, { color: theme.danger }]}>
+            <Text style={[styles.errorBannerText, { color: theme.buttonTextPrimary }]}>
               {error}
             </Text>
             <TouchableOpacity
-              style={[styles.errorBannerButton, { backgroundColor: theme.danger }]}
+              style={[styles.errorBannerButton, { backgroundColor: theme.background }]}
               onPress={handleRetry}
             >
-              <Text style={[styles.errorBannerButtonText, { color: theme.buttonText }]}>
+              <Text style={[styles.errorBannerButtonText, { color: theme.danger }]}>
                 Retry
               </Text>
             </TouchableOpacity>
@@ -177,28 +183,36 @@ const PantryScreen = () => {
         {/* Retry Banner */}
         {retryCount > 0 && (
           <View style={[styles.retryBanner, { 
-            backgroundColor: `${theme.warning}15`, 
-            borderColor: theme.warning 
+            backgroundColor: theme.warning,
+            shadowColor: theme.shadow,
           }]}>
-            <Text style={[styles.retryBannerText, { color: theme.warning }]}>
-              Retry attempt {retryCount}/3
+            <Text style={[styles.retryBannerText, { color: theme.buttonTextPrimary }]}>
+              📡 Retry attempt {retryCount}/3
             </Text>
           </View>
         )}
 
         <View style={styles.centerContent}>
+          <Text style={[styles.emptyIcon, { color: theme.primary }]}>
+            🥫
+          </Text>
           <ActivityIndicator size="large" color={theme.primary} />
-          <Text style={[styles.loadingText, { color: theme.subtext }]}>
+          <Text style={[styles.loadingText, { color: theme.text }]}>
             Loading your pantry...
           </Text>
           
           {error && (
             <TouchableOpacity
-              style={[styles.retryButton, { backgroundColor: theme.primary, marginTop: 16 }]}
+              style={[styles.retryButton, { 
+                backgroundColor: theme.primary, 
+                marginTop: 24,
+                shadowColor: theme.shadow,
+              }]}
               onPress={handleRetry}
+              activeOpacity={0.8}
             >
-              <Text style={[styles.retryButtonText, { color: theme.buttonText }]}>
-                Try Again
+              <Text style={[styles.retryButtonText, { color: theme.buttonTextPrimary }]}>
+                🔄 Try Again
               </Text>
             </TouchableOpacity>
           )}
@@ -212,17 +226,17 @@ const PantryScreen = () => {
       {/* Error Banner */}
       {error && (
         <View style={[styles.errorBanner, { 
-          backgroundColor: `${theme.danger}15`, 
-          borderColor: theme.danger 
+          backgroundColor: theme.danger,
+          shadowColor: theme.shadow,
         }]}>
-          <Text style={[styles.errorBannerText, { color: theme.danger }]}>
+          <Text style={[styles.errorBannerText, { color: theme.buttonTextPrimary }]}>
             {error}
           </Text>
           <TouchableOpacity
-            style={[styles.errorBannerButton, { backgroundColor: theme.danger }]}
+            style={[styles.errorBannerButton, { backgroundColor: theme.background }]}
             onPress={handleRetry}
           >
-            <Text style={[styles.errorBannerButtonText, { color: theme.buttonText }]}>
+            <Text style={[styles.errorBannerButtonText, { color: theme.danger }]}>
               Retry
             </Text>
           </TouchableOpacity>
@@ -232,95 +246,145 @@ const PantryScreen = () => {
       {/* Retry Banner */}
       {retryCount > 0 && (
         <View style={[styles.retryBanner, { 
-          backgroundColor: `${theme.warning}15`, 
-          borderColor: theme.warning 
+          backgroundColor: theme.warning,
+          shadowColor: theme.shadow,
         }]}>
-          <Text style={[styles.retryBannerText, { color: theme.warning }]}>
-            Retry attempt {retryCount}/3
+          <Text style={[styles.retryBannerText, { color: theme.buttonTextPrimary }]}>
+            📡 Retry attempt {retryCount}/3
           </Text>
         </View>
       )}
 
-      <Text style={[styles.title, { color: theme.text }]}>My Pantry</Text>
+      {/* Enhanced Header */}
+      <View style={{ alignItems: 'center', marginBottom: 24 }}>
+        <Text style={[styles.title, { color: theme.text }]}>
+          🥫 My Pantry
+        </Text>
+        <Text style={[{ fontSize: 16, color: theme.textSecondary, textAlign: 'center' }]}>
+          Track your ingredients and expiration dates
+        </Text>
+      </View>
       
       <FlatList
-        data={pantryItems}
-        keyExtractor={(item) => item.id.toString()}
+        data={pantryItems.filter(item => item.pantry_id && typeof item.pantry_id === 'number')}
+        keyExtractor={(item, index) => item.pantry_id ? item.pantry_id.toString() : `pantry-item-${index}`}
         renderItem={({ item }) => {
           const expirationStatus = getExpirationStatus(item.expiration_date);
-          const isDeleting = deletingId === item.id;
+          const isDeleting = deletingId === item.pantry_id;
           
           return (
             <View style={[
               styles.itemContainer, 
-              { backgroundColor: theme.card },
+              { 
+                backgroundColor: theme.card,
+                borderColor: theme.border,
+                shadowColor: theme.shadow,
+              },
               expirationStatus === 'expired' && { borderColor: theme.danger, borderWidth: 2 },
               expirationStatus === 'expiring' && { borderColor: theme.warning, borderWidth: 2 }
             ]}>
               <View style={styles.itemHeader}>
-                <Text style={[styles.itemText, { color: theme.text }]}>
-                  {item.food}
-                </Text>
-                {expirationStatus === 'expired' && (
-                  <View style={[styles.statusBadge, { backgroundColor: theme.danger }]}>
-                    <Text style={[styles.statusText, { color: theme.buttonText }]}>EXPIRED</Text>
-                  </View>
-                )}
-                {expirationStatus === 'expiring' && (
-                  <View style={[styles.statusBadge, { backgroundColor: theme.warning }]}>
-                    <Text style={[styles.statusText, { color: theme.buttonText }]}>EXPIRING</Text>
-                  </View>
-                )}
+                <View style={styles.itemMainInfo}>
+                  <Text style={[styles.itemText, { color: theme.text }]}>
+                    🥘 {item.food}
+                  </Text>
+                  {(item.quantity !== null || item.unit) && (
+                    <Text style={[styles.quantityText, { color: theme.textSecondary }]}>
+                      {item.quantity ?? ""} {item.unit || ""}
+                    </Text>
+                  )}
+                </View>
+                
+                <View style={styles.statusContainer}>
+                  {expirationStatus === 'expired' && (
+                    <View style={[styles.statusBadge, { backgroundColor: theme.danger }]}>
+                      <Text style={[styles.statusText, { color: theme.buttonTextPrimary }]}>EXPIRED</Text>
+                    </View>
+                  )}
+                  {expirationStatus === 'expiring' && (
+                    <View style={[styles.statusBadge, { backgroundColor: theme.warning }]}>
+                      <Text style={[styles.statusText, { color: theme.buttonTextPrimary }]}>EXPIRING</Text>
+                    </View>
+                  )}
+                  {expirationStatus === 'fresh' && (
+                    <View style={[styles.statusBadge, { backgroundColor: theme.success }]}>
+                      <Text style={[styles.statusText, { color: theme.buttonTextPrimary }]}>FRESH</Text>
+                    </View>
+                  )}
+                </View>
               </View>
               
-              {(item.quantity !== null || item.unit) && (
-                <Text style={[styles.quantityText, { color: theme.subtext }]}>
-                  Quantity: {item.quantity ?? ""} {item.unit || ""}
-                </Text>
-              )}
-              
               {item.expiration_date && (
-                <Text style={[
-                  styles.expirationText, 
-                  { 
-                    color: expirationStatus === 'expired' ? theme.danger :
-                           expirationStatus === 'expiring' ? theme.warning : theme.subtext 
-                  }
-                ]}>
-                  Expires: {new Date(item.expiration_date).toLocaleDateString()}
-                </Text>
+                <View style={styles.expirationContainer}>
+                  <Text style={[styles.expirationLabel, { color: theme.textSecondary }]}>
+                    Expires:
+                  </Text>
+                  <Text style={[
+                    styles.expirationText, 
+                    { 
+                      color: expirationStatus === 'expired' ? theme.danger :
+                             expirationStatus === 'expiring' ? theme.warning : 
+                             expirationStatus === 'fresh' ? theme.success : theme.textSecondary 
+                    }
+                  ]}>
+                    {new Date(item.expiration_date).toLocaleDateString()}
+                  </Text>
+                </View>
               )}
               
               <View style={styles.buttonRow}>
                 <TouchableOpacity
-                  style={[styles.editButton, { backgroundColor: theme.primary }]}
-                  onPress={() => router.push(`/pantry/${item.id}/edit`)}
+                  style={[styles.editButton, { 
+                    backgroundColor: theme.primary,
+                    shadowColor: theme.shadow,
+                  }]}
+                  onPress={() => {
+                    if (item.pantry_id && typeof item.pantry_id === 'number') {
+                      router.push(`/pantry/${item.pantry_id}/edit`);
+                    } else {
+                      Alert.alert("Error", "Invalid item ID. Cannot edit item.");
+                    }
+                  }}
                   disabled={isDeleting}
+                  activeOpacity={0.8}
                 >
-                  <Text style={[styles.editButtonText, { color: theme.buttonText }]}>Edit</Text>
+                  <Text style={[styles.editButtonText, { color: theme.buttonTextPrimary }]}>
+                    ✏️ Edit
+                  </Text>
                 </TouchableOpacity>
                 
                 <TouchableOpacity
                   style={[
                     styles.deleteButton, 
-                    { backgroundColor: theme.danger, opacity: isDeleting ? 0.5 : 1 }
+                    { 
+                      backgroundColor: theme.danger, 
+                      opacity: isDeleting ? 0.5 : 1,
+                      shadowColor: theme.shadow,
+                    }
                   ]}
-                  onPress={() =>
+                  onPress={() => {
+                    if (!item.pantry_id || typeof item.pantry_id !== 'number') {
+                      Alert.alert("Error", "Invalid item ID. Cannot delete item.");
+                      return;
+                    }
                     Alert.alert(
                       "Delete Item",
                       `Are you sure you want to delete "${item.food}"?`,
                       [
                         { text: "Cancel", style: "cancel" },
-                        { text: "Delete", onPress: () => deletePantryItem(item.id), style: "destructive" },
+                        { text: "Delete", onPress: () => deletePantryItem(item.pantry_id), style: "destructive" },
                       ]
-                    )
-                  }
+                    );
+                  }}
                   disabled={isDeleting}
+                  activeOpacity={0.8}
                 >
                   {isDeleting ? (
-                    <ActivityIndicator size="small" color={theme.buttonText} />
+                    <ActivityIndicator size="small" color={theme.buttonTextPrimary} />
                   ) : (
-                    <Text style={[styles.deleteButtonText, { color: theme.buttonText }]}>Delete</Text>
+                    <Text style={[styles.deleteButtonText, { color: theme.buttonTextPrimary }]}>
+                      🗑️ Delete
+                    </Text>
                   )}
                 </TouchableOpacity>
               </View>
@@ -337,16 +401,26 @@ const PantryScreen = () => {
         }
         ListEmptyComponent={
           <View style={styles.centerContent}>
-            <Text style={[styles.emptyText, { color: theme.subtext }]}>
-              {error ? "Unable to load pantry items" : "Your pantry is empty. Add some items!"}
+            <Text style={[styles.emptyIcon, { color: theme.textSecondary }]}>
+              🥫
+            </Text>
+            <Text style={[styles.emptyText, { color: theme.textSecondary }]}>
+              {error ? "Unable to load pantry items" : "Your pantry is empty"}
+            </Text>
+            <Text style={[styles.emptySubtext, { color: theme.textSecondary }]}>
+              {error ? "Please try again" : "Add some ingredients to get started!"}
             </Text>
             {!error && (
               <TouchableOpacity
-                style={[styles.retryButton, { backgroundColor: theme.primary, marginTop: 16 }]}
+                style={[styles.emptyActionButton, { 
+                  backgroundColor: theme.primary,
+                  shadowColor: theme.shadow,
+                }]}
                 onPress={() => router.push("/pantry/add")}
+                activeOpacity={0.8}
               >
-                <Text style={[styles.retryButtonText, { color: theme.buttonText }]}>
-                  Add First Item
+                <Text style={[styles.emptyActionButtonText, { color: theme.buttonTextPrimary }]}>
+                  ➕ Add First Item
                 </Text>
               </TouchableOpacity>
             )}
@@ -355,17 +429,29 @@ const PantryScreen = () => {
       />
       
       <TouchableOpacity
-        style={[styles.addButton, { backgroundColor: theme.primary }]}
+        style={[styles.addButton, { 
+          backgroundColor: theme.primary,
+          shadowColor: theme.shadow,
+        }]}
         onPress={() => router.push("/pantry/add")}
+        activeOpacity={0.8}
       >
-        <Text style={[styles.addButtonText, { color: theme.buttonText }]}>Add Item</Text>
+        <Text style={[styles.addButtonText, { color: theme.buttonTextPrimary }]}>
+          ➕ Add Item
+        </Text>
       </TouchableOpacity>
 
       <TouchableOpacity
-        style={[styles.backButton, { backgroundColor: theme.button }]}
+        style={[styles.backButton, { 
+          backgroundColor: theme.background,
+          borderColor: theme.border,
+        }]}
         onPress={() => router.push("/meal-plan/calendar")}
+        activeOpacity={0.8}
       >
-        <Text style={[styles.backButtonText, { color: theme.buttonText }]}>Back</Text>
+        <Text style={[styles.backButtonText, { color: theme.text }]}>
+          ← Back to Calendar
+        </Text>
       </TouchableOpacity>
     </View>
   );
@@ -374,7 +460,7 @@ const PantryScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 16,
+    padding: 20,
   },
   centerContent: {
     flex: 1,
@@ -416,10 +502,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 12,
+    padding: 16,
     marginBottom: 16,
-    borderRadius: 8,
-    borderWidth: 1,
+    borderRadius: 12,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   errorBannerText: {
     flex: 1,
@@ -436,106 +525,181 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   retryBanner: {
-    padding: 12,
+    padding: 16,
     marginBottom: 16,
-    borderRadius: 8,
-    borderWidth: 1,
+    borderRadius: 12,
     alignItems: 'center',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   retryBannerText: {
     fontSize: 14,
     fontWeight: '500',
   },
-  backButton: {
-    marginTop: 16,
-    padding: 12,
-    borderRadius: 8,
-    alignItems: "center",
-  },
-  backButtonText: {
-    fontSize: 16,
-    fontWeight: "bold",
-  },
   title: {
-    fontSize: 24,
-    fontWeight: "bold",
-    marginBottom: 16,
+    fontSize: 28,
+    fontWeight: "800",
+    marginBottom: 8,
+    textAlign: 'center',
   },
+  
+  // Enhanced Item Styles
   itemContainer: {
-    padding: 16,
-    borderRadius: 8,
-    marginBottom: 12,
+    padding: 20,
+    borderRadius: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 5,
   },
   itemHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
+    alignItems: 'flex-start',
+    marginBottom: 16,
+  },
+  itemMainInfo: {
+    flex: 1,
+    marginRight: 12,
   },
   itemText: {
-    fontSize: 16,
-    fontWeight: "bold",
-    flex: 1,
+    fontSize: 18,
+    fontWeight: "700",
+    marginBottom: 4,
+  },
+  statusContainer: {
+    alignItems: 'flex-end',
   },
   statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 4,
-    marginLeft: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    minWidth: 80,
+    alignItems: 'center',
   },
   statusText: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: 'bold',
+    letterSpacing: 0.5,
   },
   quantityText: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  expirationContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  expirationLabel: {
     fontSize: 14,
-    marginBottom: 4,
+    fontWeight: '500',
+    marginRight: 8,
   },
   expirationText: {
     fontSize: 14,
-    marginBottom: 8,
+    fontWeight: '700',
   },
   buttonRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginTop: 8,
   },
-  deleteButton: {
-    flex: 1,
-    marginLeft: 8,
-    padding: 8,
-    borderRadius: 8,
-    alignItems: "center",
-  },
-  deleteButtonText: {
-    fontSize: 14,
-    fontWeight: "bold",
-  },
-  addButton: {
-    padding: 16,
-    borderRadius: 8,
-    alignItems: "center",
-    marginTop: 16,
-  },
-  addButtonText: {
-    fontSize: 16,
-    fontWeight: "bold",
-  },
-  emptyText: {
-    fontSize: 16,
-    textAlign: "center",
-    marginTop: 32,
-  },
   editButton: {
     flex: 1,
     marginRight: 8,
-    padding: 8,
-    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
     alignItems: "center",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   editButtonText: {
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  deleteButton: {
+    flex: 1,
+    marginLeft: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    alignItems: "center",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  deleteButtonText: {
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  
+  // Enhanced Empty State
+  emptyIcon: {
+    fontSize: 64,
+    marginBottom: 16,
+  },
+  emptyText: {
+    fontSize: 18,
+    fontWeight: '600',
+    textAlign: "center",
+    marginBottom: 8,
+  },
+  emptySubtext: {
     fontSize: 14,
-    fontWeight: "bold",
+    textAlign: "center",
+    marginBottom: 24,
+  },
+  emptyActionButton: {
+    paddingVertical: 16,
+    paddingHorizontal: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  emptyActionButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  
+  // Enhanced Footer Buttons
+  addButton: {
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    borderRadius: 16,
+    alignItems: "center",
+    marginTop: 16,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  addButtonText: {
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  backButton: {
+    marginTop: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    alignItems: "center",
+    borderWidth: 1,
+  },
+  backButtonText: {
+    fontSize: 16,
+    fontWeight: "600",
   },
 });
 

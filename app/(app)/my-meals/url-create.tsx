@@ -10,33 +10,30 @@ import {
   ActivityIndicator,
   RefreshControl 
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useTheme } from "../../../context/ThemeContext";
 import { supabase } from "utils/supabase";
 
 // Ingredient input row component
 const IngredientRow = ({ ingredient, onChange, onRemove, theme }: any) => (
-  <View style={{ flexDirection: "row", marginBottom: 10, alignItems: "center" }}>
+  <View style={styles.ingredientRow}>
     <TextInput
-      style={[styles.input, { 
-        flex: 2, 
-        marginRight: 5, 
-        borderColor: theme.border,
+      style={[styles.ingredientInput, styles.ingredientName, { 
         backgroundColor: theme.background,
-        color: theme.text 
+        color: theme.text,
+        borderColor: theme.border
       }]}
-      placeholder="Name"
+      placeholder="Ingredient name"
       placeholderTextColor={theme.placeholder}
       value={ingredient.name}
       onChangeText={text => onChange("name", text)}
     />
     <TextInput
-      style={[styles.input, { 
-        flex: 1, 
-        marginRight: 5,
-        borderColor: theme.border,
+      style={[styles.ingredientInput, styles.ingredientQuantity, { 
         backgroundColor: theme.background,
-        color: theme.text 
+        color: theme.text,
+        borderColor: theme.border
       }]}
       placeholder="Qty"
       placeholderTextColor={theme.placeholder}
@@ -45,20 +42,21 @@ const IngredientRow = ({ ingredient, onChange, onRemove, theme }: any) => (
       keyboardType="numeric"
     />
     <TextInput
-      style={[styles.input, { 
-        flex: 1, 
-        marginRight: 5,
-        borderColor: theme.border,
+      style={[styles.ingredientInput, styles.ingredientUnit, { 
         backgroundColor: theme.background,
-        color: theme.text 
+        color: theme.text,
+        borderColor: theme.border
       }]}
       placeholder="Unit"
       placeholderTextColor={theme.placeholder}
       value={ingredient.unit}
       onChangeText={text => onChange("unit", text)}
     />
-    <TouchableOpacity onPress={onRemove}>
-      <Text style={{ color: theme.danger, fontWeight: "bold", fontSize: 18 }}>✕</Text>
+    <TouchableOpacity 
+      style={styles.removeButton}
+      onPress={onRemove}
+    >
+      <Ionicons name="close-circle" size={24} color={theme.danger} />
     </TouchableOpacity>
   </View>
 );
@@ -390,13 +388,25 @@ const URLCreateMealScreen: React.FC = () => {
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.background }]}>
+    <ScrollView 
+      style={{ backgroundColor: theme.background }}
+      contentContainerStyle={styles.scrollContainer}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={handleRefresh}
+          colors={[theme.primary]}
+          tintColor={theme.primary}
+        />
+      }
+    >
       {/* Error Banner */}
       {error && (
         <View style={[styles.errorBanner, { 
-          backgroundColor: `${theme.danger}15`, 
+          backgroundColor: theme.card, 
           borderColor: theme.danger 
         }]}>
+          <Ionicons name="warning" size={20} color={theme.danger} />
           <Text style={[styles.errorBannerText, { color: theme.danger }]}>
             {error}
           </Text>
@@ -414,180 +424,209 @@ const URLCreateMealScreen: React.FC = () => {
       {/* Retry Banner */}
       {retryCount > 0 && (
         <View style={[styles.retryBanner, { 
-          backgroundColor: `${theme.warning}15`, 
+          backgroundColor: theme.card, 
           borderColor: theme.warning 
         }]}>
+          <Ionicons name="refresh-circle" size={20} color={theme.warning} />
           <Text style={[styles.retryBannerText, { color: theme.warning }]}>
-            Retry attempt {retryCount}/3
+            Retry attempt {retryCount}/3...
           </Text>
         </View>
       )}
 
-      <ScrollView 
-        contentContainerStyle={styles.scrollContainer}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={handleRefresh}
-            colors={[theme.primary]}
-            tintColor={theme.primary}
+      {/* Header Card */}
+      <View style={[styles.headerCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+        <View style={styles.headerContent}>
+          <Ionicons name="link" size={32} color={theme.primary} />
+          <View style={styles.headerText}>
+            <Text style={[styles.title, { color: theme.text }]}>Create from Recipe URL</Text>
+            <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
+              Import a meal from any recipe website
+            </Text>
+          </View>
+        </View>
+      </View>
+
+      {/* URL Input Card */}
+      <View style={[styles.formCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+        <View style={styles.cardHeader}>
+          <Ionicons name="globe" size={24} color={theme.primary} />
+          <Text style={[styles.cardTitle, { color: theme.text }]}>Recipe URL</Text>
+        </View>
+        
+        <View style={styles.inputGroup}>
+          <Text style={[styles.label, { color: theme.text }]}>Website URL</Text>
+          <TextInput
+            style={[
+              styles.input,
+              { 
+                borderColor: validationErrors.recipeUrl ? theme.danger : theme.border,
+                backgroundColor: theme.background,
+                color: theme.text 
+              }
+            ]}
+            placeholder="https://example.com/recipe"
+            placeholderTextColor={theme.placeholder}
+            value={recipeUrl}
+            onChangeText={(text) => {
+              setRecipeUrl(text);
+              if (validationErrors.recipeUrl) {
+                setValidationErrors(prev => {
+                  const { recipeUrl, ...rest } = prev;
+                  return rest;
+                });
+              }
+            }}
+            editable={!loading}
+            autoCapitalize="none"
+            keyboardType="url"
           />
-        }
-      >
-        {/* Back Button */}
-        <TouchableOpacity 
-          style={[styles.backButton, { backgroundColor: theme.button }]} 
-          onPress={() => router.push("./meals")}
-        >
-          <Text style={[styles.backButtonText, { color: theme.buttonText }]}>Back</Text>
-        </TouchableOpacity>
-
-        <Text style={[styles.title, { color: theme.text }]}>Create Meal from URL</Text>
-
-        {/* URL Input */}
-        <Text style={[styles.label, { color: theme.text }]}>Recipe URL</Text>
-        <TextInput
-          style={[
-            styles.input,
-            { 
-              borderColor: validationErrors.recipeUrl ? theme.danger : theme.border,
-              backgroundColor: theme.background,
-              color: theme.text 
-            }
-          ]}
-          placeholder="Enter recipe URL"
-          placeholderTextColor={theme.placeholder}
-          value={recipeUrl}
-          onChangeText={(text) => {
-            setRecipeUrl(text);
-            if (validationErrors.recipeUrl) {
-              setValidationErrors(prev => {
-                const { recipeUrl, ...rest } = prev;
-                return rest;
-              });
-            }
-          }}
-          editable={!loading}
-        />
-        {validationErrors.recipeUrl && (
-          <Text style={[styles.errorText, { color: theme.danger }]}>
-            {validationErrors.recipeUrl}
-          </Text>
-        )}
+          {validationErrors.recipeUrl && (
+            <Text style={[styles.errorText, { color: theme.danger }]}>
+              {validationErrors.recipeUrl}
+            </Text>
+          )}
+        </View>
         
         <TouchableOpacity 
           style={[
-            styles.button, 
+            styles.primaryButton, 
             { 
-              backgroundColor: loading ? theme.button : theme.primary,
+              backgroundColor: loading ? theme.buttonSecondary : theme.primary,
               opacity: loading ? 0.6 : 1 
             }
           ]} 
           onPress={handleFetchRecipe} 
           disabled={loading}
         >
-          {loading ? (
-            <ActivityIndicator size="small" color={theme.buttonText} />
-          ) : (
-            <Text style={[styles.buttonText, { color: theme.buttonText }]}>Fetch Recipe</Text>
-          )}
+          <View style={styles.buttonContent}>
+            {loading ? (
+              <>
+                <ActivityIndicator size="small" color={theme.buttonText} />
+                <Text style={[styles.buttonText, { color: theme.buttonText }]}>Fetching...</Text>
+              </>
+            ) : (
+              <>
+                <Ionicons name="download" size={20} color={theme.buttonText} />
+                <Text style={[styles.buttonText, { color: theme.buttonText }]}>Fetch Recipe</Text>
+              </>
+            )}
+          </View>
         </TouchableOpacity>
+      </View>
 
-        {/* Meal Name */}
-        <Text style={[styles.label, { color: theme.text }]}>Meal Name</Text>
-        <TextInput
-          style={[
-            styles.input,
-            { 
-              borderColor: validationErrors.mealName ? theme.danger : theme.border,
-              backgroundColor: theme.background,
-              color: theme.text 
-            }
-          ]}
-          placeholder="Meal Name"
-          placeholderTextColor={theme.placeholder}
-          value={mealName}
-          onChangeText={(text) => {
-            setMealName(text);
-            if (validationErrors.mealName) {
-              setValidationErrors(prev => {
-                const { mealName, ...rest } = prev;
-                return rest;
-              });
-            }
-          }}
-        />
-        {validationErrors.mealName && (
-          <Text style={[styles.errorText, { color: theme.danger }]}>
-            {validationErrors.mealName}
-          </Text>
-        )}
+      {/* Basic Information Card */}
+      <View style={[styles.formCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+        <View style={styles.cardHeader}>
+          <Ionicons name="restaurant" size={24} color={theme.primary} />
+          <Text style={[styles.cardTitle, { color: theme.text }]}>Basic Information</Text>
+        </View>
+        
+        <View style={styles.inputGroup}>
+          <Text style={[styles.label, { color: theme.text }]}>Meal Name</Text>
+          <TextInput
+            style={[
+              styles.input,
+              { 
+                borderColor: validationErrors.mealName ? theme.danger : theme.border,
+                backgroundColor: theme.background,
+                color: theme.text 
+              }
+            ]}
+            placeholder="Enter meal name"
+            placeholderTextColor={theme.placeholder}
+            value={mealName}
+            onChangeText={(text) => {
+              setMealName(text);
+              if (validationErrors.mealName) {
+                setValidationErrors(prev => {
+                  const { mealName, ...rest } = prev;
+                  return rest;
+                });
+              }
+            }}
+          />
+          {validationErrors.mealName && (
+            <Text style={[styles.errorText, { color: theme.danger }]}>
+              {validationErrors.mealName}
+            </Text>
+          )}
+        </View>
 
-        {/* Description */}
-        <Text style={[styles.label, { color: theme.text }]}>Description</Text>
-        <TextInput
-          style={[
-            styles.input,
-            { 
-              borderColor: validationErrors.description ? theme.danger : theme.border,
-              backgroundColor: theme.background,
-              color: theme.text 
-            }
-          ]}
-          placeholder="Description"
-          placeholderTextColor={theme.placeholder}
-          value={description}
-          onChangeText={(text) => {
-            setDescription(text);
-            if (validationErrors.description) {
-              setValidationErrors(prev => {
-                const { description, ...rest } = prev;
-                return rest;
-              });
-            }
-          }}
-          multiline
-          numberOfLines={3}
-          textAlignVertical="top"
-        />
-        {validationErrors.description && (
-          <Text style={[styles.errorText, { color: theme.danger }]}>
-            {validationErrors.description}
-          </Text>
-        )}
+        <View style={styles.inputGroup}>
+          <Text style={[styles.label, { color: theme.text }]}>Description</Text>
+          <TextInput
+            style={[
+              styles.textArea,
+              { 
+                borderColor: validationErrors.description ? theme.danger : theme.border,
+                backgroundColor: theme.background,
+                color: theme.text 
+              }
+            ]}
+            placeholder="Describe your meal"
+            placeholderTextColor={theme.placeholder}
+            value={description}
+            onChangeText={(text) => {
+              setDescription(text);
+              if (validationErrors.description) {
+                setValidationErrors(prev => {
+                  const { description, ...rest } = prev;
+                  return rest;
+                });
+              }
+            }}
+            multiline
+            numberOfLines={3}
+            textAlignVertical="top"
+          />
+          {validationErrors.description && (
+            <Text style={[styles.errorText, { color: theme.danger }]}>
+              {validationErrors.description}
+            </Text>
+          )}
+        </View>
 
-        <Text style={[styles.label, { color: theme.text }]}>Servings</Text>
-        <TextInput
-          style={[
-            styles.input,
-            { 
-              borderColor: validationErrors.servings ? theme.danger : theme.border,
-              backgroundColor: theme.background,
-              color: theme.text 
-            }
-          ]}
-          placeholder="Servings"
-          placeholderTextColor={theme.placeholder}
-          value={servings}
-          onChangeText={(text) => {
-            setServings(text);
-            if (validationErrors.servings) {
-              setValidationErrors(prev => {
-                const { servings, ...rest } = prev;
-                return rest;
-              });
-            }
-          }}
-          keyboardType="numeric"
-        />
-        {validationErrors.servings && (
-          <Text style={[styles.errorText, { color: theme.danger }]}>
-            {validationErrors.servings}
-          </Text>
-        )}
+        <View style={styles.inputGroup}>
+          <Text style={[styles.label, { color: theme.text }]}>Servings</Text>
+          <TextInput
+            style={[
+              styles.input,
+              { 
+                borderColor: validationErrors.servings ? theme.danger : theme.border,
+                backgroundColor: theme.background,
+                color: theme.text 
+              }
+            ]}
+            placeholder="Number of servings"
+            placeholderTextColor={theme.placeholder}
+            value={servings}
+            onChangeText={(text) => {
+              setServings(text);
+              if (validationErrors.servings) {
+                setValidationErrors(prev => {
+                  const { servings, ...rest } = prev;
+                  return rest;
+                });
+              }
+            }}
+            keyboardType="numeric"
+          />
+          {validationErrors.servings && (
+            <Text style={[styles.errorText, { color: theme.danger }]}>
+              {validationErrors.servings}
+            </Text>
+          )}
+        </View>
+      </View>
 
-        {/* Ingredients */}
-        <Text style={[styles.label, { color: theme.text }]}>Ingredients</Text>
+      {/* Ingredients Card */}
+      <View style={[styles.formCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+        <View style={styles.cardHeader}>
+          <Ionicons name="list" size={24} color={theme.primary} />
+          <Text style={[styles.cardTitle, { color: theme.text }]}>Ingredients</Text>
+        </View>
+        
         {ingredients.map((ingredient, idx) => (
           <IngredientRow
             key={idx}
@@ -599,136 +638,293 @@ const URLCreateMealScreen: React.FC = () => {
             onRemove={() => removeIngredient(idx)}
           />
         ))}
-        <TouchableOpacity onPress={addIngredient} style={{ marginBottom: 15 }}>
-          <Text style={{ color: theme.primary, fontWeight: "bold" }}>+ Add Ingredient</Text>
+        
+        <TouchableOpacity
+          style={[styles.addButton, { borderColor: theme.primary }]}
+          onPress={addIngredient}
+        >
+          <Ionicons name="add-circle" size={20} color={theme.primary} />
+          <Text style={[styles.addButtonText, { color: theme.primary }]}>Add Ingredient</Text>
         </TouchableOpacity>
+        
         {validationErrors.ingredients && (
           <Text style={[styles.errorText, { color: theme.danger }]}>
             {validationErrors.ingredients}
           </Text>
         )}
+      </View>
 
-        {/* Instructions */}
-        <Text style={[styles.label, { color: theme.text }]}>Instructions</Text>
-        <TextInput
-          style={[
-            styles.input,
-            { 
-              borderColor: validationErrors.instructions ? theme.danger : theme.border,
-              backgroundColor: theme.background,
-              color: theme.text,
-              minHeight: 100 
-            }
-          ]}
-          placeholder="Instructions"
-          placeholderTextColor={theme.placeholder}
-          value={instructions}
-          onChangeText={(text) => {
-            setInstructions(text);
-            if (validationErrors.instructions) {
-              setValidationErrors(prev => {
-                const { instructions, ...rest } = prev;
-                return rest;
-              });
-            }
-          }}
-          multiline
-          numberOfLines={5}
-          textAlignVertical="top"
-        />
-        {validationErrors.instructions && (
-          <Text style={[styles.errorText, { color: theme.danger }]}>
-            {validationErrors.instructions}
-          </Text>
-        )}
+      {/* Instructions Card */}
+      <View style={[styles.formCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+        <View style={styles.cardHeader}>
+          <Ionicons name="document-text" size={24} color={theme.primary} />
+          <Text style={[styles.cardTitle, { color: theme.text }]}>Instructions</Text>
+        </View>
+        
+        <View style={styles.inputGroup}>
+          <Text style={[styles.label, { color: theme.text }]}>Cooking Instructions</Text>
+          <TextInput
+            style={[
+              styles.textArea,
+              { 
+                borderColor: validationErrors.instructions ? theme.danger : theme.border,
+                backgroundColor: theme.background,
+                color: theme.text,
+                minHeight: 120
+              }
+            ]}
+            placeholder="Step-by-step cooking instructions"
+            placeholderTextColor={theme.placeholder}
+            value={instructions}
+            onChangeText={(text) => {
+              setInstructions(text);
+              if (validationErrors.instructions) {
+                setValidationErrors(prev => {
+                  const { instructions, ...rest } = prev;
+                  return rest;
+                });
+              }
+            }}
+            multiline
+            numberOfLines={6}
+            textAlignVertical="top"
+          />
+          {validationErrors.instructions && (
+            <Text style={[styles.errorText, { color: theme.danger }]}>
+              {validationErrors.instructions}
+            </Text>
+          )}
+        </View>
+      </View>
 
-        {/* Save Meal Button */}
+      {/* Action Buttons */}
+      <View style={styles.actionContainer}>
         <TouchableOpacity 
           style={[
-            styles.button, 
+            styles.primaryButton, 
             { 
-              backgroundColor: saving ? theme.button : theme.primary,
+              backgroundColor: saving ? theme.buttonSecondary : theme.primary,
               opacity: saving ? 0.6 : 1 
             }
           ]} 
           onPress={handleSaveMeal} 
           disabled={saving}
         >
-          {saving ? (
-            <ActivityIndicator size="small" color={theme.buttonText} />
-          ) : (
-            <Text style={[styles.buttonText, { color: theme.buttonText }]}>Save Meal</Text>
-          )}
+          <View style={styles.buttonContent}>
+            {saving ? (
+              <>
+                <ActivityIndicator size="small" color={theme.buttonText} />
+                <Text style={[styles.buttonText, { color: theme.buttonText }]}>Saving...</Text>
+              </>
+            ) : (
+              <>
+                <Ionicons name="checkmark-circle" size={20} color={theme.buttonText} />
+                <Text style={[styles.buttonText, { color: theme.buttonText }]}>Save Meal</Text>
+              </>
+            )}
+          </View>
         </TouchableOpacity>
-      </ScrollView>
-    </View>
+
+        <TouchableOpacity
+          style={[styles.secondaryButton, { borderColor: theme.border, backgroundColor: theme.card }]}
+          onPress={() => router.back()}
+          disabled={saving}
+        >
+          <View style={styles.buttonContent}>
+            <Ionicons name="arrow-back" size={20} color={theme.text} />
+            <Text style={[styles.secondaryButtonText, { color: theme.text }]}>Back to Meals</Text>
+          </View>
+        </TouchableOpacity>
+      </View>
+    </ScrollView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 16,
-  },
   scrollContainer: {
     flexGrow: 1,
-    padding: 4,
+    padding: 16,
+    paddingBottom: 32,
   },
-  backButton: {
-    marginBottom: 10,
-    padding: 10,
-    borderRadius: 5,
-    alignSelf: "flex-start",
+  
+  // Header Card Styles
+  headerCard: {
+    marginBottom: 24,
+    padding: 20,
+    borderRadius: 16,
+    borderWidth: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
   },
-  backButtonText: {
-    fontSize: 16,
+  headerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  headerText: {
+    flex: 1,
+    marginLeft: 12,
   },
   title: {
     fontSize: 24,
-    fontWeight: "bold",
-    marginBottom: 20,
-    textAlign: "center",
+    fontWeight: 'bold',
+    marginBottom: 4,
+  },
+  subtitle: {
+    fontSize: 16,
+    lineHeight: 22,
+  },
+
+  // Form Card Styles
+  formCard: {
+    marginBottom: 16,
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  cardTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    marginLeft: 8,
+    flex: 1,
+  },
+
+  // Input Styles
+  inputGroup: {
+    marginBottom: 16,
   },
   label: {
     fontSize: 16,
-    fontWeight: "bold",
-    marginBottom: 5,
+    fontWeight: '500',
+    marginBottom: 8,
   },
   input: {
     borderWidth: 1,
-    borderRadius: 5,
-    padding: 10,
-    marginBottom: 8,
+    borderRadius: 8,
+    padding: 12,
     fontSize: 16,
+    marginBottom: 4,
   },
-  button: {
-    padding: 15,
-    borderRadius: 5,
-    alignItems: "center",
-    marginBottom: 20,
+  textArea: {
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    textAlignVertical: 'top',
+    minHeight: 100,
+    marginBottom: 4,
+  },
+
+  // Ingredient Styles
+  ingredientRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+    gap: 8,
+  },
+  ingredientInput: {
+    borderWidth: 1,
+    borderRadius: 6,
+    padding: 10,
+    fontSize: 14,
+  },
+  ingredientName: {
+    flex: 2,
+  },
+  ingredientQuantity: {
+    flex: 1,
+  },
+  ingredientUnit: {
+    flex: 1,
+  },
+  removeButton: {
+    padding: 6,
+    borderRadius: 4,
+  },
+  addButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    marginTop: 8,
+  },
+  addButtonText: {
+    fontSize: 14,
+    fontWeight: '500',
+    marginLeft: 6,
+  },
+
+  // Action Buttons
+  actionContainer: {
+    gap: 12,
+    marginTop: 24,
+  },
+  primaryButton: {
+    borderRadius: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  secondaryButton: {
+    borderRadius: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    borderWidth: 1,
+  },
+  buttonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   buttonText: {
     fontSize: 16,
-    fontWeight: "bold",
+    fontWeight: '600',
+    marginLeft: 8,
   },
+  secondaryButtonText: {
+    fontSize: 16,
+    fontWeight: '500',
+    marginLeft: 8,
+  },
+
+  // Error Styles
   errorText: {
     fontSize: 14,
-    marginBottom: 10,
-    marginTop: -3,
+    marginTop: 4,
+    marginBottom: 8,
   },
   errorBanner: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
     padding: 12,
-    marginHorizontal: 16,
-    marginBottom: 10,
+    marginBottom: 16,
     borderRadius: 8,
     borderWidth: 1,
   },
   errorBannerText: {
     flex: 1,
     fontSize: 14,
+    marginLeft: 8,
     marginRight: 12,
   },
   errorBannerButton: {
@@ -741,16 +937,38 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
   },
   retryBanner: {
+    flexDirection: "row",
+    alignItems: "center",
     padding: 12,
-    marginHorizontal: 16,
-    marginBottom: 10,
+    marginBottom: 16,
     borderRadius: 8,
     borderWidth: 1,
-    alignItems: "center",
   },
   retryBannerText: {
     fontSize: 14,
     fontWeight: "bold",
+    marginLeft: 8,
+  },
+
+  // Legacy Styles (for compatibility)
+  container: {
+    flex: 1,
+    padding: 16,
+  },
+  backButton: {
+    marginBottom: 10,
+    padding: 10,
+    borderRadius: 5,
+    alignSelf: "flex-start",
+  },
+  backButtonText: {
+    fontSize: 16,
+  },
+  button: {
+    padding: 15,
+    borderRadius: 5,
+    alignItems: "center",
+    marginBottom: 20,
   },
 });
 

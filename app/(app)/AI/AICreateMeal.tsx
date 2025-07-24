@@ -43,6 +43,14 @@ const AICreateMeal = () => {
   const [retryCount, setRetryCount] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const [validationErrors, setValidationErrors] = useState<{[key: string]: string}>({});
+  const [aiUsageCount, setAiUsageCount] = useState<number>(0);
+  const [aiUsageLimit] = useState<number>(10);
+  const [lastUsageDate, setLastUsageDate] = useState<string>("");
+
+  // Helper function to get today's date in YYYY-MM-DD format
+  const getTodayDate = () => {
+    return new Date().toISOString().split('T')[0];
+  };
 
   // Helper function to parse AI ingredients into array of objects
   function parseAIIngredients(ingredientText: string) {
@@ -93,6 +101,35 @@ const AICreateMeal = () => {
 
       setDietaryRestrictions(data.dietary_restrictions || "");
       setAllergies(data.allergies || "");
+      
+      // Handle daily AI usage reset
+      const today = getTodayDate();
+      const userLastUsageDate = data.ai_usage_last_date || "";
+      const userUsageCount = data.ai_usage_count || 0;
+      
+      if (userLastUsageDate !== today) {
+        // It's a new day, reset the usage count
+        setAiUsageCount(0);
+        setLastUsageDate(today);
+        
+        // Update the database to reset count for new day
+        try {
+          await supabase
+            .from("user_profiles")
+            .update({ 
+              ai_usage_count: 0,
+              ai_usage_last_date: today
+            })
+            .eq("id", userData.user.id);
+        } catch (updateError) {
+          console.warn("Failed to reset daily AI usage count:", updateError);
+        }
+      } else {
+        // Same day, use existing count
+        setAiUsageCount(userUsageCount);
+        setLastUsageDate(userLastUsageDate);
+      }
+      
       setRetryCount(0);
     } catch (error: any) {
       console.error("Error fetching dietary restrictions:", error);
@@ -316,6 +353,16 @@ const AICreateMeal = () => {
       return;
     }
 
+    // Check AI usage limit
+    if (aiUsageCount >= aiUsageLimit) {
+      Alert.alert(
+        "Daily Usage Limit Reached", 
+        `You have reached your daily limit of ${aiUsageLimit} AI meal generations. Your usage will reset tomorrow.`,
+        [{ text: "OK" }]
+      );
+      return;
+    }
+
     setLoading(true);
     setError(null);
     setGeneratedMeal({
@@ -340,6 +387,27 @@ const AICreateMeal = () => {
         throw new Error(error?.message || "Failed to generate meal.");
       }
 
+      // Update AI usage count in database
+      if (userId) {
+        const newUsageCount = aiUsageCount + 1;
+        const today = getTodayDate();
+        
+        const { error: updateError } = await supabase
+          .from("user_profiles")
+          .update({ 
+            ai_usage_count: newUsageCount,
+            ai_usage_last_date: today
+          })
+          .eq("id", userId);
+
+        if (updateError) {
+          console.warn("Failed to update AI usage count:", updateError);
+        } else {
+          setAiUsageCount(newUsageCount);
+          setLastUsageDate(today);
+        }
+      }
+
       setGeneratedMeal({
         name: data.name || "",
         description: data.description || "",
@@ -355,7 +423,7 @@ const AICreateMeal = () => {
     } finally {
       setLoading(false);
     }
-  }, [prompt, validatePrompt, dietaryRestrictions, allergies, usePantry]);
+  }, [prompt, validatePrompt, dietaryRestrictions, allergies, usePantry, aiUsageCount, aiUsageLimit, userId]);
 
   // Enhanced loading state with theme
   if (fetchingRestrictions) {
@@ -403,75 +471,184 @@ const AICreateMeal = () => {
 
         {/* Back Button */}
         <TouchableOpacity
-          style={[styles.backButton, { backgroundColor: theme.button }]}
+          style={[styles.backButton, { backgroundColor: theme.card, borderColor: theme.border }]}
           onPress={() => router.push("/(app)/my-meals/meals")}
           disabled={loading || saving}
         >
-          <Text style={[styles.backButtonText, { color: theme.buttonText }]}>Back</Text>
+          <Text style={[styles.backButtonText, { color: theme.textSecondary }]}>← Back</Text>
         </TouchableOpacity>
 
-        <Text style={[styles.title, { color: theme.text }]}>AI Meal Creator</Text>
+        <View style={styles.headerContainer}>
+          <Text style={[styles.title, { color: theme.text }]}>AI Meal Creator</Text>
+          <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
+            Generate personalized meals with AI
+          </Text>
+        </View>
+
+        {/* AI Usage Display */}
+        <View style={[styles.usageContainer, { 
+          backgroundColor: theme.card, 
+          borderColor: aiUsageCount >= aiUsageLimit ? theme.danger : theme.border,
+          shadowColor: theme.shadow 
+        }]}>
+          <View style={styles.usageHeader}>
+            <View style={[styles.aiIcon, { backgroundColor: theme.aiLight }]}>
+              <Text style={[styles.aiIconText, { color: theme.aiAccent }]}>🤖</Text>
+            </View>
+            <View style={styles.usageInfo}>
+              <Text style={[styles.usageText, { color: theme.text }]}>
+                Daily AI Generations
+              </Text>
+              <Text style={[styles.usageCount, { color: theme.primary }]}>
+                {aiUsageCount}/{aiUsageLimit}
+              </Text>
+            </View>
+          </View>
+          
+          <View style={[styles.usageBar, { backgroundColor: theme.divider }]}>
+            <View 
+              style={[
+                styles.usageProgress, 
+                { 
+                  backgroundColor: aiUsageCount >= aiUsageLimit ? theme.danger : 
+                                   aiUsageCount >= aiUsageLimit * 0.8 ? theme.warning : 
+                                   theme.success,
+                  width: `${Math.min((aiUsageCount / aiUsageLimit) * 100, 100)}%`
+                }
+              ]} 
+            />
+          </View>
+          
+          <Text style={[styles.usageRemaining, { color: theme.textSecondary }]}>
+            {aiUsageLimit - aiUsageCount} generations remaining today
+          </Text>
+          
+          {aiUsageCount >= aiUsageLimit && (
+            <View style={[styles.limitBadge, { backgroundColor: theme.dangerLight }]}>
+              <Text style={[styles.limitText, { color: theme.danger }]}>
+                🚫 Daily limit reached. Resets tomorrow
+              </Text>
+            </View>
+          )}
+          {aiUsageCount >= aiUsageLimit * 0.8 && aiUsageCount < aiUsageLimit && (
+            <View style={[styles.warningBadge, { backgroundColor: theme.warningLight }]}>
+              <Text style={[styles.warningText, { color: theme.warning }]}>
+                ⚠️ {aiUsageLimit - aiUsageCount} generations left
+              </Text>
+            </View>
+          )}
+        </View>
 
         {/* Prompt Section */}
-        <View style={styles.formSection}>
-          <Text style={[styles.sectionLabel, { color: theme.text }]}>Meal Prompt *</Text>
-          <Text style={[styles.characterCount, { color: theme.subtext }]}>
-            {prompt.length}/200
-          </Text>
+        <View style={[styles.formCard, { backgroundColor: theme.card, borderColor: theme.border, shadowColor: theme.shadow }]}>
+          <View style={styles.formHeader}>
+            <Text style={[styles.sectionLabel, { color: theme.text }]}>
+              ✨ Meal Prompt *
+            </Text>
+            <Text style={[styles.characterCount, { color: theme.textSecondary }]}>
+              {prompt.length}/200
+            </Text>
+          </View>
           <TextInput
-            style={[styles.input, { borderColor: theme.border, color: theme.text, backgroundColor: theme.card }]}
-            placeholder="Enter a meal prompt (e.g., vegan dinner)"
-            placeholderTextColor={theme.subtext}
+            style={[styles.input, { 
+              borderColor: theme.border, 
+              color: theme.text, 
+              backgroundColor: theme.background,
+              fontSize: 16,
+            }]}
+            placeholder="Describe your ideal meal (e.g., 'healthy vegan dinner with quinoa')"
+            placeholderTextColor={theme.placeholder}
             value={prompt}
             onChangeText={handlePromptChange}
             maxLength={200}
             editable={!loading && !saving}
+            multiline={true}
+            numberOfLines={3}
+            textAlignVertical="top"
           />
         </View>
 
         {/* Dietary Restrictions Display */}
-        <View style={styles.formSection}>
-          <Text style={[styles.sectionLabel, { color: theme.text }]}>Dietary Restrictions</Text>
-          <Text style={[styles.dietaryText, { color: theme.subtext }]}>
-            {dietaryRestrictions || "None"}
+        <View style={[styles.formCard, { backgroundColor: theme.card, borderColor: theme.border, shadowColor: theme.shadow }]}>
+          <Text style={[styles.sectionLabel, { color: theme.text }]}>
+            🥗 Dietary Restrictions
           </Text>
+          <View style={[styles.dietaryBadge, { backgroundColor: dietaryRestrictions ? theme.successLight : theme.divider }]}>
+            <Text style={[styles.dietaryText, { 
+              color: dietaryRestrictions ? theme.success : theme.textSecondary 
+            }]}>
+              {dietaryRestrictions || "No restrictions specified"}
+            </Text>
+          </View>
         </View>
 
         {/* Pantry Checkbox */}
-        <View style={styles.checkboxContainer}>
+        <View style={[styles.formCard, { backgroundColor: theme.card, borderColor: theme.border, shadowColor: theme.shadow }]}>
           <TouchableOpacity
-            style={[
-              styles.checkbox,
-              { 
-                backgroundColor: usePantry ? theme.primary : "transparent",
-                borderColor: theme.primary
-              },
-            ]}
+            style={styles.checkboxContainer}
             onPress={() => setUsePantry(!usePantry)}
             disabled={loading || saving}
+            activeOpacity={0.7}
           >
-            {usePantry && <Text style={[styles.checkboxMark, { color: theme.buttonText }]}>✓</Text>}
+            <View
+              style={[
+                styles.checkbox,
+                { 
+                  backgroundColor: usePantry ? theme.primary : theme.background,
+                  borderColor: usePantry ? theme.primary : theme.border,
+                  shadowColor: usePantry ? theme.primary : 'transparent',
+                },
+              ]}
+            >
+              {usePantry && <Text style={[styles.checkboxMark, { color: theme.buttonTextPrimary }]}>✓</Text>}
+            </View>
+            <View style={styles.checkboxContent}>
+              <Text style={[styles.checkboxLabel, { color: theme.text }]}>
+                🏠 Use ingredients from my pantry
+              </Text>
+              <Text style={[styles.checkboxDescription, { color: theme.textSecondary }]}>
+                AI will prioritize ingredients you already have
+              </Text>
+            </View>
           </TouchableOpacity>
-          <Text style={[styles.checkboxLabel, { color: theme.text }]}>Use ingredients from my pantry</Text>
         </View>
 
         {/* Generate Button */}
         <TouchableOpacity
           style={[
-            styles.button, 
+            styles.generateButton, 
             { 
-              backgroundColor: loading || saving || !prompt.trim() ? theme.border : theme.primary,
-              opacity: loading || saving ? 0.6 : 1
+              backgroundColor: loading || saving || !prompt.trim() || aiUsageCount >= aiUsageLimit 
+                ? theme.border 
+                : theme.primary,
+              shadowColor: loading || saving || !prompt.trim() || aiUsageCount >= aiUsageLimit 
+                ? 'transparent' 
+                : theme.primary,
             }
           ]}
           onPress={handleGenerateMeal}
-          disabled={loading || saving || !prompt.trim()}
+          disabled={loading || saving || !prompt.trim() || aiUsageCount >= aiUsageLimit}
+          activeOpacity={0.8}
         >
-          {loading ? (
-            <ActivityIndicator size="small" color={theme.buttonText} />
-          ) : (
-            <Text style={[styles.buttonText, { color: theme.buttonText }]}>Generate Meal</Text>
-          )}
+          <View style={styles.buttonContent}>
+            {loading ? (
+              <>
+                <ActivityIndicator size="small" color={theme.buttonTextPrimary} style={{ marginRight: 8 }} />
+                <Text style={[styles.generateButtonText, { color: theme.buttonTextPrimary }]}>
+                  Generating...
+                </Text>
+              </>
+            ) : (
+              <>
+                <Text style={[styles.generateButtonIcon, { color: theme.buttonTextPrimary }]}>
+                  {aiUsageCount >= aiUsageLimit ? "🚫" : "✨"}
+                </Text>
+                <Text style={[styles.generateButtonText, { color: theme.buttonTextPrimary }]}>
+                  {aiUsageCount >= aiUsageLimit ? "Daily Limit Reached" : "Generate AI Meal"}
+                </Text>
+              </>
+            )}
+          </View>
         </TouchableOpacity>
 
         {/* Generated Meal Results */}
@@ -719,47 +896,190 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   backButton: {
-    marginBottom: 16,
-    padding: 10,
-    borderRadius: 8,
+    marginBottom: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
     alignSelf: "flex-start",
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   backButtonText: {
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: '600',
+  },
+  headerContainer: {
+    alignItems: 'center',
+    marginBottom: 24,
   },
   title: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: "bold",
-    marginBottom: 16,
+    marginBottom: 4,
     textAlign: "center",
+  },
+  subtitle: {
+    fontSize: 16,
+    textAlign: "center",
+    opacity: 0.8,
+  },
+  usageContainer: {
+    padding: 20,
+    marginBottom: 24,
+    borderRadius: 16,
+    borderWidth: 1,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  usageHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  aiIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 16,
+  },
+  aiIconText: {
+    fontSize: 24,
+  },
+  usageInfo: {
+    flex: 1,
+  },
+  usageText: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  usageCount: {
+    fontSize: 24,
+    fontWeight: 'bold',
+  },
+  usageBar: {
+    height: 12,
+    borderRadius: 6,
+    marginBottom: 12,
+    overflow: 'hidden',
+  },
+  usageProgress: {
+    height: '100%',
+    borderRadius: 6,
+  },
+  usageRemaining: {
+    fontSize: 14,
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  limitBadge: {
+    padding: 12,
+    borderRadius: 8,
+    marginTop: 8,
+    alignItems: 'center',
+  },
+  limitText: {
+    fontSize: 14,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  warningBadge: {
+    padding: 12,
+    borderRadius: 8,
+    marginTop: 8,
+    alignItems: 'center',
+  },
+  warningText: {
+    fontSize: 14,
+    fontWeight: '600',
+    textAlign: 'center',
   },
   formSection: {
     marginBottom: 20,
   },
+  formCard: {
+    padding: 20,
+    marginBottom: 20,
+    borderRadius: 16,
+    borderWidth: 1,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  formHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
   sectionLabel: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 8,
+    fontSize: 18,
+    fontWeight: '700',
   },
   characterCount: {
     fontSize: 12,
-    textAlign: 'right',
-    marginBottom: 4,
+    fontWeight: '500',
   },
   input: {
     borderWidth: 1,
-    borderRadius: 8,
-    padding: 12,
+    borderRadius: 12,
+    padding: 16,
     fontSize: 16,
+    minHeight: 48,
+  },
+  dietaryBadge: {
+    padding: 12,
+    borderRadius: 8,
+    marginTop: 8,
+  },
+  dietaryText: {
+    fontSize: 16,
+    fontWeight: '500',
+    textAlign: 'center',
   },
   errorText: {
     fontSize: 12,
     marginTop: 4,
   },
-  dietaryText: {
+  checkboxContainer: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    padding: 4,
+  },
+  checkbox: {
+    width: 24,
+    height: 24,
+    borderWidth: 2,
+    marginRight: 16,
+    borderRadius: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  checkboxMark: {
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  checkboxContent: {
+    flex: 1,
+  },
+  checkboxLabel: {
     fontSize: 16,
+    fontWeight: '600',
     marginBottom: 4,
+  },
+  checkboxDescription: {
+    fontSize: 14,
+    lineHeight: 20,
   },
   button: {
     padding: 12,
@@ -771,26 +1091,29 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "bold",
   },
-  checkboxContainer: {
-    flexDirection: "row",
+  generateButton: {
+    paddingVertical: 18,
+    paddingHorizontal: 24,
+    borderRadius: 16,
     alignItems: "center",
-    marginBottom: 16,
+    marginBottom: 24,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
   },
-  checkbox: {
-    width: 20,
-    height: 20,
-    borderWidth: 1,
-    marginRight: 8,
-    borderRadius: 4,
+  buttonContent: {
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  checkboxMark: {
-    fontSize: 12,
-    fontWeight: 'bold',
+  generateButtonIcon: {
+    fontSize: 18,
+    marginRight: 8,
   },
-  checkboxLabel: {
-    fontSize: 16,
+  generateButtonText: {
+    fontSize: 18,
+    fontWeight: 'bold',
   },
   resultContainer: {
     marginTop: 16,

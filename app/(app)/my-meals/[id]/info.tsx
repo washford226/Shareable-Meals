@@ -13,6 +13,7 @@ import {
   ActivityIndicator,
   RefreshControl,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "../../../../context/ThemeContext";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { format } from "date-fns";
@@ -319,27 +320,36 @@ const MyMealInfo = () => {
     return (
       <View style={[styles.container, { backgroundColor: theme.background }]}>
         <View style={styles.centerContent}>
-          <ActivityIndicator size="large" color={theme.primary} />
-          <Text style={[styles.loadingText, { color: theme.text }]}>Loading meal information...</Text>
+          <View style={[styles.loadingCard, { backgroundColor: theme.card }]}>
+            <ActivityIndicator size="large" color={theme.primary} />
+            <Text style={[styles.loadingText, { color: theme.text }]}>
+              Loading meal information...
+            </Text>
+            {retryCount > 0 && (
+              <Text style={[styles.retryText, { color: theme.warning }]}>
+                Retry attempt {retryCount}/3...
+              </Text>
+            )}
+          </View>
           {error && (
-            <View style={styles.errorContainer}>
-              <Text style={[styles.errorText, { color: theme.danger }]}>
+            <View style={[styles.errorContainer, { backgroundColor: theme.card, borderColor: theme.danger }]}>
+              <Ionicons name="warning-outline" size={32} color={theme.danger} />
+              <Text style={[styles.errorTitle, { color: theme.danger }]}>
+                Error Loading Meal
+              </Text>
+              <Text style={[styles.errorText, { color: theme.text }]}>
                 {error}
               </Text>
               <TouchableOpacity
                 style={[styles.retryButton, { backgroundColor: theme.primary }]}
                 onPress={() => fetchMeal()}
               >
+                <Ionicons name="refresh-outline" size={20} color={theme.buttonText} style={{ marginRight: 8 }} />
                 <Text style={[styles.retryButtonText, { color: theme.buttonText }]}>
-                  Retry
+                  Try Again
                 </Text>
               </TouchableOpacity>
             </View>
-          )}
-          {retryCount > 0 && (
-            <Text style={[styles.retryText, { color: theme.warning }]}>
-              Retry attempt {retryCount}/3...
-            </Text>
           )}
         </View>
       </View>
@@ -350,25 +360,33 @@ const MyMealInfo = () => {
     return (
       <View style={[styles.container, { backgroundColor: theme.background }]}>
         <View style={styles.centerContent}>
-          <Text style={[styles.errorText, { color: theme.danger }]}>
-            {error || "Meal not found."}
-          </Text>
-          <TouchableOpacity
-            style={[styles.retryButton, { backgroundColor: theme.primary }]}
-            onPress={() => fetchMeal()}
-          >
-            <Text style={[styles.retryButtonText, { color: theme.buttonText }]}>
-              Try Again
+          <View style={[styles.errorContainer, { backgroundColor: theme.card, borderColor: theme.danger }]}>
+            <Ionicons name="warning-outline" size={48} color={theme.danger} />
+            <Text style={[styles.errorTitle, { color: theme.danger }]}>
+              Meal Not Found
             </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.backButton, { backgroundColor: theme.button }]}
-            onPress={() => router.push("/(app)/my-meals/meals")}
-          >
-            <Text style={[styles.retryButtonText, { color: theme.buttonText }]}>
-              Go Back
+            <Text style={[styles.errorText, { color: theme.text }]}>
+              {error || "The meal you're looking for couldn't be found."}
             </Text>
-          </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.retryButton, { backgroundColor: theme.primary }]}
+              onPress={() => fetchMeal()}
+            >
+              <Ionicons name="refresh-outline" size={20} color={theme.buttonText} style={{ marginRight: 8 }} />
+              <Text style={[styles.retryButtonText, { color: theme.buttonText }]}>
+                Try Again
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.backButton, { backgroundColor: theme.button, borderColor: theme.border }]}
+              onPress={() => router.push("/(app)/my-meals/meals")}
+            >
+              <Ionicons name="arrow-back-outline" size={20} color={theme.buttonText} style={{ marginRight: 8 }} />
+              <Text style={[styles.retryButtonText, { color: theme.buttonText }]}>
+                Go Back
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
     );
@@ -388,6 +406,7 @@ const MyMealInfo = () => {
     >
       {error && (
         <View style={[styles.errorBanner, { backgroundColor: theme.card, borderColor: theme.danger }]}>
+          <Ionicons name="warning" size={20} color={theme.danger} />
           <Text style={[styles.errorBannerText, { color: theme.danger }]}>
             {error}
           </Text>
@@ -412,142 +431,260 @@ const MyMealInfo = () => {
 
       {/* Meal Picture */}
       {meal?.picture ? (
-        <Image
-          source={{ uri: typeof meal.picture === "string" ? meal.picture : "" }}
-          style={styles.mealImage}
-          resizeMode="cover"
-        />
+        <View style={[styles.imageCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+          <Image
+            source={{ uri: typeof meal.picture === "string" ? meal.picture : "" }}
+            style={styles.mealImage}
+            resizeMode="cover"
+          />
+        </View>
       ) : (
-        <View style={[styles.placeholder, { backgroundColor: theme.card }]}>
-          <Text style={[styles.placeholderText, { color: theme.subtext }]}>No Image Available</Text>
+        <View style={[styles.placeholder, { backgroundColor: theme.card, borderColor: theme.border }]}>
+          <Ionicons name="image-outline" size={48} color={theme.subtext} />
+          <Text style={[styles.placeholderText, { color: theme.subtext }]}>
+            No Image Available
+          </Text>
         </View>
       )}
 
-      <View style={[styles.container, { backgroundColor: theme.background }]}>
-        {/* Meal Name */}
-        <Text style={[styles.title, { color: theme.text }]}>{meal?.name || "Unknown Meal"}</Text>
-
-        {/* Description */}
-        <Text style={[styles.description, { color: theme.subtext }]}>{meal?.description || "No description available"}</Text>
-
-        {/* Instructions */}
-        <Text style={[styles.sectionTitle, { color: theme.text }]}>Instructions</Text>
-        <Text style={[styles.details, { color: theme.text }]}>{meal?.instructions || "No instructions provided"}</Text>
-
-        {/* Dietary Restriction */}
-        {meal?.dietary_restrictions && (
-          <Text style={[styles.details, { color: theme.text, fontWeight: "bold", marginBottom: 8 }]}>
-            Dietary Restriction: {meal.dietary_restrictions}
-          </Text>
-        )}
-        {/* Cuisine */}
-        {meal?.cuisine && (
-          <Text style={[styles.details, { color: theme.text, fontWeight: "bold", marginBottom: 8 }]}>
-            Cuisine: {meal.cuisine}
-          </Text>
-        )}
-
-        {/* Meal Link */}
-        {meal?.recipeLink && (
-          <>
-            <Text style={[styles.sectionTitle, { color: theme.text }]}>Recipe Link</Text>
-            <Text
-              style={[styles.linkText, { color: theme.primary }]}
-              onPress={() => meal?.recipeLink && Linking.openURL(meal.recipeLink)}
-            >
-              {meal.recipeLink}
-            </Text>
-          </>
-        )}
-        {/* Ingredients */}
-        <Text style={[styles.sectionTitle, { color: theme.text }]}>Ingredients</Text>
-        {meal?.ingredients && Array.isArray(meal.ingredients) ? (
-          meal.ingredients.length > 0 ? (
-            meal.ingredients.map((ing, idx: number) => (
-              <Text key={idx} style={[styles.details, { color: theme.text }]}>
-                {ing.quantity} {ing.unit || ''} {ing.raw_name}
-              </Text>
-            ))
-          ) : (
-            <Text style={[styles.details, { color: theme.text }]}>No ingredients listed.</Text>
-          )
-        ) : (
-          <Text style={[styles.details, { color: theme.text }]}>No ingredients available.</Text>
-        )}
-
-        {/* Nutrition Info */}
-        <Text style={[styles.sectionTitle, { color: theme.text }]}>Nutrition Info</Text>
-        <View style={styles.nutritionContainer}>
-          <Text style={[styles.nutritionText, { color: theme.text }]}>
-            Calories: {meal?.calories || 'N/A'}
-          </Text>
-          <Text style={[styles.nutritionText, { color: theme.text }]}>
-            Protein: {meal?.protein || 'N/A'}g
-          </Text>
-          <Text style={[styles.nutritionText, { color: theme.text }]}>
-            Carbs: {meal?.carbohydrates || 'N/A'}g
-          </Text>
-          <Text style={[styles.nutritionText, { color: theme.text }]}>
-            Fat: {meal?.fat || 'N/A'}g
+      <View style={[styles.contentContainer, { backgroundColor: theme.background }]}>
+        {/* Meal Title Card */}
+        <View style={[styles.titleCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+          <View style={styles.titleHeader}>
+            <Ionicons name="restaurant-outline" size={28} color={theme.primary} />
+            <Text style={[styles.title, { color: theme.text }]}>{meal?.name || "Unknown Meal"}</Text>
+            {meal?.created_by_ai && (
+              <View style={[styles.aiTag, { backgroundColor: theme.aiAccent }]}>
+                <Ionicons name="sparkles" size={14} color={theme.buttonText} />
+                <Text style={[styles.aiTagText, { color: theme.buttonText }]}>AI</Text>
+              </View>
+            )}
+          </View>
+          <Text style={[styles.description, { color: theme.subtext }]}>
+            {meal?.description || "No description available"}
           </Text>
         </View>
 
-        {/* Buttons */}
-        <TouchableOpacity
-          style={[styles.button, { backgroundColor: theme.primary }]}
-          onPress={() => setIsModalVisible(true)}
-          disabled={addingToMealPlan}
-        >
-          {addingToMealPlan ? (
-            <ActivityIndicator color={theme.buttonText} />
+        {/* Meal Details Cards */}
+        {meal?.dietary_restrictions && (
+          <View style={[styles.infoCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+            <View style={styles.cardHeader}>
+              <Ionicons name="leaf-outline" size={24} color={theme.success} />
+              <Text style={[styles.cardTitle, { color: theme.text }]}>Dietary Restriction</Text>
+            </View>
+            <Text style={[styles.cardContent, { color: theme.subtext }]}>
+              {meal.dietary_restrictions}
+            </Text>
+          </View>
+        )}
+
+        {meal?.cuisine && (
+          <View style={[styles.infoCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+            <View style={styles.cardHeader}>
+              <Ionicons name="globe-outline" size={24} color={theme.info} />
+              <Text style={[styles.cardTitle, { color: theme.text }]}>Cuisine</Text>
+            </View>
+            <Text style={[styles.cardContent, { color: theme.subtext }]}>
+              {meal.cuisine}
+            </Text>
+          </View>
+        )}
+
+        {/* Instructions Card */}
+        <View style={[styles.contentCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+          <View style={styles.cardHeader}>
+            <Ionicons name="book-outline" size={24} color={theme.primary} />
+            <Text style={[styles.sectionTitle, { color: theme.text }]}>Instructions</Text>
+          </View>
+          <Text style={[styles.details, { color: theme.subtext }]}>
+            {meal?.instructions || "No instructions provided"}
+          </Text>
+        </View>
+
+        {/* Recipe Link Card */}
+        {meal?.recipeLink && (
+          <TouchableOpacity 
+            style={[styles.linkCard, { backgroundColor: theme.primaryLight, borderColor: theme.primary }]}
+            onPress={() => meal?.recipeLink && Linking.openURL(meal.recipeLink)}
+          >
+            <Ionicons name="link-outline" size={24} color={theme.primary} />
+            <View style={styles.linkContent}>
+              <Text style={[styles.linkTitle, { color: theme.primary }]}>
+                View Full Recipe
+              </Text>
+              <Text style={[styles.linkSubtext, { color: theme.primary }]} numberOfLines={1}>
+                {meal.recipeLink}
+              </Text>
+            </View>
+            <Ionicons name="arrow-forward-outline" size={20} color={theme.primary} />
+          </TouchableOpacity>
+        )}
+
+        {/* Ingredients Card */}
+        <View style={[styles.contentCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+          <View style={styles.cardHeader}>
+            <Ionicons name="list-outline" size={24} color={theme.success} />
+            <Text style={[styles.sectionTitle, { color: theme.text }]}>Ingredients</Text>
+          </View>
+          {meal?.ingredients && Array.isArray(meal.ingredients) ? (
+            meal.ingredients.length > 0 ? (
+              <View style={styles.ingredientsList}>
+                {meal.ingredients.map((ing, idx: number) => (
+                  <View key={idx} style={styles.ingredientItem}>
+                    <Ionicons name="ellipse" size={6} color={theme.success} style={{ marginTop: 6 }} />
+                    <Text style={[styles.ingredientText, { color: theme.subtext }]}>
+                      {ing.quantity} {ing.unit || ''} {ing.raw_name}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            ) : (
+              <Text style={[styles.emptyText, { color: theme.subtext }]}>
+                No ingredients listed.
+              </Text>
+            )
           ) : (
-            <Text style={[styles.buttonText, { color: theme.buttonText }]}>Add to Meal Plan</Text>
+            <Text style={[styles.emptyText, { color: theme.subtext }]}>
+              No ingredients available.
+            </Text>
           )}
-        </TouchableOpacity>
+        </View>
 
-        <TouchableOpacity
-          style={[styles.button, { backgroundColor: theme.button }]}
-          onPress={() => router.push(`/my-meals/${id}/edit`)}
-          disabled={deleting}
-        >
-          <Text style={[styles.buttonText, { color: theme.buttonText }]}>Edit Meal</Text>
-        </TouchableOpacity>
+        {/* Nutrition Card */}
+        <View style={[styles.nutritionCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+          <View style={styles.cardHeader}>
+            <Ionicons name="fitness-outline" size={24} color={theme.primary} />
+            <Text style={[styles.sectionTitle, { color: theme.text }]}>Nutrition Information</Text>
+          </View>
+          <View style={styles.nutritionGrid}>
+            <View style={[styles.nutritionItem, { backgroundColor: theme.background }]}>
+              <Ionicons name="flame-outline" size={20} color={theme.warning} />
+              <Text style={[styles.nutritionLabel, { color: theme.subtext }]}>Calories</Text>
+              <Text style={[styles.nutritionValue, { color: theme.text }]}>
+                {meal?.calories || 'N/A'}
+              </Text>
+            </View>
+            <View style={[styles.nutritionItem, { backgroundColor: theme.background }]}>
+              <Ionicons name="barbell-outline" size={20} color={theme.protein} />
+              <Text style={[styles.nutritionLabel, { color: theme.subtext }]}>Protein</Text>
+              <Text style={[styles.nutritionValue, { color: theme.text }]}>
+                {meal?.protein || 'N/A'}g
+              </Text>
+            </View>
+            <View style={[styles.nutritionItem, { backgroundColor: theme.background }]}>
+              <Ionicons name="analytics-outline" size={20} color={theme.carbs} />
+              <Text style={[styles.nutritionLabel, { color: theme.subtext }]}>Carbs</Text>
+              <Text style={[styles.nutritionValue, { color: theme.text }]}>
+                {meal?.carbohydrates || 'N/A'}g
+              </Text>
+            </View>
+            <View style={[styles.nutritionItem, { backgroundColor: theme.background }]}>
+              <Ionicons name="water-outline" size={20} color={theme.fat} />
+              <Text style={[styles.nutritionLabel, { color: theme.subtext }]}>Fat</Text>
+              <Text style={[styles.nutritionValue, { color: theme.text }]}>
+                {meal?.fat || 'N/A'}g
+              </Text>
+            </View>
+          </View>
+        </View>
 
-        <TouchableOpacity
-          style={[styles.button, { backgroundColor: theme.danger }]}
-          onPress={handleDeleteMeal}
-          disabled={deleting}
-        >
-          {deleting ? (
-            <ActivityIndicator color={theme.buttonText} />
-          ) : (
-            <Text style={[styles.buttonText, { color: theme.buttonText }]}>Delete Meal</Text>
-          )}
-        </TouchableOpacity>
+        {/* Action Buttons */}
+        <View style={styles.actionContainer}>
+          <TouchableOpacity
+            style={[styles.primaryButton, { backgroundColor: theme.primary }]}
+            onPress={() => setIsModalVisible(true)}
+            disabled={addingToMealPlan}
+          >
+            {addingToMealPlan ? (
+              <ActivityIndicator color={theme.buttonText} size="small" />
+            ) : (
+              <View style={styles.buttonContent}>
+                <Ionicons name="calendar-outline" size={20} color={theme.buttonText} />
+                <Text style={[styles.buttonText, { color: theme.buttonText }]}>
+                  Add to Meal Plan
+                </Text>
+              </View>
+            )}
+          </TouchableOpacity>
 
-        <TouchableOpacity
-          style={[styles.button, { backgroundColor: theme.button }]}
-          onPress={() => router.push("/(app)/my-meals/meals")}
-          disabled={deleting}
-        >
-          <Text style={[styles.buttonText, { color: theme.buttonText }]}>Back</Text>
-        </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.secondaryButton, { backgroundColor: theme.button, borderColor: theme.border }]}
+            onPress={() => router.push(`/my-meals/${id}/edit`)}
+            disabled={deleting}
+          >
+            <View style={styles.buttonContent}>
+              <Ionicons name="create-outline" size={20} color={theme.text} />
+              <Text style={[styles.secondaryButtonText, { color: theme.text }]}>
+                Edit Meal
+              </Text>
+            </View>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.dangerButton, { backgroundColor: theme.danger }]}
+            onPress={handleDeleteMeal}
+            disabled={deleting}
+          >
+            {deleting ? (
+              <ActivityIndicator color={theme.buttonText} size="small" />
+            ) : (
+              <View style={styles.buttonContent}>
+                <Ionicons name="trash-outline" size={20} color={theme.buttonText} />
+                <Text style={[styles.buttonText, { color: theme.buttonText }]}>
+                  Delete Meal
+                </Text>
+              </View>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.secondaryButton, { backgroundColor: theme.background, borderColor: theme.border }]}
+            onPress={() => router.push("/(app)/my-meals/meals")}
+            disabled={deleting}
+          >
+            <View style={styles.buttonContent}>
+              <Ionicons name="arrow-back-outline" size={20} color={theme.text} />
+              <Text style={[styles.secondaryButtonText, { color: theme.text }]}>
+                Back to Meals
+              </Text>
+            </View>
+          </TouchableOpacity>
+        </View>
       </View>
 
-      {/* Modal for Adding to Meal Plan */}
+      {/* Enhanced Modal for Adding to Meal Plan */}
       <Modal visible={isModalVisible} transparent animationType="slide">
         <View style={styles.modalContainer}>
           <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
-            <Text style={[styles.modalTitle, { color: theme.text }]}>Add to Meal Plan</Text>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: theme.text }]}>Add to Meal Plan</Text>
+              <TouchableOpacity
+                style={styles.modalCloseButton}
+                onPress={() => setIsModalVisible(false)}
+              >
+                <Ionicons name="close" size={24} color={theme.subtext} />
+              </TouchableOpacity>
+            </View>
 
-            <TouchableOpacity
-              style={[styles.input, { borderColor: theme.border }]}
-              onPress={() => setShowDatePicker(true)}
-            >
-              <Text style={{ color: theme.text }}>
-                {selectedDate ? selectedDate : "Select Date"}
-              </Text>
-            </TouchableOpacity>
+            <Text style={[styles.modalSubtitle, { color: theme.subtext }]}>
+              Choose when you'd like to have this meal
+            </Text>
+
+            {/* Date Selection */}
+            <View style={styles.inputSection}>
+              <Text style={[styles.inputLabel, { color: theme.text }]}>Date</Text>
+              <TouchableOpacity
+                style={[styles.dateInput, { borderColor: theme.border, backgroundColor: theme.background }]}
+                onPress={() => setShowDatePicker(true)}
+              >
+                <Ionicons name="calendar-outline" size={20} color={theme.primary} />
+                <Text style={[styles.dateText, { color: selectedDate ? theme.text : theme.placeholder }]}>
+                  {selectedDate ? selectedDate : "Select Date"}
+                </Text>
+                <Ionicons name="chevron-down" size={20} color={theme.subtext} />
+              </TouchableOpacity>
+            </View>
+
             {showDatePicker && (
               <DateTimePicker
                 value={selectedDate ? new Date(selectedDate) : new Date()}
@@ -562,37 +699,52 @@ const MyMealInfo = () => {
               />
             )}
 
-            <View style={[styles.pickerContainer, { borderColor: theme.border }]}>
-              <Picker
-                selectedValue={mealType}
-                onValueChange={(itemValue) => setMealType(itemValue)}
-                style={{ color: theme.text }}
-              >
-                <Picker.Item label="Breakfast" value="Breakfast" />
-                <Picker.Item label="Lunch" value="Lunch" />
-                <Picker.Item label="Dinner" value="Dinner" />
-                <Picker.Item label="Other" value="Other" />
-              </Picker>
+            {/* Meal Type Selection */}
+            <View style={styles.inputSection}>
+              <Text style={[styles.inputLabel, { color: theme.text }]}>Meal Type</Text>
+              <View style={[styles.pickerContainer, { borderColor: theme.border, backgroundColor: theme.background }]}>
+                <Ionicons name="restaurant-outline" size={20} color={theme.primary} style={styles.pickerIcon} />
+                <Picker
+                  selectedValue={mealType}
+                  onValueChange={(itemValue) => setMealType(itemValue)}
+                  style={[styles.picker, { color: theme.text }]}
+                >
+                  <Picker.Item label="Breakfast" value="Breakfast" />
+                  <Picker.Item label="Lunch" value="Lunch" />
+                  <Picker.Item label="Dinner" value="Dinner" />
+                  <Picker.Item label="Other" value="Other" />
+                </Picker>
+              </View>
             </View>
 
-            <TouchableOpacity
-              style={[styles.button, { backgroundColor: theme.primary }]}
-              onPress={handleAddToMealPlan}
-              disabled={addingToMealPlan}
-            >
-              {addingToMealPlan ? (
-                <ActivityIndicator color={theme.buttonText} />
-              ) : (
-                <Text style={[styles.buttonText, { color: theme.buttonText }]}>Add</Text>
-              )}
-            </TouchableOpacity>
+            {/* Modal Action Buttons */}
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.primaryButton, { backgroundColor: theme.primary }]}
+                onPress={handleAddToMealPlan}
+                disabled={addingToMealPlan}
+              >
+                {addingToMealPlan ? (
+                  <ActivityIndicator color={theme.buttonText} size="small" />
+                ) : (
+                  <View style={styles.buttonContent}>
+                    <Ionicons name="add-circle-outline" size={20} color={theme.buttonText} />
+                    <Text style={[styles.buttonText, { color: theme.buttonText }]}>
+                      Add to Plan
+                    </Text>
+                  </View>
+                )}
+              </TouchableOpacity>
 
-            <TouchableOpacity
-              style={[styles.button, { backgroundColor: theme.danger }]}
-              onPress={() => setIsModalVisible(false)}
-            >
-              <Text style={[styles.buttonText, { color: theme.buttonText }]}>Cancel</Text>
-            </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.cancelButton, { backgroundColor: theme.background, borderColor: theme.border }]}
+                onPress={() => setIsModalVisible(false)}
+              >
+                <Text style={[styles.cancelButtonText, { color: theme.text }]}>
+                  Cancel
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
@@ -603,82 +755,516 @@ const MyMealInfo = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 16,
-    width: "100%",
+    backgroundColor: 'transparent',
   },
   scrollContainer: {
     flexGrow: 1,
   },
+  centerContent: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+
+  // Enhanced Loading Card
+  loadingCard: {
+    padding: 40,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 5,
+    maxWidth: '90%',
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    textAlign: 'center',
+    fontWeight: '600',
+  },
+  retryText: {
+    fontSize: 14,
+    marginTop: 8,
+    textAlign: 'center',
+    fontWeight: '500',
+  },
+
+  // Enhanced Error Styles
+  errorContainer: {
+    padding: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    maxWidth: '90%',
+    borderWidth: 2,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 5,
+  },
+  errorTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 12,
+    marginTop: 16,
+    textAlign: 'center',
+  },
+  errorText: {
+    fontSize: 16,
+    marginBottom: 20,
+    textAlign: 'center',
+    lineHeight: 24,
+  },
+  retryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 12,
+    marginBottom: 12,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  retryButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  backButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+
+  // Error Banner
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    marginHorizontal: 16,
+    marginBottom: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  errorBannerText: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+  errorBannerButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  errorBannerButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  retryBanner: {
+    padding: 12,
+    marginHorizontal: 16,
+    marginBottom: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignItems: "center",
+  },
+  retryBannerText: {
+    fontSize: 14,
+    fontWeight: "bold",
+  },
+
+  // Enhanced Image Card
+  imageCard: {
+    marginHorizontal: 16,
+    marginBottom: 20,
+    borderRadius: 16,
+    borderWidth: 1,
+    overflow: 'hidden',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 6,
+  },
   mealImage: {
     width: "100%",
-    height: 200,
-    borderRadius: 8,
-    marginBottom: 16,
+    height: 250,
+    resizeMode: 'cover',
   },
   placeholder: {
     width: "100%",
-    height: 200,
-    borderRadius: 8,
+    height: 250,
+    borderRadius: 16,
+    borderWidth: 1,
     justifyContent: "center",
     alignItems: "center",
+    marginHorizontal: 16,
+    marginBottom: 20,
+    gap: 12,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
   },
   placeholderText: {
     fontSize: 16,
-    fontWeight: "bold",
+    fontWeight: "600",
+  },
+
+  // Content Container
+  contentContainer: {
+    padding: 16,
+    gap: 16,
+  },
+
+  // Enhanced Title Card
+  titleCard: {
+    padding: 20,
+    borderRadius: 16,
+    borderWidth: 1,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 5,
+  },
+  titleHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+    gap: 12,
   },
   title: {
     fontSize: 24,
-    fontWeight: "bold",
-    marginBottom: 16,
+    fontWeight: "800",
+    flex: 1,
+    lineHeight: 32,
+  },
+  aiTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    gap: 4,
+  },
+  aiTagText: {
+    fontSize: 10,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   description: {
     fontSize: 16,
-    marginBottom: 16,
+    lineHeight: 24,
+    fontWeight: '500',
+  },
+
+  // Info Cards
+  infoCard: {
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+    gap: 12,
+  },
+  cardTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  cardContent: {
+    fontSize: 15,
+    fontWeight: '500',
+    lineHeight: 22,
+  },
+
+  // Content Cards
+  contentCard: {
+    padding: 20,
+    borderRadius: 16,
+    borderWidth: 1,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 5,
   },
   sectionTitle: {
     fontSize: 18,
-    fontWeight: "bold",
-    marginTop: 16,
-    marginBottom: 8,
+    fontWeight: '700',
   },
   details: {
-    fontSize: 14,
-    marginBottom: 8,
+    fontSize: 15,
+    lineHeight: 24,
+    fontWeight: '500',
   },
-  nutritionContainer: {
-    flexDirection: "row",
-    justifyContent: "space-around",
+  emptyText: {
+    fontSize: 15,
+    fontStyle: "italic",
+    textAlign: "center",
+    fontWeight: '500',
+  },
+
+  // Link Card
+  linkCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 20,
+    borderRadius: 16,
+    borderWidth: 2,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 5,
+    gap: 16,
+  },
+  linkContent: {
+    flex: 1,
+  },
+  linkTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  linkSubtext: {
+    fontSize: 14,
+    fontWeight: '500',
+    opacity: 0.8,
+  },
+
+  // Ingredients List
+  ingredientsList: {
+    gap: 8,
+  },
+  ingredientItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  ingredientText: {
+    fontSize: 15,
+    lineHeight: 22,
+    fontWeight: '500',
+    flex: 1,
+  },
+
+  // Nutrition Card
+  nutritionCard: {
+    padding: 20,
+    borderRadius: 16,
+    borderWidth: 1,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 5,
+  },
+  nutritionGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  nutritionItem: {
+    flex: 1,
+    minWidth: '45%',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 12,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  nutritionLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 8,
+    marginBottom: 4,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  nutritionValue: {
+    fontSize: 18,
+    fontWeight: '800',
+  },
+
+  // Action Container
+  actionContainer: {
+    gap: 16,
+    paddingBottom: 20,
+  },
+  buttonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+
+  // Enhanced Buttons
+  primaryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  secondaryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    borderWidth: 1,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  dangerButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  buttonText: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  secondaryButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+
+  // Enhanced Modal
+  modalContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    padding: 20,
+  },
+  modalContent: {
+    width: "100%",
+    maxWidth: 400,
+    padding: 24,
+    borderRadius: 20,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.2,
+    shadowRadius: 16,
+    elevation: 10,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: 16,
   },
-  nutritionText: {
-    fontSize: 14,
-    fontWeight: "bold",
+  modalTitle: {
+    fontSize: 22,
+    fontWeight: "800",
+    flex: 1,
   },
+  modalCloseButton: {
+    padding: 4,
+  },
+  modalSubtitle: {
+    fontSize: 16,
+    marginBottom: 24,
+    lineHeight: 22,
+  },
+
+  // Modal Input Styles
+  inputSection: {
+    marginBottom: 20,
+  },
+  inputLabel: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 8,
+  },
+  dateInput: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 12,
+  },
+  dateText: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  pickerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingLeft: 16,
+  },
+  pickerIcon: {
+    marginRight: 12,
+  },
+  picker: {
+    flex: 1,
+    height: 50,
+  },
+
+  // Modal Actions
+  modalActions: {
+    gap: 12,
+    marginTop: 8,
+  },
+  cancelButton: {
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    alignItems: "center",
+    borderWidth: 1,
+  },
+  cancelButtonText: {
+    fontSize: 16,
+    fontWeight: "600",
+  },
+
+  // Legacy compatibility styles
   button: {
     padding: 12,
     borderRadius: 8,
     marginVertical: 8,
     alignItems: "center",
-  },
-  buttonText: {
-    fontSize: 16,
-    fontWeight: "bold",
-  },
-  modalContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-  },
-  modalContent: {
-    width: "80%",
-    padding: 20,
-    borderRadius: 8,
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
-    marginBottom: 16,
   },
   linkText: {
     fontSize: 16,
@@ -690,85 +1276,12 @@ const styles = StyleSheet.create({
     padding: 10,
     marginBottom: 16,
   },
-  pickerContainer: {
-    borderWidth: 1,
-    borderRadius: 8,
+  nutritionContainer: {
+    flexDirection: "row",
+    justifyContent: "space-around",
     marginBottom: 16,
   },
-  centerContent: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 20,
-  },
-  loadingText: {
-    fontSize: 16,
-    marginTop: 10,
-    textAlign: "center",
-  },
-  errorContainer: {
-    marginTop: 20,
-    alignItems: "center",
-  },
-  errorText: {
-    fontSize: 16,
-    textAlign: "center",
-    marginBottom: 10,
-  },
-  retryButton: {
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 6,
-    marginVertical: 5,
-  },
-  retryButtonText: {
-    fontSize: 16,
-    fontWeight: "bold",
-  },
-  retryText: {
-    fontSize: 14,
-    marginTop: 10,
-    textAlign: "center",
-  },
-  backButton: {
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 6,
-    marginVertical: 5,
-  },
-  errorBanner: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: 12,
-    marginHorizontal: 16,
-    marginBottom: 10,
-    borderRadius: 8,
-    borderWidth: 1,
-  },
-  errorBannerText: {
-    flex: 1,
-    fontSize: 14,
-    marginRight: 12,
-  },
-  errorBannerButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 6,
-    borderRadius: 4,
-  },
-  errorBannerButtonText: {
-    fontSize: 12,
-    fontWeight: "bold",
-  },
-  retryBanner: {
-    padding: 12,
-    marginHorizontal: 16,
-    marginBottom: 10,
-    borderRadius: 8,
-    borderWidth: 1,
-    alignItems: "center",
-  },
-  retryBannerText: {
+  nutritionText: {
     fontSize: 14,
     fontWeight: "bold",
   },

@@ -8,7 +8,9 @@ import {
   Alert,
   ActivityIndicator,
   RefreshControl,
+  ScrollView,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useTheme } from "../../../context/ThemeContext";
 import { supabase } from "utils/supabase";
@@ -247,27 +249,72 @@ const CurrentMeals = () => {
 
   if (loading) {
     return (
-      <View style={[styles.centerContent, { backgroundColor: theme.background }]}>
-        <ActivityIndicator size="large" color={theme.primary} />
-        <Text style={[styles.loadingText, { color: theme.text }]}>Loading competitions...</Text>
-        {error && (
-          <View style={styles.errorContainer}>
-            <Text style={[styles.errorText, { color: theme.danger }]}>{error}</Text>
-            <TouchableOpacity
-              style={[styles.retryButton, { backgroundColor: theme.primary }]}
-              onPress={handleRetry}
-            >
-              <Text style={[styles.retryButtonText, { color: theme.buttonText }]}>
-                Retry
+      <View style={[styles.container, { backgroundColor: theme.background }]}>
+        {/* Modern Header */}
+        <View style={[styles.header, { backgroundColor: theme.background }]}>
+          <TouchableOpacity 
+            style={[styles.backButton, { backgroundColor: `${theme.text}15` }]}
+            onPress={() => router.push("/other-meals/other-meals")}
+          >
+            <Ionicons name="arrow-back" size={20} color={theme.text} />
+          </TouchableOpacity>
+          <Text style={[styles.headerTitle, { color: theme.text }]}>
+            Competition
+          </Text>
+          <View style={styles.headerActions} />
+        </View>
+
+        <ScrollView style={styles.scrollContainer} showsVerticalScrollIndicator={false}>
+          {/* Error Banner */}
+          {error && (
+            <View style={[styles.errorBanner, { 
+              backgroundColor: `${theme.danger}15`, 
+              borderColor: theme.danger 
+            }]}>
+              <Ionicons name="warning-outline" size={20} color={theme.danger} />
+              <Text style={[styles.errorBannerText, { color: theme.danger }]}>
+                {error}
               </Text>
-            </TouchableOpacity>
-            {retryCount > 0 && (
-              <Text style={[styles.retryText, { color: theme.subtext }]}>
+              <TouchableOpacity
+                style={[styles.errorBannerButton, { backgroundColor: theme.danger }]}
+                onPress={handleRetry}
+              >
+                <Text style={[styles.errorBannerButtonText, { color: theme.buttonText }]}>
+                  Retry
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* Retry Banner */}
+          {retryCount > 0 && (
+            <View style={[styles.retryBanner, { 
+              backgroundColor: `${theme.warning}15`, 
+              borderColor: theme.warning 
+            }]}>
+              <Ionicons name="refresh-outline" size={16} color={theme.warning} />
+              <Text style={[styles.retryBannerText, { color: theme.warning }]}>
                 Retry attempt {retryCount}/3
               </Text>
+            </View>
+          )}
+
+          <View style={styles.centerContent}>
+            <ActivityIndicator size="large" color={theme.primary} />
+            <Text style={[styles.loadingText, { color: theme.text }]}>Loading competitions...</Text>
+            
+            {error && (
+              <TouchableOpacity
+                style={[styles.retryButton, { backgroundColor: theme.primary, marginTop: 16 }]}
+                onPress={handleRetry}
+              >
+                <Text style={[styles.retryButtonText, { color: theme.buttonText }]}>
+                  Retry
+                </Text>
+              </TouchableOpacity>
             )}
           </View>
-        )}
+        </ScrollView>
       </View>
     );
   }
@@ -275,139 +322,240 @@ const CurrentMeals = () => {
   if (!competitionId) {
     return (
       <View style={[styles.container, { backgroundColor: theme.background }]}>
-        {/* Error Banner */}
-        {error && (
-          <View style={[styles.errorBanner, { 
-            backgroundColor: `${theme.danger}15`, 
-            borderColor: theme.danger 
-          }]}>
-            <Text style={[styles.errorBannerText, { color: theme.danger }]}>
-              {error}
-            </Text>
-            <TouchableOpacity
-              style={[styles.errorBannerButton, { backgroundColor: theme.danger }]}
-              onPress={handleRetry}
-            >
-              <Text style={[styles.errorBannerButtonText, { color: theme.buttonText }]}>
-                Retry
-              </Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {/* Retry Banner */}
-        {retryCount > 0 && (
-          <View style={[styles.retryBanner, { 
-            backgroundColor: `${theme.warning}15`, 
-            borderColor: theme.warning 
-          }]}>
-            <Text style={[styles.retryBannerText, { color: theme.warning }]}>
-              Retry attempt {retryCount}/3
-            </Text>
-          </View>
-        )}
-
-        {/* Back Button */}
-        <TouchableOpacity
-          style={[styles.backButton, { backgroundColor: theme.primary }]}
-          onPress={() => router.push("/other-meals/other-meals")}
-        >
-          <Text style={[styles.backButtonText, { color: theme.buttonText }]}>Back</Text>
-        </TouchableOpacity>
-        
-        <View style={styles.centerContent}>
-          <Text style={[styles.emptyText, { color: theme.subtext }]}>
-            {error || "No active competitions available."}
+        {/* Modern Header */}
+        <View style={[styles.header, { backgroundColor: theme.background }]}>
+          <TouchableOpacity 
+            style={[styles.backButton, { backgroundColor: `${theme.text}15` }]}
+            onPress={() => router.push("/other-meals/other-meals")}
+          >
+            <Ionicons name="arrow-back" size={20} color={theme.text} />
+          </TouchableOpacity>
+          <Text style={[styles.headerTitle, { color: theme.text }]}>
+            Competition
           </Text>
-          {!error && (
-            <TouchableOpacity
-              style={[styles.retryButton, { backgroundColor: theme.primary, marginTop: 16 }]}
-              onPress={handleRetry}
-            >
-              <Text style={[styles.retryButtonText, { color: theme.buttonText }]}>
-                Check Again
-              </Text>
-            </TouchableOpacity>
-          )}
+          <View style={styles.headerActions} />
         </View>
+
+        <ScrollView style={styles.scrollContainer} showsVerticalScrollIndicator={false}>
+          {/* Error Banner */}
+          {error && (
+            <View style={[styles.errorBanner, { 
+              backgroundColor: `${theme.danger}15`, 
+              borderColor: theme.danger 
+            }]}>
+              <Ionicons name="warning-outline" size={20} color={theme.danger} />
+              <Text style={[styles.errorBannerText, { color: theme.danger }]}>
+                {error}
+              </Text>
+              <TouchableOpacity
+                style={[styles.errorBannerButton, { backgroundColor: theme.danger }]}
+                onPress={handleRetry}
+              >
+                <Text style={[styles.errorBannerButtonText, { color: theme.buttonText }]}>
+                  Retry
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* Retry Banner */}
+          {retryCount > 0 && (
+            <View style={[styles.retryBanner, { 
+              backgroundColor: `${theme.warning}15`, 
+              borderColor: theme.warning 
+            }]}>
+              <Ionicons name="refresh-outline" size={16} color={theme.warning} />
+              <Text style={[styles.retryBannerText, { color: theme.warning }]}>
+                Retry attempt {retryCount}/3
+              </Text>
+            </View>
+          )}
+
+          {/* Empty State Card */}
+          <View style={[styles.emptyStateCard, { backgroundColor: theme.card }]}>
+            <View style={styles.cardHeader}>
+              <Ionicons name="trophy-outline" size={24} color={theme.textSecondary} />
+              <Text style={[styles.cardTitle, { color: theme.text }]}>
+                Competition
+              </Text>
+            </View>
+            
+            <View style={styles.emptyStateContent}>
+              <Ionicons name="calendar-outline" size={48} color={theme.textSecondary} />
+              <Text style={[styles.emptyTitle, { color: theme.text }]}>
+                No Active Competition
+              </Text>
+              <Text style={[styles.emptySubtext, { color: theme.textSecondary }]}>
+                {error || "There are no active competitions at this time. Check back later!"}
+              </Text>
+              
+              {!error && (
+                <TouchableOpacity
+                  style={[styles.actionButton, { backgroundColor: theme.primary }]}
+                  onPress={handleRetry}
+                >
+                  <Ionicons name="refresh-outline" size={16} color={theme.buttonText} />
+                  <Text style={[styles.actionButtonText, { color: theme.buttonText }]}>
+                    Check Again
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+        </ScrollView>
       </View>
     );
   }
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
-      {/* Back Button */}
-      <TouchableOpacity
-        style={[styles.backButton, { backgroundColor: theme.primary }]}
-        onPress={() => router.push("/other-meals/other-meals")}
-      >
-        <Text style={[styles.backButtonText, { color: theme.buttonText }]}>Back</Text>
-      </TouchableOpacity>
+      {/* Modern Header */}
+      <View style={[styles.header, { backgroundColor: theme.background }]}>
+        <TouchableOpacity 
+          style={[styles.backButton, { backgroundColor: `${theme.text}15` }]}
+          onPress={() => router.push("/other-meals/other-meals")}
+        >
+          <Ionicons name="arrow-back" size={20} color={theme.text} />
+        </TouchableOpacity>
+        <Text style={[styles.headerTitle, { color: theme.text }]}>
+          Competition
+        </Text>
+        <TouchableOpacity 
+          style={[styles.headerActionButton, { backgroundColor: theme.primary }]}
+          onPress={() => router.push("/competition/add-meal")}
+        >
+          <Ionicons name="add" size={20} color={theme.buttonText} />
+        </TouchableOpacity>
+      </View>
 
-      {/* Competition Theme */}
-      {competitionTheme && (
-        <View style={styles.competitionInfo}>
-          <Text style={[styles.themeText, { color: theme.text }]}>
-            Current Theme: {competitionTheme}
-          </Text>
-          {competitionStatus && (
-            <Text style={[styles.statusText, { color: theme.subtext }]}>
-              Status: {competitionStatus.charAt(0).toUpperCase() + competitionStatus.slice(1)}
-            </Text>
-          )}
-        </View>
-      )}
-
-      {/* Add Meal Button */}
-      <TouchableOpacity
-        style={[styles.addMealButton, { backgroundColor: theme.primary }]}
-        onPress={() => router.push("/competition/add-meal")}
-      >
-        <Text style={[styles.addMealButtonText, { color: theme.buttonText }]}>Add Meal</Text>
-      </TouchableOpacity>
-
-      {/* Meals List */}
-      <FlatList
-        data={meals}
-        keyExtractor={(item) => item.meal_id.toString()}
-        renderItem={({ item }) => (
-          <View style={[styles.mealContainer, { backgroundColor: theme.card }]}>
-            <View style={styles.mealInfo}>
-              <Text style={[styles.mealName, { color: theme.text }]}>{item.name}</Text>
-              <Text style={[styles.mealUser, { color: theme.subtext }]}>
-                by {item.username}
-              </Text>
-              <Text style={[styles.mealVotes, { color: theme.subtext }]}>
-                Votes: {item.votes}
+      <View style={styles.scrollContainer}>
+        {/* Competition Theme Card */}
+        {competitionTheme && (
+          <View style={[styles.competitionCard, { backgroundColor: theme.card }]}>
+            <View style={styles.cardHeader}>
+              <Ionicons name="trophy" size={24} color={theme.primary} />
+              <Text style={[styles.cardTitle, { color: theme.text }]}>
+                Weekly Competition
               </Text>
             </View>
+            
+            <View style={styles.competitionContent}>
+              <Text style={[styles.themeText, { color: theme.text }]}>
+                {competitionTheme}
+              </Text>
+              {competitionStatus && (
+                <View style={[styles.statusBadge, { 
+                  backgroundColor: competitionStatus === 'active' ? theme.success : theme.warning 
+                }]}>
+                  <Text style={[styles.statusText, { color: theme.buttonText }]}>
+                    {competitionStatus.charAt(0).toUpperCase() + competitionStatus.slice(1)}
+                  </Text>
+                </View>
+              )}
+            </View>
+            
             <TouchableOpacity
-              style={[styles.voteButton, { backgroundColor: theme.primary }]}
-              onPress={() => handleVote(item.meal_id)}
-              disabled={voting}
+              style={[styles.addMealButton, { backgroundColor: theme.primary }]}
+              onPress={() => router.push("/competition/add-meal")}
             >
-              <Text style={[styles.voteButtonText, { color: theme.buttonText }]}>
-                {voting ? "Voting..." : "Vote"}
+              <Ionicons name="add-circle-outline" size={20} color={theme.buttonText} />
+              <Text style={[styles.addMealButtonText, { color: theme.buttonText }]}>
+                Submit Your Meal
               </Text>
             </TouchableOpacity>
           </View>
         )}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={handleRefresh}
-            colors={[theme.primary]}
-            tintColor={theme.primary}
-          />
-        }
-        ListEmptyComponent={
-          <View style={styles.centerContent}>
-            <Text style={[styles.emptyText, { color: theme.subtext }]}>
-              No meals have been added to this competition yet.
-            </Text>
-          </View>
-        }
-      />
+
+        {/* Meals List */}
+        <FlatList
+          data={meals}
+          keyExtractor={(item) => item.meal_id.toString()}
+          renderItem={({ item }) => (
+            <View style={[styles.mealCard, { backgroundColor: theme.card }]}>
+              <View style={styles.mealHeader}>
+                <View style={styles.mealInfo}>
+                  <Text style={[styles.mealName, { color: theme.text }]}>{item.name}</Text>
+                  <View style={styles.userRow}>
+                    <Ionicons name="person-circle-outline" size={16} color={theme.textSecondary} />
+                    <Text style={[styles.mealUser, { color: theme.textSecondary }]}>
+                      {item.username}
+                    </Text>
+                  </View>
+                </View>
+                
+                <View style={styles.voteSection}>
+                  <View style={styles.voteCount}>
+                    <Ionicons name="heart" size={16} color={theme.primary} />
+                    <Text style={[styles.voteText, { color: theme.text }]}>
+                      {item.votes}
+                    </Text>
+                  </View>
+                  
+                  <TouchableOpacity
+                    style={[styles.voteButton, { 
+                      backgroundColor: voting ? theme.border : theme.primary,
+                      opacity: voting ? 0.6 : 1
+                    }]}
+                    onPress={() => handleVote(item.meal_id)}
+                    disabled={voting}
+                  >
+                    {voting ? (
+                      <ActivityIndicator size="small" color={theme.buttonText} />
+                    ) : (
+                      <>
+                        <Ionicons name="heart-outline" size={16} color={theme.buttonText} />
+                        <Text style={[styles.voteButtonText, { color: theme.buttonText }]}>
+                          Vote
+                        </Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+          )}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              colors={[theme.primary]}
+              tintColor={theme.primary}
+            />
+          }
+          ListEmptyComponent={
+            <View style={[styles.emptyStateCard, { backgroundColor: theme.card }]}>
+              <View style={styles.cardHeader}>
+                <Ionicons name="restaurant-outline" size={24} color={theme.textSecondary} />
+                <Text style={[styles.cardTitle, { color: theme.text }]}>
+                  No Meals Yet
+                </Text>
+              </View>
+              
+              <View style={styles.emptyStateContent}>
+                <Ionicons name="add-circle-outline" size={48} color={theme.textSecondary} />
+                <Text style={[styles.emptyTitle, { color: theme.text }]}>
+                  Be the First!
+                </Text>
+                <Text style={[styles.emptySubtext, { color: theme.textSecondary }]}>
+                  No meals have been submitted for this competition yet. Submit yours to get started!
+                </Text>
+                
+                <TouchableOpacity
+                  style={[styles.actionButton, { backgroundColor: theme.primary }]}
+                  onPress={() => router.push("/competition/add-meal")}
+                >
+                  <Ionicons name="add" size={16} color={theme.buttonText} />
+                  <Text style={[styles.actionButtonText, { color: theme.buttonText }]}>
+                    Add Meal
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          }
+          contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
+        />
+      </View>
     </View>
   );
 };
@@ -415,15 +563,266 @@ const CurrentMeals = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 16,
+  },
+  
+  // Header Styles
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    paddingTop: 44, // Account for status bar
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   backButton: {
-    padding: 12,
+    padding: 8,
     borderRadius: 8,
-    alignItems: "center",
-    marginBottom: 16,
-    alignSelf: "flex-start",
   },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  headerActions: {
+    width: 44, // Match back button width for centering
+  },
+  headerActionButton: {
+    padding: 8,
+    borderRadius: 8,
+  },
+
+  // Scroll Container
+  scrollContainer: {
+    flex: 1,
+  },
+
+  // Error/Retry Banners
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    marginHorizontal: 16,
+    marginTop: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: 8,
+  },
+  errorBannerText: {
+    flex: 1,
+    fontSize: 14,
+  },
+  errorBannerButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  errorBannerButtonText: {
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  retryBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 12,
+    marginHorizontal: 16,
+    marginTop: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: 6,
+  },
+  retryBannerText: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+
+  // Card Components
+  emptyStateCard: {
+    margin: 16,
+    marginTop: 8,
+    padding: 20,
+    borderRadius: 16,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  competitionCard: {
+    margin: 16,
+    marginTop: 8,
+    padding: 20,
+    borderRadius: 16,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  mealCard: {
+    marginHorizontal: 16,
+    marginBottom: 12,
+    padding: 16,
+    borderRadius: 12,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+    gap: 8,
+  },
+  cardTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+  },
+
+  // Competition Content
+  competitionContent: {
+    alignItems: 'center',
+    marginBottom: 16,
+    gap: 8,
+  },
+  themeText: {
+    fontSize: 20,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  statusBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  statusText: {
+    fontSize: 12,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+  },
+  addMealButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    gap: 6,
+  },
+  addMealButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+
+  // Meal Components
+  mealHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  mealInfo: {
+    flex: 1,
+  },
+  mealName: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  userRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  mealUser: {
+    fontSize: 13,
+  },
+  voteSection: {
+    alignItems: 'center',
+    gap: 8,
+  },
+  voteCount: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  voteText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  voteButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    gap: 4,
+    minWidth: 60,
+    justifyContent: 'center',
+  },
+  voteButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+
+  // Empty State
+  emptyStateContent: {
+    alignItems: 'center',
+    paddingVertical: 20,
+    gap: 12,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  emptySubtext: {
+    fontSize: 14,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  actionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    marginTop: 8,
+    gap: 6,
+  },
+  actionButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+
+  // Content and Layout
+  centerContent: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  listContent: {
+    paddingBottom: 20,
+  },
+  loadingText: {
+    fontSize: 16,
+    marginTop: 16,
+    textAlign: 'center',
+  },
+  retryButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  retryButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+
+  // Legacy styles (keeping for compatibility)
   backButtonText: {
     fontSize: 16,
     fontWeight: "bold",
@@ -431,27 +830,6 @@ const styles = StyleSheet.create({
   competitionInfo: {
     marginBottom: 16,
     alignItems: "center",
-  },
-  themeText: {
-    fontSize: 18,
-    fontWeight: "bold",
-    marginBottom: 4,
-    textAlign: "center",
-  },
-  statusText: {
-    fontSize: 14,
-    fontStyle: "italic",
-    textAlign: "center",
-  },
-  addMealButton: {
-    padding: 12,
-    borderRadius: 8,
-    alignItems: "center",
-    marginBottom: 16,
-  },
-  addMealButtonText: {
-    fontSize: 16,
-    fontWeight: "bold",
   },
   mealContainer: {
     padding: 16,
@@ -461,45 +839,13 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
   },
-  mealInfo: {
-    flex: 1,
-  },
-  mealName: {
-    fontSize: 16,
-    fontWeight: "bold",
-    marginBottom: 2,
-  },
-  mealUser: {
-    fontSize: 12,
-    fontStyle: "italic",
-    marginBottom: 2,
-  },
   mealVotes: {
     fontSize: 14,
-  },
-  voteButton: {
-    padding: 8,
-    borderRadius: 8,
-    marginLeft: 16,
-  },
-  voteButtonText: {
-    fontSize: 14,
-    fontWeight: "bold",
   },
   emptyText: {
     fontSize: 16,
     textAlign: "center",
     marginTop: 32,
-  },
-  centerContent: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    fontSize: 16,
-    marginTop: 16,
-    textAlign: 'center',
   },
   errorContainer: {
     flex: 1,
@@ -512,54 +858,10 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     textAlign: 'center',
   },
-  retryButton: {
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  retryButtonText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
   retryText: {
     fontSize: 14,
     marginTop: 8,
     textAlign: 'center',
-  },
-  errorBanner: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 12,
-    marginBottom: 16,
-    borderRadius: 8,
-    borderWidth: 1,
-  },
-  errorBannerText: {
-    flex: 1,
-    fontSize: 14,
-    marginRight: 12,
-  },
-  errorBannerButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6,
-  },
-  errorBannerButtonText: {
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
-  retryBanner: {
-    padding: 12,
-    marginBottom: 16,
-    borderRadius: 8,
-    borderWidth: 1,
-    alignItems: 'center',
-  },
-  retryBannerText: {
-    fontSize: 14,
-    fontWeight: '500',
   },
 });
 

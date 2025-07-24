@@ -1,30 +1,91 @@
 import React from "react";
-import { View, TouchableOpacity, Text, StyleSheet } from "react-native";
-import { router } from "expo-router";
-import FontAwesome from "react-native-vector-icons/FontAwesome"; // Import FontAwesome icons
+import { View, TouchableOpacity, Text, StyleSheet, Platform } from "react-native";
+import { router, usePathname } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
+import { useTheme } from "context/ThemeContext";
 
 export default function BottomNav() {
+  const { theme } = useTheme();
+  const pathname = usePathname();
+
+  const navItems = [
+    {
+      id: 'calendar',
+      route: '/(app)/meal-plan/calendar',
+      icon: 'calendar',
+      activeIcon: 'calendar',
+      label: 'Calendar',
+      isActive: pathname?.includes('/meal-plan/'),
+    },
+    {
+      id: 'my-meals',
+      route: '/(app)/my-meals/meals',
+      icon: 'restaurant-outline',
+      activeIcon: 'restaurant',
+      label: 'My Meals',
+      isActive: pathname?.includes('/my-meals/'),
+    },
+    {
+      id: 'discover',
+      route: '/(app)/other-meals/other-meals',
+      icon: 'search-outline',
+      activeIcon: 'search',
+      label: 'Discover',
+      isActive: pathname?.includes('/other-meals/'),
+    },
+    {
+      id: 'account',
+      route: '/(app)/account/account',
+      icon: 'person-outline',
+      activeIcon: 'person',
+      label: 'Account',
+      isActive: pathname?.includes('/account/'),
+    },
+  ];
+
+  const handleNavPress = (route: string) => {
+    router.push(route as any);
+  };
+
   return (
-    <View style={styles.nav}>
-      <TouchableOpacity onPress={() => router.push("/(app)/meal-plan/calendar")} style={styles.navItem}>
-        <FontAwesome name="calendar" size={20} color="#333" />
-        <Text style={styles.link}>Calendar</Text>
-      </TouchableOpacity>
-
-      <TouchableOpacity onPress={() => router.push("/(app)/my-meals/meals")} style={styles.navItem}>
-        <FontAwesome name="cutlery" size={20} color="#333" />
-        <Text style={styles.link}>My Meals</Text>
-      </TouchableOpacity>
-
-      <TouchableOpacity onPress={() => router.push("/(app)/other-meals/other-meals")} style={styles.navItem}>
-        <FontAwesome name="search" size={20} color="#333" />
-        <Text style={styles.link}>Discover Meals</Text>
-      </TouchableOpacity>
-
-      <TouchableOpacity onPress={() => router.push("/(app)/account/account")} style={styles.navItem}>
-        <FontAwesome name="user" size={20} color="#333" />
-        <Text style={styles.link}>Account</Text>
-      </TouchableOpacity>
+    <View style={[styles.nav, { 
+      backgroundColor: theme.card,
+      borderTopColor: theme.border 
+    }]}>
+      {navItems.map((item) => (
+        <TouchableOpacity
+          key={item.id}
+          onPress={() => handleNavPress(item.route)}
+          style={[
+            styles.navItem,
+            item.isActive && [styles.activeNavItem, { backgroundColor: `${theme.primary}15` }]
+          ]}
+          activeOpacity={0.7}
+        >
+          <View style={[
+            styles.iconContainer,
+            item.isActive && [styles.activeIconContainer, { backgroundColor: theme.primary }]
+          ]}>
+            <Ionicons
+              name={item.isActive ? item.activeIcon as any : item.icon as any}
+              size={item.isActive ? 20 : 18}
+              color={item.isActive ? theme.buttonText : theme.subtext}
+            />
+          </View>
+          <Text style={[
+            styles.navLabel,
+            { 
+              color: item.isActive ? theme.primary : theme.subtext,
+              fontWeight: item.isActive ? '600' : '500'
+            }
+          ]}>
+            {item.label}
+          </Text>
+          {item.isActive && (
+            <View style={[styles.activeIndicator, { backgroundColor: theme.primary }]} />
+          )}
+        </TouchableOpacity>
+      ))}
     </View>
   );
 }
@@ -37,19 +98,70 @@ const styles = StyleSheet.create({
     right: 0,
     flexDirection: "row",
     justifyContent: "space-around",
-    backgroundColor: "#f8f8f8",
-    paddingVertical: 12,
+    paddingVertical: Platform.OS === 'ios' ? 20 : 12,
+    paddingBottom: Platform.OS === 'ios' ? 34 : 12, // Safe area for iOS
     borderTopWidth: 1,
-    borderColor: "#ddd",
     zIndex: 999,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: -2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 8,
+      },
+    }),
   },
   navItem: {
-    alignItems: "center", // Center the icon and text
+    alignItems: "center",
+    justifyContent: "center",
+    flex: 1,
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+    borderRadius: 12,
+    position: 'relative',
   },
-  link: {
-    fontSize: 12, // Adjust font size to fit with the icon
-    fontWeight: "600",
-    color: "#333",
-    marginTop: 4, // Add spacing between the icon and text
+  activeNavItem: {
+    borderRadius: 12,
+  },
+  iconContainer: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 4,
+  },
+  activeIconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.2,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 4,
+      },
+    }),
+  },
+  navLabel: {
+    fontSize: 11,
+    textAlign: 'center',
+    marginTop: 2,
+  },
+  activeIndicator: {
+    position: 'absolute',
+    top: 0,
+    left: '50%',
+    marginLeft: -12,
+    width: 24,
+    height: 3,
+    borderRadius: 2,
   },
 });

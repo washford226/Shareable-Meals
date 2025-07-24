@@ -8,12 +8,15 @@ import {
   Alert,
   ActivityIndicator,
   RefreshControl,
+  Dimensions,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { format } from "date-fns";
 import NutritionNav from "../../../../components/nutritionNav";
 import { useTheme } from "../../../../context/ThemeContext";
 import { supabase } from "utils/supabase";
+
+const { width: screenWidth } = Dimensions.get('window');
 
 type MacroKey = "calories" | "protein" | "carbs" | "fat";
 
@@ -291,11 +294,27 @@ const NutritionScreen = () => {
   }
 
   // Helper function to get color based on ratio
-  const getProgressColor = (ratio: number) => {
-    if (ratio < 0.5) return "#4CAF50"; // Green
-    if (ratio < 0.8) return theme.warning || "#FF9800"; // Orange
-    if (ratio <= 1) return theme.primary || "#2196F3"; // Blue
-    return theme.danger || "#F44336"; // Red
+  const getProgressColor = (ratio: number, macroKey: MacroKey) => {
+    // Use macro-specific colors from theme when available
+    if (macroKey === 'protein') return theme.protein || "#dc2626";
+    if (macroKey === 'carbs') return theme.carbs || "#2563eb";
+    if (macroKey === 'fat') return theme.fat || "#ca8a04";
+    
+    // Fallback to general progress colors for calories
+    if (ratio < 0.5) return theme.success || "#22c55e";
+    if (ratio < 0.8) return theme.warning || "#f59e0b";
+    if (ratio <= 1) return theme.primary || "#3b82f6";
+    return theme.danger || "#ef4444";
+  };
+
+  const getMacroIcon = (macroKey: MacroKey) => {
+    switch (macroKey) {
+      case 'calories': return '🔥';
+      case 'protein': return '🥩';
+      case 'carbs': return '🍞';
+      case 'fat': return '🥑';
+      default: return '📊';
+    }
   };
 
   return (
@@ -312,24 +331,122 @@ const NutritionScreen = () => {
     >
       <NutritionNav />
       
-      {/* Error Banner */}
+      {/* Enhanced Error Banner */}
       {(error || goalError || macroError) && (
-        <View style={[styles.errorBanner, { backgroundColor: theme.danger }]}>
-          <Text style={[styles.errorText, { color: theme.buttonText }]}>
-            {error || goalError || macroError}
-          </Text>
+        <View style={[styles.errorBanner, { 
+          backgroundColor: theme.dangerLight, 
+          borderColor: theme.danger,
+          borderWidth: 1,
+        }]}>
+          <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}>
+            <Text style={{ fontSize: 18, marginRight: 8, color: theme.danger }}>⚠️</Text>
+            <Text style={[styles.errorText, { color: theme.danger }]}>
+              {error || goalError || macroError}
+            </Text>
+          </View>
           <TouchableOpacity
-            style={styles.retryButton}
+            style={[styles.retryButton, { backgroundColor: theme.danger }]}
             onPress={handleRefresh}
           >
-            <Text style={[styles.retryButtonText, { color: theme.buttonText }]}>Retry</Text>
+            <Text style={[styles.retryButtonText, { color: theme.buttonTextPrimary }]}>Retry</Text>
           </TouchableOpacity>
         </View>
       )}
 
-      <Text style={[styles.title, { color: theme.text }]}>
-        Nutrition for {formatDate(date)}
-      </Text>
+      <View style={{ alignItems: 'center', marginBottom: 32 }}>
+        <Text style={[styles.title, { color: theme.text }]}>
+          Daily Nutrition
+        </Text>
+        <Text style={[{ fontSize: 16, color: theme.textSecondary, textAlign: 'center' }]}>
+          {formatDate(date)}
+        </Text>
+      </View>
+
+      {/* Nutrition Overview Chart */}
+      <View style={[styles.chartContainer, { 
+        backgroundColor: theme.card,
+        borderColor: theme.border,
+        shadowColor: theme.shadow,
+      }]}>
+        <Text style={[styles.chartTitle, { color: theme.text }]}>
+          📊 Progress Overview
+        </Text>
+        <View style={styles.chartWrapper}>
+          <View style={styles.customChart}>
+            {macros.map((macro, index) => {
+              const value = actualMacros[macro.key];
+              const goal = macroGoals[macro.key];
+              const ratio = goal ? value / goal : 0;
+              const heightPercent = Math.min(ratio * 100, 120); // Cap at 120% for visual purposes
+              
+              return (
+                <View key={macro.key} style={styles.chartBar}>
+                  <View style={styles.chartBarContainer}>
+                    <View 
+                      style={[
+                        styles.chartBarFill,
+                        {
+                          height: `${heightPercent}%`,
+                          backgroundColor: getProgressColor(ratio, macro.key),
+                        }
+                      ]}
+                    />
+                  </View>
+                  <View style={styles.chartBarLabel}>
+                    <Text style={[styles.chartBarIcon, { color: theme.textSecondary }]}>
+                      {getMacroIcon(macro.key)}
+                    </Text>
+                    <Text style={[styles.chartBarText, { color: theme.textSecondary }]}>
+                      {macro.label}
+                    </Text>
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+        </View>
+        <Text style={[styles.chartSubtitle, { color: theme.textSecondary }]}>
+          Percentage of daily goals achieved
+        </Text>
+      </View>
+
+      {/* Daily Summary Cards */}
+      <View style={[styles.summaryContainer, { 
+        backgroundColor: theme.cardSecondary,
+        borderColor: theme.border,
+      }]}>
+        <Text style={[styles.summaryTitle, { color: theme.text }]}>
+          📈 Daily Summary
+        </Text>
+        <View style={styles.summaryRow}>
+          <View style={styles.summaryItem}>
+            <Text style={[styles.summaryValue, { color: theme.primary }]}>
+              {actualMacros.calories}
+            </Text>
+            <Text style={[styles.summaryLabel, { color: theme.textSecondary }]}>
+              Total Calories
+            </Text>
+          </View>
+          <View style={styles.summaryDivider} />
+          <View style={styles.summaryItem}>
+            <Text style={[styles.summaryValue, { color: theme.success }]}>
+              {Math.round((actualMacros.calories / macroGoals.calories) * 100)}%
+            </Text>
+            <Text style={[styles.summaryLabel, { color: theme.textSecondary }]}>
+              Goal Progress
+            </Text>
+          </View>
+          <View style={styles.summaryDivider} />
+          <View style={styles.summaryItem}>
+            <Text style={[styles.summaryValue, { color: theme.protein }]}>
+              {actualMacros.protein + actualMacros.carbs + actualMacros.fat}g
+            </Text>
+            <Text style={[styles.summaryLabel, { color: theme.textSecondary }]}>
+              Total Macros
+            </Text>
+          </View>
+        </View>
+      </View>
       
       {macros.map((macro) => {
         const value = actualMacros[macro.key];
@@ -337,20 +454,37 @@ const NutritionScreen = () => {
         const ratio = goal ? value / goal : 0;
         const percent = Math.round(ratio * 100);
         const isOver = ratio > 1;
-        const progressColor = getProgressColor(ratio);
+        const progressColor = getProgressColor(ratio, macro.key);
+        const macroIcon = getMacroIcon(macro.key);
 
         return (
-          <View key={macro.key} style={[styles.barGroup, { borderBottomColor: theme.border }]}>
-            <View style={styles.barLabelRow}>
-              <Text style={[styles.barLabel, { color: theme.text }]}>{macro.label}</Text>
-              <Text style={[styles.barValue, { color: theme.subtext }]}>
-                {value} / {goal} ({percent}%)
-              </Text>
+          <View key={macro.key} style={[styles.macroCard, { 
+            backgroundColor: theme.card,
+            borderColor: theme.border,
+            shadowColor: theme.shadow,
+          }]}>
+            <View style={styles.macroHeader}>
+              <View style={styles.macroTitleRow}>
+                <Text style={styles.macroIcon}>{macroIcon}</Text>
+                <Text style={[styles.macroLabel, { color: theme.text }]}>{macro.label}</Text>
+              </View>
+              <View style={styles.macroValueContainer}>
+                <Text style={[styles.macroValue, { color: progressColor }]}>
+                  {value}
+                </Text>
+                <Text style={[styles.macroGoal, { color: theme.textSecondary }]}>
+                  / {goal}
+                </Text>
+                <Text style={[styles.macroUnit, { color: theme.textSecondary }]}>
+                  {macro.key === 'calories' ? 'kcal' : 'g'}
+                </Text>
+              </View>
             </View>
-            <View style={[styles.barBackground, { backgroundColor: theme.border }]}>
+            
+            <View style={[styles.progressBarContainer, { backgroundColor: theme.divider }]}>
               <View
                 style={[
-                  styles.barFill,
+                  styles.progressBar,
                   {
                     width: `${Math.min(ratio, 1) * 100}%`,
                     backgroundColor: progressColor,
@@ -360,7 +494,7 @@ const NutritionScreen = () => {
               {isOver && (
                 <View
                   style={[
-                    styles.barOverrun,
+                    styles.progressBarOverrun,
                     {
                       width: `${Math.min((ratio - 1), 1) * 100}%`,
                       backgroundColor: theme.danger,
@@ -369,22 +503,33 @@ const NutritionScreen = () => {
                 />
               )}
             </View>
-            {/* Progress indicator text */}
-            <Text style={[styles.progressText, { color: theme.subtext }]}>
-              {ratio < 0.5 ? "Keep going!" : 
-               ratio < 0.8 ? "Getting close!" :
-               ratio <= 1 ? "Almost there!" :
-               "Goal exceeded!"}
-            </Text>
+            
+            <View style={styles.macroFooter}>
+              <Text style={[styles.percentageText, { color: progressColor }]}>
+                {percent}% of goal
+              </Text>
+              <Text style={[styles.statusText, { color: theme.textSecondary }]}>
+                {ratio < 0.5 ? "Keep going! 💪" : 
+                 ratio < 0.8 ? "Getting close! 🎯" :
+                 ratio <= 1 ? "Almost there! ⭐" :
+                 `+${Math.round((ratio - 1) * goal)} over goal 🔥`}
+              </Text>
+            </View>
           </View>
         );
       })}
       
       <TouchableOpacity 
-        style={[styles.backButton, { backgroundColor: theme.button }]} 
+        style={[styles.backButton, { 
+          backgroundColor: theme.primary,
+          shadowColor: theme.shadow,
+        }]} 
         onPress={() => router.push("/(app)/meal-plan/calendar")}
+        activeOpacity={0.8}
       >
-        <Text style={[styles.backButtonText, { color: theme.buttonText }]}>Back to Calendar</Text>
+        <Text style={[styles.backButtonText, { color: theme.buttonTextPrimary }]}>
+          ← Back to Calendar
+        </Text>
       </TouchableOpacity>
     </ScrollView>
   );
@@ -410,9 +555,13 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    padding: 12,
+    padding: 16,
     marginBottom: 16,
-    borderRadius: 8,
+    borderRadius: 12,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   errorText: {
     flex: 1,
@@ -420,75 +569,238 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   retryButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
     backgroundColor: "rgba(255,255,255,0.2)",
-    marginLeft: 8,
+    marginLeft: 12,
   },
   retryButtonText: {
     fontSize: 14,
     fontWeight: "bold",
   },
   backButton: {
-    alignSelf: "flex-start",
-    marginTop: 20,
-    marginBottom: 10,
-    padding: 15,
-    backgroundColor: "#ccc",
-    borderRadius: 8,
-    minWidth: 120,
+    alignSelf: "center",
+    marginTop: 32,
+    marginBottom: 16,
+    paddingVertical: 16,
+    paddingHorizontal: 32,
+    borderRadius: 16,
+    minWidth: 200,
     alignItems: "center",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
   },
   backButtonText: {
-    color: "#000",
     fontSize: 16,
     fontWeight: "bold",
   },
   title: {
-    fontSize: 24,
-    fontWeight: "bold",
-    marginBottom: 24,
+    fontSize: 28,
+    fontWeight: "800",
+    marginBottom: 32,
     textAlign: "center",
   },
-  barGroup: {
+  chartContainer: {
+    marginBottom: 32,
+    padding: 20,
+    borderRadius: 16,
+    borderWidth: 1,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 5,
+  },
+  chartTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    textAlign: "center",
+    marginBottom: 16,
+  },
+  chartWrapper: {
+    position: 'relative',
+  },
+  customChart: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'flex-end',
+    height: 150,
+    paddingVertical: 10,
+  },
+  chartBar: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  chartBarContainer: {
+    height: 100,
+    width: 40,
+    backgroundColor: '#f0f0f0',
+    borderRadius: 8,
+    justifyContent: 'flex-end',
+    overflow: 'hidden',
+  },
+  chartBarFill: {
+    width: '100%',
+    borderRadius: 8,
+    minHeight: 2,
+  },
+  chartBarLabel: {
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  chartBarIcon: {
+    fontSize: 16,
+    marginBottom: 2,
+  },
+  chartBarText: {
+    fontSize: 11,
+    textAlign: 'center',
+    fontWeight: '500',
+  },
+  chart: {
+    height: 180,
+    width: screenWidth - 80,
+  },
+  chartLabels: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginTop: 12,
+    paddingHorizontal: 20,
+  },
+  chartLabel: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  chartLabelText: {
+    fontSize: 20,
+    marginBottom: 4,
+  },
+  chartLabelName: {
+    fontSize: 12,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  chartSubtitle: {
+    fontSize: 14,
+    fontStyle: 'italic',
+    textAlign: 'center',
+    marginTop: 12,
+  },
+  summaryContainer: {
     marginBottom: 24,
-    paddingBottom: 8,
-    borderBottomWidth: 1,
+    padding: 20,
+    borderRadius: 16,
+    borderWidth: 1,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 3,
   },
-  barLabelRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 8,
-  },
-  barLabel: {
+  summaryTitle: {
     fontSize: 18,
-    fontWeight: "600",
+    fontWeight: "700",
+    textAlign: "center",
+    marginBottom: 16,
   },
-  barValue: {
+  summaryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  summaryItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  summaryValue: {
+    fontSize: 24,
+    fontWeight: "800",
+    marginBottom: 4,
+  },
+  summaryLabel: {
+    fontSize: 12,
+    fontWeight: "600",
+    textAlign: 'center',
+  },
+  summaryDivider: {
+    width: 1,
+    height: 40,
+    backgroundColor: '#e5e7eb',
+    marginHorizontal: 16,
+  },
+  macroCard: {
+    marginBottom: 20,
+    padding: 20,
+    borderRadius: 16,
+    borderWidth: 1,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 5,
+  },
+  macroHeader: {
+    marginBottom: 16,
+  },
+  macroTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  macroIcon: {
+    fontSize: 24,
+    marginRight: 12,
+  },
+  macroLabel: {
+    fontSize: 20,
+    fontWeight: "700",
+    flex: 1,
+  },
+  macroValueContainer: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'center',
+  },
+  macroValue: {
+    fontSize: 32,
+    fontWeight: "800",
+  },
+  macroGoal: {
+    fontSize: 20,
+    fontWeight: "600",
+    marginLeft: 4,
+  },
+  macroUnit: {
     fontSize: 16,
     fontWeight: "500",
+    marginLeft: 8,
   },
-  barBackground: {
-    height: 24,
-    backgroundColor: "#eee",
-    borderRadius: 12,
+  progressBarContainer: {
+    height: 12,
+    borderRadius: 6,
     overflow: "hidden",
     flexDirection: "row",
+    marginBottom: 16,
   },
-  barFill: {
+  progressBar: {
     height: "100%",
-    borderRadius: 12,
+    borderRadius: 6,
   },
-  barOverrun: {
+  progressBarOverrun: {
     height: "100%",
-    backgroundColor: "#ff4d4d",
+    borderRadius: 6,
   },
-  progressText: {
-    fontSize: 12,
-    fontStyle: "italic",
-    marginTop: 4,
-    textAlign: "center",
+  macroFooter: {
+    alignItems: 'center',
+  },
+  percentageText: {
+    fontSize: 16,
+    fontWeight: "700",
+    marginBottom: 4,
+  },
+  statusText: {
+    fontSize: 14,
+    fontWeight: "500",
+    textAlign: 'center',
   },
 });
 

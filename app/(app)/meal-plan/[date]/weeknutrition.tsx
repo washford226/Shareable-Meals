@@ -8,6 +8,7 @@ import {
   Alert,
   ActivityIndicator,
   RefreshControl,
+  Dimensions,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import NutritionNav from "../../../../components/nutritionNav";
@@ -15,15 +16,32 @@ import { format, subDays } from "date-fns";
 import { useTheme } from "../../../../context/ThemeContext";
 import { supabase } from "utils/supabase";
 
+const { width: screenWidth } = Dimensions.get('window');
+
 type MacroKey = "calories" | "protein" | "carbs" | "fat";
-const macroLabels = ["Calories", "Protein", "Carbs", "Fat"];
-const macroKeys: MacroKey[] = ["calories", "protein", "carbs", "fat"];
-const barColors = ["#4F8EF7", "#F7B32B", "#F76E5C", "#7ED957"];
 
 const WeekNutritionScreen = () => {
   const { date } = useLocalSearchParams();
   const router = useRouter();
   const { theme } = useTheme();
+
+  // Define macros with icons and theme-based colors
+  const macros = [
+    { label: "Calories", key: "calories" as MacroKey, icon: "🔥", unit: "kcal" },
+    { label: "Protein", key: "protein" as MacroKey, icon: "🥩", unit: "g" },
+    { label: "Carbs", key: "carbs" as MacroKey, icon: "🍞", unit: "g" },
+    { label: "Fat", key: "fat" as MacroKey, icon: "🥑", unit: "g" },
+  ];
+
+  const getMacroColor = (macroKey: MacroKey) => {
+    switch (macroKey) {
+      case 'protein': return theme.protein || "#dc2626";
+      case 'carbs': return theme.carbs || "#2563eb";
+      case 'fat': return theme.fat || "#ca8a04";
+      case 'calories': return theme.primary || "#3b82f6";
+      default: return theme.primary || "#3b82f6";
+    }
+  };
 
   const [macroGoals, setMacroGoals] = useState({
     calories: 2000,
@@ -229,9 +247,9 @@ const WeekNutritionScreen = () => {
   }, [date]);
 
   // Calculate averages for each macro
-  const averages = macroKeys.reduce((acc, key) => {
-    const sum = weekData.reduce((total, day) => total + day[key], 0);
-    acc[key] = weekData.length ? Math.round(sum / weekData.length) : 0;
+  const averages = macros.reduce((acc, macro) => {
+    const sum = weekData.reduce((total, day) => total + day[macro.key], 0);
+    acc[macro.key] = weekData.length ? Math.round(sum / weekData.length) : 0;
     return acc;
   }, {} as Record<MacroKey, number>);
 
@@ -260,106 +278,191 @@ const WeekNutritionScreen = () => {
     >
       <NutritionNav />
 
-      {/* Error Banner */}
+      {/* Enhanced Error Banner */}
       {error && (
-        <View style={[styles.errorBanner, { backgroundColor: theme.danger }]}>
-          <Text style={[styles.errorText, { color: theme.buttonText }]}>
-            {error}
-          </Text>
+        <View style={[styles.errorBanner, { 
+          backgroundColor: theme.dangerLight, 
+          borderColor: theme.danger,
+          borderWidth: 1,
+        }]}>
+          <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}>
+            <Text style={{ fontSize: 18, marginRight: 8, color: theme.danger }}>⚠️</Text>
+            <Text style={[styles.errorText, { color: theme.danger }]}>
+              {error}
+            </Text>
+          </View>
           <TouchableOpacity
-            style={styles.retryButton}
+            style={[styles.retryButton, { backgroundColor: theme.danger }]}
             onPress={handleRefresh}
           >
-            <Text style={[styles.retryButtonText, { color: theme.buttonText }]}>Retry</Text>
+            <Text style={[styles.retryButtonText, { color: theme.buttonTextPrimary }]}>Retry</Text>
           </TouchableOpacity>
         </View>
       )}
 
-      <Text style={[styles.title, { color: theme.text }]}>Weekly Nutrition Overview</Text>
-
-      {/* Averages Block */}
-      <View style={[styles.averagesBlock, { backgroundColor: theme.card }]}>
-        <Text style={[styles.averagesTitle, { color: theme.primary }]}>Weekly Averages</Text>
-        {macroLabels.map((label, i) => {
-          const key = macroKeys[i];
-          const value = averages[key];
-          const goal = macroGoals[key];
-          const percent = Math.min(1, value / goal);
-          const over = value > goal;
-
-          return (
-            <View key={label} style={{ marginBottom: 14 }}>
-              <Text style={[styles.averageText, { color: theme.text }]}>
-                {label}: {value} / {goal} {label === "Calories" ? "kcal" : "g"} ({Math.round((value / goal) * 100)}%)
-              </Text>
-              <View style={[styles.progressBarBackground, { backgroundColor: theme.border }]}>
-                <View
-                  style={[
-                    styles.progressBarFill,
-                    {
-                      width: `${percent * 100}%`,
-                      backgroundColor: barColors[i],
-                    },
-                  ]}
-                />
-                {over && (
-                  <View
-                    style={[
-                      styles.progressBarOverrun,
-                      {
-                        backgroundColor: theme.danger,
-                      },
-                    ]}
-                  />
-                )}
-              </View>
-            </View>
-          );
-        })}
+      <View style={{ alignItems: 'center', marginBottom: 32 }}>
+        <Text style={[styles.title, { color: theme.text }]}>
+          📊 Weekly Nutrition
+        </Text>
+        <Text style={[{ fontSize: 16, color: theme.textSecondary, textAlign: 'center' }]}>
+          7-day nutrition overview and trends
+        </Text>
       </View>
 
-      {[...weekData].reverse().map((day) => (
-        <View key={day.date} style={[styles.dayBlock, { borderBottomColor: theme.border }]}>
-          <Text style={[styles.dayLabel, { color: theme.text }]}>
-            {format(new Date(day.date), "EEEE, MMMM d")}
-          </Text>
-          {macroLabels.map((label, i) => {
-            const key = macroKeys[i];
-            const value = day[key];
-            const goal = macroGoals[key];
-            const percent = Math.min(1, value / goal);
+      {/* Weekly Chart Overview */}
+      <View style={[styles.chartContainer, { 
+        backgroundColor: theme.card,
+        borderColor: theme.border,
+        shadowColor: theme.shadow,
+      }]}>
+        <Text style={[styles.chartTitle, { color: theme.text }]}>
+          📈 Weekly Progress Chart
+        </Text>
+        <View style={styles.chartWrapper}>
+          <View style={styles.customChart}>
+            {weekData.map((day, dayIndex) => {
+              const calPercent = macroGoals.calories ? (day.calories / macroGoals.calories) * 100 : 0;
+              const heightPercent = Math.min(calPercent, 120); // Cap at 120% for visual purposes
+              
+              return (
+                <View key={day.date} style={styles.chartBar}>
+                  <View style={styles.chartBarContainer}>
+                    <View 
+                      style={[
+                        styles.chartBarFill,
+                        {
+                          height: `${heightPercent}%`,
+                          backgroundColor: getMacroColor('calories'),
+                          opacity: 0.7 + (dayIndex * 0.04), // Varying opacity
+                        }
+                      ]}
+                    />
+                  </View>
+                  <View style={styles.chartBarLabel}>
+                    <Text style={[styles.chartBarText, { color: theme.textSecondary }]}>
+                      {format(new Date(day.date), "EEE")}
+                    </Text>
+                    <Text style={[styles.chartBarValue, { color: theme.text }]}>
+                      {Math.round(day.calories)}
+                    </Text>
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+        </View>
+        <Text style={[styles.chartSubtitle, { color: theme.textSecondary }]}>
+          Daily calorie intake over the week
+        </Text>
+      </View>
+
+      {/* Enhanced Averages Block */}
+      <View style={[styles.averagesContainer, { 
+        backgroundColor: theme.card,
+        borderColor: theme.border,
+        shadowColor: theme.shadow,
+      }]}>
+        <Text style={[styles.averagesTitle, { color: theme.text }]}>
+          📊 Weekly Averages
+        </Text>
+        <View style={styles.averagesGrid}>
+          {macros.map((macro) => {
+            const value = averages[macro.key];
+            const goal = macroGoals[macro.key];
+            const percent = Math.round((value / goal) * 100);
             const isOver = value > goal;
 
             return (
-              <View key={label} style={{ marginBottom: 10 }}>
-                <Text style={[styles.macroText, { color: theme.text }]}>
-                  {label}: {value} / {goal} {label === "Calories" ? "kcal" : "g"} ({Math.round((value / goal) * 100)}%)
+              <View key={macro.key} style={[styles.averageCard, { 
+                backgroundColor: theme.cardSecondary,
+                borderColor: getMacroColor(macro.key),
+              }]}>
+                <Text style={styles.averageIcon}>{macro.icon}</Text>
+                <Text style={[styles.averageLabel, { color: theme.text }]}>
+                  {macro.label}
                 </Text>
-                <View style={[styles.progressBarBackground, { backgroundColor: theme.border }]}>
-                  <View
-                    style={[
-                      styles.progressBarFill,
-                      {
-                        width: `${percent * 100}%`,
-                        backgroundColor: barColors[i],
-                      },
-                    ]}
-                  />
-                  {isOver && (
-                    <View style={[styles.progressBarOverrun, { backgroundColor: theme.danger }]} />
-                  )}
-                </View>
+                <Text style={[styles.averageValue, { color: getMacroColor(macro.key) }]}>
+                  {value}
+                </Text>
+                <Text style={[styles.averageGoal, { color: theme.textSecondary }]}>
+                  / {goal} {macro.unit}
+                </Text>
+                <Text style={[styles.averagePercent, { 
+                  color: isOver ? theme.danger : getMacroColor(macro.key) 
+                }]}>
+                  {percent}%
+                </Text>
               </View>
             );
           })}
         </View>
+      </View>
+
+      {/* Enhanced Daily Blocks */}
+      {[...weekData].reverse().map((day) => (
+        <View key={day.date} style={[styles.dayCard, { 
+          backgroundColor: theme.card,
+          borderColor: theme.border,
+          shadowColor: theme.shadow,
+        }]}>
+          <View style={styles.dayHeader}>
+            <Text style={[styles.dayLabel, { color: theme.text }]}>
+              {format(new Date(day.date), "EEEE, MMMM d")}
+            </Text>
+            <Text style={[styles.dayCalories, { color: theme.primary }]}>
+              {day.calories} kcal
+            </Text>
+          </View>
+          
+          <View style={styles.macrosRow}>
+            {macros.slice(1).map((macro) => { // Skip calories as it's shown in header
+              const value = day[macro.key];
+              const goal = macroGoals[macro.key];
+              const percent = Math.round((value / goal) * 100);
+
+              return (
+                <View key={macro.key} style={styles.macroItem}>
+                  <Text style={styles.macroItemIcon}>{macro.icon}</Text>
+                  <Text style={[styles.macroItemValue, { color: getMacroColor(macro.key) }]}>
+                    {value}g
+                  </Text>
+                  <Text style={[styles.macroItemPercent, { color: theme.textSecondary }]}>
+                    {percent}%
+                  </Text>
+                </View>
+              );
+            })}
+          </View>
+
+          {/* Progress bar for overall day completion */}
+          <View style={styles.dayProgress}>
+            <Text style={[styles.dayProgressLabel, { color: theme.textSecondary }]}>
+              Daily Goal Progress
+            </Text>
+            <View style={[styles.dayProgressBar, { backgroundColor: theme.divider }]}>
+              <View style={[styles.dayProgressFill, {
+                width: `${Math.min((day.calories / macroGoals.calories) * 100, 100)}%`,
+                backgroundColor: theme.primary,
+              }]} />
+            </View>
+            <Text style={[styles.dayProgressText, { color: theme.textSecondary }]}>
+              {Math.round((day.calories / macroGoals.calories) * 100)}% of calorie goal
+            </Text>
+          </View>
+        </View>
       ))}
       
       <TouchableOpacity 
-        style={[styles.backButton, { backgroundColor: theme.button }]} 
+        style={[styles.backButton, { 
+          backgroundColor: theme.primary,
+          shadowColor: theme.shadow,
+        }]} 
         onPress={() => router.push("/(app)/meal-plan/calendar")}
+        activeOpacity={0.8}
       >
-        <Text style={[styles.backButtonText, { color: theme.buttonText }]}>Back to Calendar</Text>
+        <Text style={[styles.backButtonText, { color: theme.buttonTextPrimary }]}>
+          ← Back to Calendar
+        </Text>
       </TouchableOpacity>
     </ScrollView>
   );
@@ -386,9 +489,13 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    padding: 12,
+    padding: 16,
     marginBottom: 16,
-    borderRadius: 8,
+    borderRadius: 12,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   errorText: {
     flex: 1,
@@ -396,49 +503,247 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   retryButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6,
-    backgroundColor: "rgba(255,255,255,0.2)",
-    marginLeft: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    marginLeft: 12,
   },
   retryButtonText: {
     fontSize: 14,
     fontWeight: "bold",
   },
   backButton: {
-    alignSelf: "flex-start",
-    marginTop: 20,
-    marginBottom: 10,
-    padding: 15,
-    backgroundColor: "#ccc",
-    borderRadius: 8,
-    minWidth: 120,
+    alignSelf: "center",
+    marginTop: 32,
+    marginBottom: 16,
+    paddingVertical: 16,
+    paddingHorizontal: 32,
+    borderRadius: 16,
+    minWidth: 200,
     alignItems: "center",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
   },
   backButtonText: {
-    color: "#000",
     fontSize: 16,
     fontWeight: "bold",
   },
   title: {
-    fontSize: 24,
-    fontWeight: "bold",
-    marginBottom: 24,
+    fontSize: 28,
+    fontWeight: "800",
+    marginBottom: 8,
     textAlign: "center",
   },
+  chartContainer: {
+    marginBottom: 24,
+    padding: 20,
+    borderRadius: 16,
+    borderWidth: 1,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 5,
+  },
+  chartTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    textAlign: "center",
+    marginBottom: 16,
+  },
+  chartWrapper: {
+    position: 'relative',
+  },
+  customChart: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'flex-end',
+    height: 150,
+    paddingVertical: 10,
+  },
+  chartBar: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  chartBarContainer: {
+    height: 100,
+    width: 30,
+    backgroundColor: '#f0f0f0',
+    borderRadius: 8,
+    justifyContent: 'flex-end',
+    overflow: 'hidden',
+  },
+  chartBarFill: {
+    width: '100%',
+    borderRadius: 8,
+    minHeight: 2,
+  },
+  chartBarLabel: {
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  chartBarText: {
+    fontSize: 10,
+    textAlign: 'center',
+    fontWeight: '500',
+    marginBottom: 2,
+  },
+  chartBarValue: {
+    fontSize: 12,
+    textAlign: 'center',
+    fontWeight: '700',
+  },
+  chart: {
+    height: 160,
+    width: screenWidth - 80,
+  },
+  chartLabels: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginTop: 12,
+    paddingHorizontal: 10,
+  },
+  chartLabel: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  chartLabelText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  chartSubtitle: {
+    fontSize: 14,
+    fontStyle: 'italic',
+    textAlign: 'center',
+    marginTop: 12,
+  },
+  averagesContainer: {
+    marginBottom: 24,
+    padding: 20,
+    borderRadius: 16,
+    borderWidth: 1,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 5,
+  },
+  averagesTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    textAlign: "center",
+    marginBottom: 20,
+  },
+  averagesGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+  },
+  averageCard: {
+    width: '48%',
+    padding: 16,
+    marginBottom: 12,
+    borderRadius: 12,
+    borderWidth: 2,
+    alignItems: 'center',
+  },
+  averageIcon: {
+    fontSize: 24,
+    marginBottom: 8,
+  },
+  averageLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  averageValue: {
+    fontSize: 24,
+    fontWeight: '800',
+    marginBottom: 2,
+  },
+  averageGoal: {
+    fontSize: 12,
+    marginBottom: 4,
+  },
+  averagePercent: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  dayCard: {
+    marginBottom: 16,
+    padding: 20,
+    borderRadius: 16,
+    borderWidth: 1,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  dayHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  dayLabel: {
+    fontSize: 18,
+    fontWeight: "700",
+  },
+  dayCalories: {
+    fontSize: 20,
+    fontWeight: "800",
+  },
+  macrosRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginBottom: 16,
+  },
+  macroItem: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  macroItemIcon: {
+    fontSize: 20,
+    marginBottom: 4,
+  },
+  macroItemValue: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  macroItemPercent: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  dayProgress: {
+    marginTop: 8,
+  },
+  dayProgressLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  dayProgressBar: {
+    height: 8,
+    borderRadius: 4,
+    overflow: 'hidden',
+    marginBottom: 4,
+  },
+  dayProgressFill: {
+    height: '100%',
+    borderRadius: 4,
+  },
+  dayProgressText: {
+    fontSize: 12,
+    textAlign: 'center',
+  },
+  // Legacy styles (can be removed after migration)
   averagesBlock: {
     backgroundColor: "#e6eaf0",
     borderRadius: 12,
     padding: 16,
     marginBottom: 24,
-  },
-  averagesTitle: {
-    fontWeight: "bold",
-    fontSize: 20,
-    marginBottom: 12,
-    color: "#4F8EF7",
-    textAlign: "center",
   },
   averageText: {
     fontSize: 16,
@@ -451,12 +756,6 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
     borderBottomWidth: 1,
     borderBottomColor: "#eee",
-  },
-  dayLabel: {
-    fontSize: 20,
-    fontWeight: "bold",
-    marginBottom: 12,
-    color: "#333",
   },
   macroText: {
     fontSize: 15,

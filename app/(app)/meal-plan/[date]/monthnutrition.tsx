@@ -16,14 +16,34 @@ import { useTheme } from "../../../../context/ThemeContext";
 import { supabase } from "utils/supabase";
 
 type MacroKey = "calories" | "protein" | "carbs" | "fat";
-const macroLabels = ["Calories", "Protein", "Carbs", "Fat"];
-const macroKeys: MacroKey[] = ["calories", "protein", "carbs", "fat"];
-const barColors = ["#4F8EF7", "#F7B32B", "#F76E5C", "#7ED957"];
 
 const MonthNutritionScreen = () => {
   const { date } = useLocalSearchParams();
   const router = useRouter();
   const { theme } = useTheme();
+
+  // Define macros with icons and theme-based colors
+  const macros = [
+    { label: "Calories", key: "calories" as MacroKey, icon: "🔥", unit: "kcal" },
+    { label: "Protein", key: "protein" as MacroKey, icon: "🥩", unit: "g" },
+    { label: "Carbs", key: "carbs" as MacroKey, icon: "🍞", unit: "g" },
+    { label: "Fat", key: "fat" as MacroKey, icon: "🥑", unit: "g" },
+  ];
+
+  const getMacroColor = (macroKey: MacroKey) => {
+    switch (macroKey) {
+      case 'protein': return theme.protein || "#dc2626";
+      case 'carbs': return theme.carbs || "#2563eb";
+      case 'fat': return theme.fat || "#ca8a04";
+      case 'calories': return theme.primary || "#3b82f6";
+      default: return theme.primary || "#3b82f6";
+    }
+  };
+
+  const getMacroIcon = (macroKey: MacroKey) => {
+    const macro = macros.find(m => m.key === macroKey);
+    return macro?.icon || "📊";
+  };
 
   const [macroGoals, setMacroGoals] = useState({
     calories: 2000,
@@ -162,9 +182,9 @@ const MonthNutritionScreen = () => {
   }, [date]);
 
   // Calculate averages for each macro
-  const averages = macroKeys.reduce((acc, key) => {
-    const sum = monthData.reduce((total, day) => total + day[key], 0);
-    acc[key] = monthData.length ? Math.round(sum / monthData.length) : 0;
+  const averages = macros.reduce((acc, macro) => {
+    const sum = monthData.reduce((total, day) => total + day[macro.key], 0);
+    acc[macro.key] = monthData.length ? Math.round(sum / monthData.length) : 0;
     return acc;
   }, {} as Record<MacroKey, number>);
 
@@ -195,102 +215,176 @@ const MonthNutritionScreen = () => {
 
       {/* Error Banner */}
       {error && (
-        <View style={[styles.errorBanner, { backgroundColor: theme.danger }]}>
-          <Text style={[styles.errorText, { color: theme.buttonText }]}>
+        <View style={[styles.errorBanner, { 
+          backgroundColor: theme.danger,
+          shadowColor: theme.shadow,
+        }]}>
+          <Text style={[styles.errorText, { color: theme.buttonTextPrimary }]}>
             {error}
           </Text>
           <TouchableOpacity
             style={styles.retryButton}
             onPress={handleRefresh}
           >
-            <Text style={[styles.retryButtonText, { color: theme.buttonText }]}>Retry</Text>
+            <Text style={[styles.retryButtonText, { color: theme.buttonTextPrimary }]}>Retry</Text>
           </TouchableOpacity>
         </View>
       )}
 
-      <Text style={[styles.title, { color: theme.text }]}>Monthly Nutrition Overview</Text>
-
-      {/* Averages Block */}
-      <View style={[styles.averagesBlock, { backgroundColor: theme.card }]}>
-        <Text style={[styles.averagesTitle, { color: theme.primary }]}>Monthly Averages</Text>
-        {macroLabels.map((label, i) => {
-          const key = macroKeys[i];
-          const value = averages[key];
-          const goal = macroGoals[key];
-          const percent = Math.min(1, value / goal);
-          const over = value > goal;
-
-          return (
-            <View key={label} style={{ marginBottom: 14 }}>
-              <Text style={[styles.averageText, { color: theme.text }]}>
-                {label}: {value} / {goal} {label === "Calories" ? "kcal" : "g"} ({Math.round((value / goal) * 100)}%)
-              </Text>
-              <View style={[styles.progressBarBackground, { backgroundColor: theme.border }]}>
-                <View
-                  style={[
-                    styles.progressBarFill,
-                    {
-                      width: `${percent * 100}%`,
-                      backgroundColor: barColors[i],
-                    },
-                  ]}
-                />
-                {over && (
-                  <View style={[styles.progressBarOverrun, { backgroundColor: theme.danger }]} />
-                )}
-              </View>
-            </View>
-          );
-        })}
+      <View style={{ alignItems: 'center', marginBottom: 32 }}>
+        <Text style={[styles.title, { color: theme.text }]}>
+          📅 Monthly Nutrition
+        </Text>
+        <Text style={[{ fontSize: 16, color: theme.textSecondary, textAlign: 'center' }]}>
+          30-day nutrition overview and trends
+        </Text>
       </View>
 
-      {/* Show last 7 days only for performance */}
-      {monthData.slice(-7).reverse().map((day) => (
-        <View key={day.date} style={[styles.dayBlock, { borderBottomColor: theme.border }]}>
-          <Text style={[styles.dayLabel, { color: theme.text }]}>
-            {format(new Date(day.date), "EEEE, MMMM d")}
-          </Text>
-          {macroLabels.map((label, i) => {
-            const key = macroKeys[i];
-            const value = day[key];
-            const goal = macroGoals[key];
-            const percent = Math.min(1, value / goal);
-            const isOver = value > goal;
-
+      {/* Enhanced Monthly Averages Block */}
+      <View style={[styles.averagesContainer, { 
+        backgroundColor: theme.card,
+        borderColor: theme.border,
+        shadowColor: theme.shadow,
+      }]}>
+        <Text style={[styles.averagesTitle, { color: theme.text }]}>
+          📊 Monthly Averages
+        </Text>
+        <View style={styles.averagesGrid}>
+          {macros.map((macro) => {
+            const value = averages[macro.key];
+            const goal = macroGoals[macro.key];
+            const ratio = goal ? value / goal : 0;
+            const percent = Math.round(ratio * 100);
+            
             return (
-              <View key={label} style={{ marginBottom: 10 }}>
-                <Text style={[styles.macroText, { color: theme.text }]}>
-                  {label}: {value} / {goal} {label === "Calories" ? "kcal" : "g"} ({Math.round((value / goal) * 100)}%)
-                </Text>
-                <View style={[styles.progressBarBackground, { backgroundColor: theme.border }]}>
+              <View key={macro.key} style={[styles.averageCard, { 
+                backgroundColor: theme.background,
+                borderColor: theme.border,
+              }]}>
+                <View style={styles.averageHeader}>
+                  <Text style={[styles.averageIcon, { color: getMacroColor(macro.key) }]}>
+                    {macro.icon}
+                  </Text>
+                  <Text style={[styles.averageLabel, { color: theme.text }]}>
+                    {macro.label}
+                  </Text>
+                </View>
+                <View style={styles.averageValues}>
+                  <Text style={[styles.averageValue, { color: getMacroColor(macro.key) }]}>
+                    {value}
+                  </Text>
+                  <Text style={[styles.averageGoal, { color: theme.textSecondary }]}>
+                    / {goal} {macro.unit}
+                  </Text>
+                </View>
+                <View style={[styles.averageProgressBar, { backgroundColor: theme.border }]}>
                   <View
                     style={[
-                      styles.progressBarFill,
+                      styles.averageProgressFill,
                       {
-                        width: `${percent * 100}%`,
-                        backgroundColor: barColors[i],
+                        width: `${Math.min(percent, 100)}%`,
+                        backgroundColor: getMacroColor(macro.key),
                       },
                     ]}
                   />
-                  {isOver && (
-                    <View style={[styles.progressBarOverrun, { backgroundColor: theme.danger }]} />
-                  )}
                 </View>
+                <Text style={[styles.averagePercent, { 
+                  color: ratio > 1 ? theme.danger : ratio > 0.8 ? theme.success : theme.textSecondary 
+                }]}>
+                  {percent}% of goal
+                </Text>
               </View>
             );
           })}
         </View>
-      ))}
+      </View>
+
+      {/* Enhanced Recent Days */}
+      <View style={[styles.recentDaysContainer, { 
+        backgroundColor: theme.card,
+        borderColor: theme.border,
+        shadowColor: theme.shadow,
+      }]}>
+        <Text style={[styles.recentDaysTitle, { color: theme.text }]}>
+          📅 Recent 7 Days
+        </Text>
+        <Text style={[styles.recentDaysSubtitle, { color: theme.textSecondary }]}>
+          Daily nutrition breakdown
+        </Text>
+        
+        {monthData.slice(-7).reverse().map((day) => (
+          <View key={day.date} style={[styles.dayCard, { 
+            backgroundColor: theme.background,
+            borderColor: theme.border,
+          }]}>
+            <View style={styles.dayHeader}>
+              <Text style={[styles.dayLabel, { color: theme.text }]}>
+                {format(new Date(day.date), "EEEE, MMMM d")}
+              </Text>
+              <Text style={[styles.dayCalories, { color: theme.primary }]}>
+                {Math.round(day.calories)} kcal
+              </Text>
+            </View>
+            
+            <View style={styles.dayMacrosGrid}>
+              {macros.slice(1).map((macro) => { // Skip calories as it's already shown
+                const value = day[macro.key];
+                const goal = macroGoals[macro.key];
+                const ratio = goal ? value / goal : 0;
+                const percent = Math.round(ratio * 100);
+
+                return (
+                  <View key={macro.key} style={styles.dayMacroItem}>
+                    <View style={styles.dayMacroHeader}>
+                      <Text style={[styles.dayMacroIcon, { color: getMacroColor(macro.key) }]}>
+                        {macro.icon}
+                      </Text>
+                      <Text style={[styles.dayMacroLabel, { color: theme.textSecondary }]}>
+                        {macro.label}
+                      </Text>
+                    </View>
+                    <Text style={[styles.dayMacroValue, { color: theme.text }]}>
+                      {Math.round(value)}/{goal} {macro.unit}
+                    </Text>
+                    <View style={[styles.dayMacroProgressBar, { backgroundColor: theme.border }]}>
+                      <View
+                        style={[
+                          styles.dayMacroProgressFill,
+                          {
+                            width: `${Math.min(percent, 100)}%`,
+                            backgroundColor: getMacroColor(macro.key),
+                          },
+                        ]}
+                      />
+                    </View>
+                    <Text style={[styles.dayMacroPercent, { 
+                      color: ratio > 1 ? theme.danger : ratio > 0.8 ? theme.success : theme.textSecondary 
+                    }]}>
+                      {percent}%
+                    </Text>
+                  </View>
+                );
+              })}
+            </View>
+          </View>
+        ))}
+      </View>
       
-      <Text style={[styles.summaryText, { color: theme.subtext }]}>
-        Showing last 7 days. Monthly averages calculated from all 30 days.
+      <Text style={[styles.summaryText, { color: theme.textSecondary }]}>
+        Showing recent 7 days • Monthly averages from all 30 days
       </Text>
       
       <TouchableOpacity 
-        style={[styles.backButton, { backgroundColor: theme.button }]} 
+        style={[styles.backButton, { 
+          backgroundColor: theme.primary,
+          shadowColor: theme.shadow,
+        }]} 
         onPress={() => router.push("/(app)/meal-plan/calendar")}
+        activeOpacity={0.8}
       >
-        <Text style={[styles.backButtonText, { color: theme.buttonText }]}>Back to Calendar</Text>
+        <Text style={[styles.backButtonText, { color: theme.buttonTextPrimary }]}>
+          ← Back to Calendar
+        </Text>
       </TouchableOpacity>
     </ScrollView>
   );
@@ -317,9 +411,13 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    padding: 12,
+    padding: 16,
     marginBottom: 16,
-    borderRadius: 8,
+    borderRadius: 12,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   errorText: {
     flex: 1,
@@ -327,49 +425,216 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   retryButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
     backgroundColor: "rgba(255,255,255,0.2)",
-    marginLeft: 8,
+    marginLeft: 12,
   },
   retryButtonText: {
     fontSize: 14,
     fontWeight: "bold",
   },
+  title: {
+    fontSize: 28,
+    fontWeight: "800",
+    marginBottom: 8,
+    textAlign: "center",
+  },
+  
+  // Enhanced Averages Section
+  averagesContainer: {
+    marginBottom: 32,
+    padding: 20,
+    borderRadius: 16,
+    borderWidth: 1,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 5,
+  },
+  averagesTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    textAlign: "center",
+    marginBottom: 20,
+  },
+  averagesGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+  },
+  averageCard: {
+    width: '48%',
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 16,
+  },
+  averageHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  averageIcon: {
+    fontSize: 20,
+    marginRight: 8,
+  },
+  averageLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    flex: 1,
+  },
+  averageValues: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    marginBottom: 12,
+  },
+  averageValue: {
+    fontSize: 24,
+    fontWeight: '800',
+  },
+  averageGoal: {
+    fontSize: 16,
+    fontWeight: '500',
+    marginLeft: 4,
+  },
+  averageProgressBar: {
+    height: 8,
+    borderRadius: 4,
+    overflow: 'hidden',
+    marginBottom: 8,
+  },
+  averageProgressFill: {
+    height: '100%',
+    borderRadius: 4,
+  },
+  averagePercent: {
+    fontSize: 12,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  
+  // Enhanced Recent Days Section
+  recentDaysContainer: {
+    marginBottom: 24,
+    padding: 20,
+    borderRadius: 16,
+    borderWidth: 1,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 5,
+  },
+  recentDaysTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    textAlign: "center",
+    marginBottom: 4,
+  },
+  recentDaysSubtitle: {
+    fontSize: 14,
+    textAlign: "center",
+    marginBottom: 20,
+  },
+  dayCard: {
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 16,
+  },
+  dayHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  dayLabel: {
+    fontSize: 16,
+    fontWeight: "700",
+    flex: 1,
+  },
+  dayCalories: {
+    fontSize: 18,
+    fontWeight: "800",
+  },
+  dayMacrosGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+  },
+  dayMacroItem: {
+    width: '31%',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  dayMacroHeader: {
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  dayMacroIcon: {
+    fontSize: 16,
+    marginBottom: 4,
+  },
+  dayMacroLabel: {
+    fontSize: 10,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  dayMacroValue: {
+    fontSize: 12,
+    fontWeight: '700',
+    textAlign: 'center',
+    marginBottom: 6,
+  },
+  dayMacroProgressBar: {
+    width: '100%',
+    height: 6,
+    borderRadius: 3,
+    overflow: 'hidden',
+    marginBottom: 4,
+  },
+  dayMacroProgressFill: {
+    height: '100%',
+    borderRadius: 3,
+  },
+  dayMacroPercent: {
+    fontSize: 10,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  
+  summaryText: {
+    fontSize: 14,
+    textAlign: "center",
+    fontStyle: "italic",
+    marginVertical: 16,
+  },
   backButton: {
-    alignSelf: "flex-start",
-    marginTop: 20,
-    marginBottom: 10,
-    padding: 15,
-    backgroundColor: "#ccc",
-    borderRadius: 8,
-    minWidth: 120,
+    alignSelf: "center",
+    marginTop: 16,
+    marginBottom: 16,
+    paddingVertical: 16,
+    paddingHorizontal: 32,
+    borderRadius: 16,
+    minWidth: 200,
     alignItems: "center",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
   },
   backButtonText: {
-    color: "#000",
     fontSize: 16,
     fontWeight: "bold",
   },
-  title: {
-    fontSize: 24,
-    fontWeight: "bold",
-    marginBottom: 24,
-    textAlign: "center",
-  },
+  
+  // Legacy styles (maintained for compatibility)
   averagesBlock: {
     backgroundColor: "#e6eaf0",
     borderRadius: 12,
     padding: 16,
     marginBottom: 24,
-  },
-  averagesTitle: {
-    fontWeight: "bold",
-    fontSize: 20,
-    marginBottom: 12,
-    color: "#4F8EF7",
-    textAlign: "center",
   },
   averageText: {
     fontSize: 16,
@@ -383,22 +648,10 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#eee",
   },
-  dayLabel: {
-    fontSize: 20,
-    fontWeight: "bold",
-    marginBottom: 12,
-    color: "#333",
-  },
   macroText: {
     fontSize: 15,
     marginBottom: 4,
     fontWeight: "500",
-  },
-  summaryText: {
-    fontSize: 14,
-    textAlign: "center",
-    fontStyle: "italic",
-    marginVertical: 16,
   },
   progressBarBackground: {
     width: "100%",
