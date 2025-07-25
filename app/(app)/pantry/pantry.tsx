@@ -420,13 +420,29 @@ const PantryScreen = () => {
       )}
 
       {/* Enhanced Header */}
-      <View style={{ alignItems: 'center', marginBottom: 24 }}>
-        <Text style={[styles.title, { color: theme.text }]}>
-          🥫 My Pantry
-        </Text>
-        <Text style={[{ fontSize: 16, color: theme.textSecondary, textAlign: 'center' }]}>
-          Track your ingredients and expiration dates
-        </Text>
+      <View style={[styles.headerContainer, { backgroundColor: theme.card, shadowColor: theme.shadow }]}>
+        <View style={styles.headerContent}>
+          <View style={[styles.pantryIconContainer, { backgroundColor: theme.primaryLight }]}>
+            <Text style={styles.pantryHeaderIcon}>🥫</Text>
+          </View>
+          <View style={styles.headerTextContainer}>
+            <Text style={[styles.title, { color: theme.text }]}>
+              My Pantry
+            </Text>
+            <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
+              Track your ingredients and expiration dates
+            </Text>
+          </View>
+        </View>
+        
+        {scannerUsage && (
+          <View style={[styles.usageIndicator, { backgroundColor: theme.background, borderColor: theme.border }]}>
+            <Ionicons name="camera" size={16} color={theme.primary} />
+            <Text style={[styles.usageIndicatorText, { color: theme.text }]}>
+              {scannerUsage.remaining}/{scannerUsage.total} scans left
+            </Text>
+          </View>
+        )}
       </View>
       
       <FlatList
@@ -449,29 +465,40 @@ const PantryScreen = () => {
             ]}>
               <View style={styles.itemHeader}>
                 <View style={styles.itemMainInfo}>
-                  <Text style={[styles.itemText, { color: theme.text }]}>
-                    🥘 {item.food}
-                  </Text>
-                  {(item.quantity !== null || item.unit) && (
-                    <Text style={[styles.quantityText, { color: theme.textSecondary }]}>
-                      {item.quantity ?? ""} {item.unit || ""}
+                  <View style={styles.itemTitleContainer}>
+                    <View style={[styles.itemIconBadge, { backgroundColor: theme.primaryLight }]}>
+                      <Text style={styles.itemIconEmoji}>🥘</Text>
+                    </View>
+                    <Text style={[styles.itemText, { color: theme.text }]}>
+                      {item.food}
                     </Text>
+                  </View>
+                  {(item.quantity !== null || item.unit) && (
+                    <View style={styles.quantityContainer}>
+                      <Ionicons name="scale-outline" size={14} color={theme.textSecondary} />
+                      <Text style={[styles.quantityText, { color: theme.textSecondary }]}>
+                        {item.quantity ?? ""} {item.unit || ""}
+                      </Text>
+                    </View>
                   )}
                 </View>
                 
                 <View style={styles.statusContainer}>
                   {expirationStatus === 'expired' && (
                     <View style={[styles.statusBadge, { backgroundColor: theme.danger }]}>
+                      <Ionicons name="alert-circle" size={12} color={theme.buttonTextPrimary} />
                       <Text style={[styles.statusText, { color: theme.buttonTextPrimary }]}>EXPIRED</Text>
                     </View>
                   )}
                   {expirationStatus === 'expiring' && (
                     <View style={[styles.statusBadge, { backgroundColor: theme.warning }]}>
+                      <Ionicons name="warning" size={12} color={theme.buttonTextPrimary} />
                       <Text style={[styles.statusText, { color: theme.buttonTextPrimary }]}>EXPIRING</Text>
                     </View>
                   )}
                   {expirationStatus === 'fresh' && (
                     <View style={[styles.statusBadge, { backgroundColor: theme.success }]}>
+                      <Ionicons name="leaf" size={12} color={theme.buttonTextPrimary} />
                       <Text style={[styles.statusText, { color: theme.buttonTextPrimary }]}>FRESH</Text>
                     </View>
                   )}
@@ -480,6 +507,7 @@ const PantryScreen = () => {
               
               {item.expiration_date && (
                 <View style={styles.expirationContainer}>
+                  <Ionicons name="calendar-outline" size={16} color={theme.textSecondary} />
                   <Text style={[styles.expirationLabel, { color: theme.textSecondary }]}>
                     Expires:
                   </Text>
@@ -608,35 +636,57 @@ const PantryScreen = () => {
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[styles.scanButton, { 
-            backgroundColor: theme.success,
-            shadowColor: theme.shadow,
-          }]}
+          style={[
+            styles.scanButton, 
+            { 
+              backgroundColor: scanningItems ? theme.successLight : theme.success,
+              borderColor: theme.success,
+              borderWidth: 2,
+              opacity: scanningItems || (scannerUsage?.remaining === 0) ? 0.7 : 1
+            }
+          ]}
           onPress={openCameraForPantryScan}
-          disabled={scanningItems}
+          disabled={scanningItems || (scannerUsage?.remaining === 0)}
           activeOpacity={0.8}
         >
-          {scanningItems ? (
-            <ActivityIndicator size="small" color={theme.buttonTextPrimary} />
-          ) : (
-            <>
-              <Ionicons name="camera" size={20} color={theme.buttonTextPrimary} />
-              <View style={styles.scanButtonContent}>
-                <Text style={[styles.scanButtonText, { color: theme.buttonTextPrimary }]}>
-                  Scan Items
+          <View style={styles.scanButtonWrapper}>
+            {scanningItems ? (
+              <>
+                <ActivityIndicator size="small" color={theme.success} />
+                <Text style={[styles.scanButtonProcessing, { color: theme.success }]}>
+                  Analyzing...
                 </Text>
-                {scannerUsage && (
-                  <Text style={[styles.usageText, { color: theme.buttonTextPrimary }]}>
-                    {scannerUsage.remaining}/{scannerUsage.total} left
+              </>
+            ) : (
+              <>
+                <View style={[styles.scanIconContainer, { backgroundColor: theme.buttonTextPrimary }]}>
+                  <Ionicons name="camera" size={18} color={theme.success} />
+                  <Ionicons name="sparkles" size={12} color={theme.success} style={styles.aiSparkle} />
+                </View>
+                <View style={styles.scanButtonContent}>
+                  <Text style={[styles.scanButtonText, { color: theme.buttonTextPrimary, fontSize: 15 }]}>
+                    AI Scanner
                   </Text>
-                )}
-              </View>
-            </>
-          )}
+                  {scannerUsage && (
+                    <View style={[styles.usageContainer, { backgroundColor: theme.buttonTextPrimary }]}>
+                      <Text style={[styles.usageText, { color: theme.success }]}>
+                        {scannerUsage.remaining}/{scannerUsage.total} left
+                      </Text>
+                    </View>
+                  )}
+                  {scannerUsage?.remaining === 0 && (
+                    <Text style={[styles.limitReachedText, { color: theme.danger }]}>
+                      Daily limit reached
+                    </Text>
+                  )}
+                </View>
+              </>
+            )}
+          </View>
         </TouchableOpacity>
       </View>
 
-      {/* Scan Results Modal */}
+      {/* Enhanced Scan Results Modal */}
       <Modal
         visible={scanModalVisible}
         transparent={true}
@@ -644,51 +694,72 @@ const PantryScreen = () => {
         onRequestClose={() => setScanModalVisible(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalContainer, { backgroundColor: theme.card }]}>
+          <View style={[styles.enhancedModalContainer, { backgroundColor: theme.card }]}>
             <View style={styles.modalHeader}>
+              <View style={[styles.scanSuccessIcon, { backgroundColor: theme.success }]}>
+                <Ionicons name="checkmark" size={24} color={theme.buttonTextPrimary} />
+              </View>
               <Text style={[styles.modalTitle, { color: theme.text }]}>
-                Items Added to Pantry
+                🎉 Items Successfully Added!
+              </Text>
+              <Text style={[styles.modalSubtitle, { color: theme.textSecondary }]}>
+                AI detected and added {detectedItems.length} items to your pantry
               </Text>
               <TouchableOpacity
                 style={styles.closeButton}
                 onPress={() => setScanModalVisible(false)}
               >
-                <Ionicons name="close" size={24} color={theme.text} />
+                <Ionicons name="close" size={24} color={theme.textSecondary} />
               </TouchableOpacity>
             </View>
             
             <View style={styles.modalContent}>
-              <Text style={[styles.modalSubtitle, { color: theme.textSecondary }]}>
-                Successfully detected and added {detectedItems.length} items:
-              </Text>
+              <View style={[styles.detectedItemsContainer, { backgroundColor: theme.background, borderColor: theme.border }]}>
+                <Text style={[styles.detectedItemsTitle, { color: theme.text }]}>
+                  Detected Items:
+                </Text>
+                
+                {detectedItems.map((item, index) => (
+                  <View
+                    key={index}
+                    style={[styles.enhancedDetectedItemRow, { 
+                      backgroundColor: theme.card,
+                      borderColor: theme.border,
+                    }]}
+                  >
+                    <View style={styles.itemIconContainer}>
+                      <Text style={styles.itemEmoji}>🥘</Text>
+                    </View>
+                    <Text style={[styles.detectedItemText, { color: theme.text }]}>
+                      {item}
+                    </Text>
+                    <View style={[styles.checkmarkContainer, { backgroundColor: theme.successLight }]}>
+                      <Ionicons name="checkmark-circle" size={20} color={theme.success} />
+                    </View>
+                  </View>
+                ))}
+              </View>
               
-              {detectedItems.map((item, index) => (
-                <View
-                  key={index}
-                  style={[styles.detectedItemRow, { 
-                    backgroundColor: theme.background,
-                    borderColor: theme.border,
-                  }]}
-                >
-                  <Text style={[styles.detectedItemText, { color: theme.text }]}>
-                    🥘 {item}
-                  </Text>
-                  <Ionicons name="checkmark-circle" size={20} color={theme.success} />
-                </View>
-              ))}
+              <View style={[styles.scanSuccessMessage, { backgroundColor: theme.successLight, borderColor: theme.success }]}>
+                <Ionicons name="information-circle" size={20} color={theme.success} />
+                <Text style={[styles.scanSuccessText, { color: theme.success }]}>
+                  All items have been automatically added to your pantry with default quantities. You can edit them individually if needed.
+                </Text>
+              </View>
             </View>
             
             <View style={styles.modalActions}>
               <TouchableOpacity
-                style={[styles.modalButton, { 
+                style={[styles.enhancedModalButton, { 
                   backgroundColor: theme.primary,
                   shadowColor: theme.shadow,
                 }]}
                 onPress={() => setScanModalVisible(false)}
                 activeOpacity={0.8}
               >
+                <Ionicons name="checkmark" size={20} color={theme.buttonTextPrimary} style={{ marginRight: 8 }} />
                 <Text style={[styles.addAllButtonText, { color: theme.buttonTextPrimary }]}>
-                  Done
+                  Perfect!
                 </Text>
               </TouchableOpacity>
             </View>
@@ -716,6 +787,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 20,
+    paddingTop: 45, // Add top padding to avoid status bar overlap
   },
   centerContent: {
     flex: 1,
@@ -796,8 +868,55 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 28,
     fontWeight: "800",
-    marginBottom: 8,
+    marginBottom: 4,
+  },
+  subtitle: {
+    fontSize: 16,
+    fontWeight: '500',
     textAlign: 'center',
+  },
+  // Enhanced header styles
+  headerContainer: {
+    padding: 20,
+    borderRadius: 16,
+    marginBottom: 24,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  headerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  pantryIconContainer: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 16,
+  },
+  pantryHeaderIcon: {
+    fontSize: 24,
+  },
+  headerTextContainer: {
+    flex: 1,
+  },
+  usageIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+    gap: 6,
+  },
+  usageIndicatorText: {
+    fontSize: 12,
+    fontWeight: '600',
   },
   
   // Enhanced Item Styles
@@ -821,10 +940,31 @@ const styles = StyleSheet.create({
     flex: 1,
     marginRight: 12,
   },
+  itemTitleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+    gap: 12,
+  },
+  itemIconBadge: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  itemIconEmoji: {
+    fontSize: 16,
+  },
   itemText: {
     fontSize: 18,
     fontWeight: "700",
-    marginBottom: 4,
+    flex: 1,
+  },
+  quantityContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   statusContainer: {
     alignItems: 'flex-end',
@@ -835,6 +975,9 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     minWidth: 80,
     alignItems: 'center',
+    flexDirection: 'row',
+    gap: 4,
+    justifyContent: 'center',
   },
   statusText: {
     fontSize: 11,
@@ -849,11 +992,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 16,
+    gap: 6,
   },
   expirationLabel: {
     fontSize: 14,
     fontWeight: '500',
-    marginRight: 8,
   },
   expirationText: {
     fontSize: 14,
@@ -1064,6 +1207,128 @@ const styles = StyleSheet.create({
   addAllButtonText: {
     fontSize: 16,
     fontWeight: '600',
+  },
+  // Enhanced scanner button styles
+  scanButtonWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    flex: 1,
+  },
+  scanButtonProcessing: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+  scanIconContainer: {
+    position: 'relative',
+    padding: 6,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  aiSparkle: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+  },
+  usageContainer: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+    marginTop: 2,
+  },
+  limitReachedText: {
+    fontSize: 9,
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  // Enhanced modal styles
+  enhancedModalContainer: {
+    width: '95%',
+    maxHeight: '85%',
+    borderRadius: 20,
+    padding: 24,
+    elevation: 10,
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+  },
+  scanSuccessIcon: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'center',
+    marginBottom: 16,
+  },
+  detectedItemsContainer: {
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+  },
+  detectedItemsTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 12,
+  },
+  enhancedDetectedItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginVertical: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 12,
+  },
+  itemIconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#f0f0f0',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  itemEmoji: {
+    fontSize: 18,
+  },
+  checkmarkContainer: {
+    padding: 4,
+    borderRadius: 12,
+  },
+  scanSuccessMessage: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 12,
+  },
+  scanSuccessText: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '600',
+    lineHeight: 20,
+  },
+  enhancedModalButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
   },
 });
 

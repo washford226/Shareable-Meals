@@ -658,42 +658,74 @@ const MealPlanCalendar: React.FC = () => {
             <Text style={[styles.headerButtonText, { color: theme.primary }]}>Pantry</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.headerButton, styles.mealScanButton, { 
-              backgroundColor: theme.warningLight, 
-              borderColor: theme.warning 
-            }]}
+            style={[
+              styles.headerButton, 
+              styles.mealScanButton, 
+              { 
+                backgroundColor: scanningMeal ? theme.warningLight : theme.warningLight, 
+                borderColor: scanningMeal ? theme.warning : theme.warning,
+                opacity: scanningMeal ? 0.7 : 1
+              }
+            ]}
             onPress={() => {
-              // Show modal to select date for meal scan
+              // Show enhanced modal to select date for meal scan
               Alert.alert(
-                "Scan Meal",
-                "Which date would you like to add the scanned meal to?",
+                "🤖 AI Meal Scanner",
+                `Scan a meal photo to automatically detect nutrition data!\n\nScans remaining: ${scannerUsage?.remaining || 0}/${scannerUsage?.total || 3}`,
                 [
-                  { text: "Today", onPress: () => openCameraForMealScan(format(today, 'yyyy-MM-dd')) },
-                  { text: "Select Date", onPress: () => {
-                    // For now, just use today - could enhance later with date picker
-                    openCameraForMealScan(format(today, 'yyyy-MM-dd'));
-                  }},
+                  { 
+                    text: "📅 Today", 
+                    onPress: () => openCameraForMealScan(format(today, 'yyyy-MM-dd')),
+                    style: "default"
+                  },
+                  { 
+                    text: "📋 Select Date", 
+                    onPress: () => {
+                      // For now, just use today - could enhance later with date picker
+                      openCameraForMealScan(format(today, 'yyyy-MM-dd'));
+                    },
+                    style: "default"
+                  },
                   { text: "Cancel", style: "cancel" }
                 ]
               );
             }}
-            disabled={scanningMeal}
+            disabled={scanningMeal || (scannerUsage?.remaining === 0)}
           >
-            {scanningMeal ? (
-              <ActivityIndicator size="small" color={theme.warning} />
-            ) : (
-              <>
-                <Ionicons name="camera" size={16} color={theme.warning} />
-                <View style={styles.scanButtonContent}>
-                  <Text style={[styles.headerButtonText, { color: theme.warning }]}>Scan Meal</Text>
-                  {scannerUsage && (
-                    <Text style={[styles.usageText, { color: theme.warning }]}>
-                      {scannerUsage.remaining}/{scannerUsage.total} left
+            <View style={styles.scanButtonWrapper}>
+              {scanningMeal ? (
+                <>
+                  <ActivityIndicator size="small" color={theme.warning} />
+                  <Text style={[styles.scanButtonProcessing, { color: theme.warning }]}>
+                    Analyzing...
+                  </Text>
+                </>
+              ) : (
+                <>
+                  <View style={[styles.scanIconContainer, { backgroundColor: theme.warning }]}>
+                    <Ionicons name="camera" size={18} color={theme.buttonText} />
+                    <Ionicons name="sparkles" size={12} color={theme.buttonText} style={styles.aiSparkle} />
+                  </View>
+                  <View style={styles.scanButtonContent}>
+                    <Text style={[styles.headerButtonText, { color: theme.warning, fontSize: 15 }]}>
+                      AI Scanner
                     </Text>
-                  )}
-                </View>
-              </>
-            )}
+                    {scannerUsage && (
+                      <View style={[styles.usageContainer, { backgroundColor: theme.warning }]}>
+                        <Text style={[styles.usageText, { color: theme.buttonText }]}>
+                          {scannerUsage.remaining}/{scannerUsage.total} left
+                        </Text>
+                      </View>
+                    )}
+                    {scannerUsage?.remaining === 0 && (
+                      <Text style={[styles.limitReachedText, { color: theme.danger }]}>
+                        Daily limit reached
+                      </Text>
+                    )}
+                  </View>
+                </>
+              )}
+            </View>
           </TouchableOpacity>
         </View>
       </View>
@@ -792,21 +824,34 @@ const MealPlanCalendar: React.FC = () => {
                         activeOpacity={0.7}
                       >
                         <View style={styles.mealCardContent}>
-                          {/* Meal Type Badge */}
+                          {/* Enhanced Meal Type Badge */}
                           <View style={[styles.mealTypeBadge, { 
                             backgroundColor: theme.mealAccent[meal.meal_type.toLowerCase() as keyof typeof theme.mealAccent] || theme.primary 
                           }]}>
-                            <Text style={[styles.mealTypeBadgeText, { color: theme.buttonTextPrimary }]}>
-                              {meal.meal_type}
-                            </Text>
+                            <View style={styles.mealTypeBadgeContent}>
+                              <Text style={[styles.mealTypeIcon, { color: theme.buttonTextPrimary }]}>
+                                {meal.meal_type.includes('Breakfast') ? '🌅' : 
+                                 meal.meal_type.includes('Lunch') ? '🌞' : 
+                                 meal.meal_type.includes('Dinner') ? '🌙' : 
+                                 meal.meal_type.includes('Snack') ? '🍎' : 
+                                 meal.meal_type === 'Scanned' ? '📸' : '🍽️'}
+                              </Text>
+                              <Text style={[styles.mealTypeBadgeText, { color: theme.buttonTextPrimary }]}>
+                                {meal.meal_type}
+                              </Text>
+                            </View>
                           </View>
 
                           {/* AI Scanner Badge for macro meals */}
                           {meal.isMacroMeal && (
                             <View style={[styles.aiScannerBadge, { backgroundColor: theme.aiAccent }]}>
-                              <Text style={[styles.aiScannerBadgeText, { color: theme.buttonTextPrimary }]}>
-                                🤖 AI
-                              </Text>
+                              <View style={styles.aiScannerBadgeContent}>
+                                <Ionicons name="sparkles" size={10} color={theme.buttonTextPrimary} />
+                                <Text style={[styles.aiScannerBadgeText, { color: theme.buttonTextPrimary }]}>
+                                  AI SCAN
+                                </Text>
+                                <Ionicons name="camera" size={8} color={theme.buttonTextPrimary} />
+                              </View>
                             </View>
                           )}
 
@@ -976,82 +1021,96 @@ const MealPlanCalendar: React.FC = () => {
         </View>
       </Modal>
 
-      {/* Meal Scan Results Modal */}
+      {/* Enhanced Meal Scan Results Modal */}
       <Modal visible={mealScanModalVisible} transparent animationType="slide">
         <View style={styles.modalContainer}>
-          <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
-            <Text style={[styles.modalTitle, { color: theme.text }]}>
-              Scanned Meal Nutrition
-            </Text>
+          <View style={[styles.scanModalContent, { backgroundColor: theme.card }]}>
+            <View style={styles.scanModalHeader}>
+              <View style={[styles.scanModalIcon, { backgroundColor: theme.aiAccent }]}>
+                <Ionicons name="sparkles" size={24} color={theme.buttonText} />
+              </View>
+              <Text style={[styles.modalTitle, { color: theme.text }]}>
+                🤖 AI Meal Analysis Complete!
+              </Text>
+              <Text style={[styles.scanModalSubtitle, { color: theme.textSecondary }]}>
+                Your meal has been analyzed and nutrition data saved
+              </Text>
+            </View>
             
             {scannedMealData && (
-              <ScrollView style={styles.scanResultsContainer}>
-                <Text style={[styles.scanResultsTitle, { color: theme.text }]}>
-                  Meal Analysis:
-                </Text>
-                
-                <View style={[styles.scanResultItem, { backgroundColor: theme.border }]}>
-                  <Text style={[styles.scanResultItemName, { color: theme.text }]}>
-                    {scannedMealData.meal_name || 'Analyzed Meal'}
-                  </Text>
-                  <Text style={[styles.scanResultItemNutrition, { color: theme.text }]}>
-                    Calories: {scannedMealData.calories || 'N/A'}
-                  </Text>
-                  <Text style={[styles.scanResultItemNutrition, { color: theme.text }]}>
-                    Protein: {scannedMealData.protein || 'N/A'}g
-                  </Text>
-                  <Text style={[styles.scanResultItemNutrition, { color: theme.text }]}>
-                    Carbs: {scannedMealData.carbs || 'N/A'}g
-                  </Text>
-                  <Text style={[styles.scanResultItemNutrition, { color: theme.text }]}>
-                    Fat: {scannedMealData.fat || 'N/A'}g
-                  </Text>
+              <ScrollView style={styles.scanResultsContainer} showsVerticalScrollIndicator={false}>
+                <View style={[styles.scanResultCard, { backgroundColor: theme.cardSecondary, borderColor: theme.border }]}>
+                  <View style={styles.scanResultHeader}>
+                    <Ionicons name="restaurant" size={20} color={theme.primary} />
+                    <Text style={[styles.scanResultItemName, { color: theme.text }]}>
+                      {scannedMealData.meal_name || 'Analyzed Meal'}
+                    </Text>
+                  </View>
+                  
+                  <View style={styles.nutritionGrid}>
+                    <View style={[styles.nutritionGridItem, { backgroundColor: theme.warningLight }]}>
+                      <Ionicons name="flame" size={16} color={theme.warning} />
+                      <Text style={[styles.nutritionGridValue, { color: theme.warning }]}>
+                        {scannedMealData.calories || 'N/A'}
+                      </Text>
+                      <Text style={[styles.nutritionGridLabel, { color: theme.warning }]}>calories</Text>
+                    </View>
+                    
+                    <View style={[styles.nutritionGridItem, { backgroundColor: theme.protein + '20' }]}>
+                      <Ionicons name="barbell" size={16} color={theme.protein} />
+                      <Text style={[styles.nutritionGridValue, { color: theme.protein }]}>
+                        {scannedMealData.protein || 'N/A'}g
+                      </Text>
+                      <Text style={[styles.nutritionGridLabel, { color: theme.protein }]}>protein</Text>
+                    </View>
+                    
+                    <View style={[styles.nutritionGridItem, { backgroundColor: theme.carbs + '20' }]}>
+                      <Ionicons name="leaf" size={16} color={theme.carbs} />
+                      <Text style={[styles.nutritionGridValue, { color: theme.carbs }]}>
+                        {scannedMealData.carbs || 'N/A'}g
+                      </Text>
+                      <Text style={[styles.nutritionGridLabel, { color: theme.carbs }]}>carbs</Text>
+                    </View>
+                    
+                    <View style={[styles.nutritionGridItem, { backgroundColor: theme.fat + '20' }]}>
+                      <Ionicons name="water" size={16} color={theme.fat} />
+                      <Text style={[styles.nutritionGridValue, { color: theme.fat }]}>
+                        {scannedMealData.fat || 'N/A'}g
+                      </Text>
+                      <Text style={[styles.nutritionGridLabel, { color: theme.fat }]}>fat</Text>
+                    </View>
+                  </View>
                 </View>
                 
-                <View style={[styles.totalNutritionContainer, { backgroundColor: theme.primary }]}>
-                  <Text style={[styles.totalNutritionTitle, { color: theme.buttonText }]}>
-                    Nutrition Summary:
-                  </Text>
-                  <Text style={[styles.totalNutritionText, { color: theme.buttonText }]}>
-                    Calories: {scannedMealData.calories || 'N/A'}
-                  </Text>
-                  <Text style={[styles.totalNutritionText, { color: theme.buttonText }]}>
-                    Protein: {scannedMealData.protein || 'N/A'}g
-                  </Text>
-                  <Text style={[styles.totalNutritionText, { color: theme.buttonText }]}>
-                    Carbs: {scannedMealData.carbs || 'N/A'}g
-                  </Text>
-                  <Text style={[styles.totalNutritionText, { color: theme.buttonText }]}>
-                    Fat: {scannedMealData.fat || 'N/A'}g
+                <View style={[styles.scanSuccessMessage, { backgroundColor: theme.successLight, borderColor: theme.success }]}>
+                  <Ionicons name="checkmark-circle" size={20} color={theme.success} />
+                  <Text style={[styles.scanSuccessText, { color: theme.success }]}>
+                    Meal data has been automatically added to your daily nutrition totals!
                   </Text>
                 </View>
               </ScrollView>
             )}
             
             <TouchableOpacity
-              style={[styles.modalButton, { backgroundColor: theme.primary }]}
+              style={[styles.scanModalButton, { backgroundColor: theme.primary }]}
               onPress={() => {
                 // The meal has already been saved to the macro_meals table by the edge function
                 if (scannedMealData && selectedScanDate) {
                   console.log('Meal macros saved to database:', scannedMealData);
-                  Alert.alert(
-                    'Success', 
-                    `Meal nutrition data has been saved and will appear in your daily totals!\n\nMeal: ${scannedMealData.meal_name || 'Analyzed Meal'}\nCalories: ${scannedMealData.calories}\nProtein: ${scannedMealData.protein}g`,
-                    [{ text: 'OK' }]
-                  );
                 }
                 setMealScanModalVisible(false);
                 setScannedMealData(null);
                 setSelectedScanDate(null);
               }}
             >
+              <Ionicons name="checkmark" size={20} color={theme.buttonText} style={{ marginRight: 8 }} />
               <Text style={[styles.modalButtonText, { color: theme.buttonText }]}>
-                Done
+                Got it!
               </Text>
             </TouchableOpacity>
             
             <TouchableOpacity
-              style={[styles.modalCancelButton, { backgroundColor: theme.border }]}
+              style={[styles.modalCancelButton, { backgroundColor: theme.background, borderColor: theme.border }]}
               onPress={() => {
                 setMealScanModalVisible(false);
                 setScannedMealData(null);
@@ -1059,7 +1118,7 @@ const MealPlanCalendar: React.FC = () => {
               }}
             >
               <Text style={[styles.modalCancelButtonText, { color: theme.text }]}>
-                Cancel
+                Close
               </Text>
             </TouchableOpacity>
           </View>
@@ -1314,7 +1373,7 @@ mealScanButtonText: {
     padding: 0,
     borderWidth: 2,
     borderRadius: 20,
-    height: SCREEN_HEIGHT * 0.725, // Increased from 0.65 to 0.70
+    height: SCREEN_HEIGHT * 0.725,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,
     shadowRadius: 12,
@@ -1396,6 +1455,18 @@ mealScanButtonText: {
     paddingVertical: 4,
     borderRadius: 12,
     zIndex: 1,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  mealTypeBadgeContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  mealTypeIcon: {
+    fontSize: 10,
   },
   mealTypeBadgeText: {
     fontSize: 10,
@@ -1617,6 +1688,11 @@ mealScanButtonText: {
     borderRadius: 8,
     zIndex: 1,
   },
+  aiScannerBadgeContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+  },
   aiScannerBadgeText: {
     fontSize: 8,
     fontWeight: 'bold',
@@ -1630,6 +1706,135 @@ mealScanButtonText: {
     fontWeight: '500',
     marginTop: 2,
     opacity: 0.9,
+  },
+  scanButtonWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    flex: 1,
+  },
+  scanButtonProcessing: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+  scanIconContainer: {
+    position: 'relative',
+    padding: 6,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  aiSparkle: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+  },
+  usageContainer: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+    marginTop: 2,
+  },
+  limitReachedText: {
+    fontSize: 9,
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  // Enhanced scan modal styles
+  scanModalContent: {
+    width: "95%",
+    maxWidth: 420,
+    borderRadius: 20,
+    padding: 24,
+    alignItems: "center",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.25,
+    shadowRadius: 16,
+    elevation: 10,
+    maxHeight: '85%',
+  },
+  scanModalHeader: {
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  scanModalIcon: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  scanModalSubtitle: {
+    fontSize: 14,
+    textAlign: 'center',
+    marginTop: 8,
+    lineHeight: 20,
+  },
+  scanResultCard: {
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+  },
+  scanResultHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+    gap: 8,
+  },
+  nutritionGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    justifyContent: 'space-between',
+  },
+  nutritionGridItem: {
+    flex: 1,
+    minWidth: '45%',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 12,
+    gap: 4,
+  },
+  nutritionGridValue: {
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  nutritionGridLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  scanSuccessMessage: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 12,
+  },
+  scanSuccessText: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '600',
+    lineHeight: 20,
+  },
+  scanModalButton: {
+    width: "100%",
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 12,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
   },
 });
 
