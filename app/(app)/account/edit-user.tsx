@@ -224,10 +224,10 @@ const EditUserScreen: React.FC = () => {
   const handleUpdateProfilePicture = async () => {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: 'images',
         allowsEditing: true,
         aspect: [1, 1],
-        quality: 0.8, // Reduce quality to manage file size
+        quality: 0.6, // Reduce quality to manage file size
         base64: true, // Get base64 for storing in database
       });
 
@@ -235,21 +235,24 @@ const EditUserScreen: React.FC = () => {
         setLoading(true);
         const asset = result.assets[0];
         
-        // For now, we'll store the local URI. In production, you might want to:
-        // 1. Upload to Supabase Storage and store the public URL
-        // 2. Or convert to base64 and store in the bytea field
-        // 3. Or implement proper image storage service
+        if (!asset.base64) {
+          throw new Error('Failed to get image data');
+        }
         
+        // Create data URI from base64
+        const dataUri = `data:image/jpeg;base64,${asset.base64}`;
+        
+        // Store the base64 data URI in the database
         await updateUserField(
-          { profile_picture: asset.uri }, // Using URI for now
+          { profile_picture: dataUri },
           'Profile picture updated successfully!',
           'Failed to update profile picture.'
         );
-        setProfilePicture(asset.uri);
+        setProfilePicture(dataUri);
       }
     } catch (error) {
       console.error('Error updating profile picture:', error);
-      Alert.alert('Error', 'Failed to update profile picture');
+      Alert.alert('Error', 'Failed to update profile picture. Please try again.');
     } finally {
       setLoading(false);
     }

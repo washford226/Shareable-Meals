@@ -67,9 +67,19 @@ const AccountScreen: React.FC = () => {
         setUsername(data.username || 'Unknown User');
         setCaloriesGoal(data.calories_goal);
         setDietaryRestrictions(data.dietary_restrictions || 'None specified');
-        setEmail(data.email || 'No email provided');
+        setEmail(userData.user.email || 'No email provided');
         setAllergies(data.allergies || 'None specified');
-        setProfilePicture(data.profile_picture);
+        
+        // Handle profile picture - convert hex bytes to string if needed
+        let profilePictureUri = data.profile_picture;
+        if (profilePictureUri && typeof profilePictureUri === 'string' && profilePictureUri.startsWith('\\x')) {
+          // Convert hex bytes back to string
+          const hexString = profilePictureUri.slice(2); // Remove \x prefix
+          const bytes = hexString.match(/.{1,2}/g) || [];
+          profilePictureUri = bytes.map(byte => String.fromCharCode(parseInt(byte, 16))).join('');
+        }
+        
+        setProfilePicture(profilePictureUri);
         setIsAdmin(data.is_admin || false);
         
       } catch (error) {
@@ -235,9 +245,19 @@ const AccountScreen: React.FC = () => {
                       setUsername(data.username || 'Unknown User');
                       setCaloriesGoal(data.calories_goal);
                       setDietaryRestrictions(data.dietary_restrictions || 'None specified');
-                      setEmail(data.email || 'No email provided');
+                      setEmail(userData.user.email || 'No email provided');
                       setAllergies(data.allergies || 'None specified');
-                      setProfilePicture(data.profile_picture);
+                      
+                      // Handle profile picture - convert hex bytes to string if needed
+                      let profilePictureUri = data.profile_picture;
+                      if (profilePictureUri && typeof profilePictureUri === 'string' && profilePictureUri.startsWith('\\x')) {
+                        // Convert hex bytes back to string
+                        const hexString = profilePictureUri.slice(2); // Remove \x prefix
+                        const bytes = hexString.match(/.{1,2}/g) || [];
+                        profilePictureUri = bytes.map(byte => String.fromCharCode(parseInt(byte, 16))).join('');
+                      }
+                      
+                      setProfilePicture(profilePictureUri);
                       setIsAdmin(data.is_admin || false);
                       
                     } catch (err) {

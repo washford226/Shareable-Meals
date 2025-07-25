@@ -421,7 +421,14 @@ const OtherMeals: React.FC = () => {
             {/* Meal Image */}
             <View style={styles.imageContainer}>
               {item.picture && typeof item.picture === "string" ? (
-                <Image source={{ uri: item.picture }} style={styles.mealImage} />
+                <Image 
+                  source={{ 
+                    uri: item.picture.startsWith('\\x') 
+                      ? item.picture.slice(2).match(/.{2}/g)?.map((hex: string) => String.fromCharCode(parseInt(hex, 16))).join('') || ''
+                      : item.picture 
+                  }} 
+                  style={styles.mealImage} 
+                />
               ) : (
                 <View style={[styles.imagePlaceholder, { backgroundColor: theme.border }]}>
                   <Ionicons name="image" size={32} color={theme.subtext} />

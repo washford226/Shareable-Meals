@@ -116,30 +116,41 @@ const MealPlanCalendar: React.FC = () => {
       }
 
       // Transform the data to match the expected Meal interface
-      const transformedMeals = data?.map(entry => ({
-        id: entry.meals?.id || entry.meal_id,
-        name: entry.meals?.name || "Unknown Meal",
-        description: entry.meals?.description || "",
-        calories: entry.meals?.calories || 0,
-        protein: entry.meals?.protein || 0,
-        carbohydrates: entry.meals?.carbohydrates || 0,
-        fat: entry.meals?.fat || 0,
-        picture: entry.meals?.picture || null,
-        meal_type: entry.meal_type || "Other", // Get meal_type from meal_plan table
-        userName: entry.meals?.created_by || "",
-        visibility: entry.meals?.visibility || false,
-        averageRating: 0, // Not stored in database
-        reviewCount: 0, // Not stored in database
-        meal_plan_id: entry.meal_plan_id,
-        instructions: entry.meals?.instructions || "",
-        recipeLink: entry.meals?.recipeLink || "",
-        created_at: entry.meals?.created_at || "",
-        created_by_ai: entry.meals?.created_by_ai || false,
-        favorite: entry.meals?.favorite || false,
-        dietary_restrictions: entry.meals?.dietary_restrictions || "",
-        servings: entry.meals?.servings || 1,
-        cuisine: entry.meals?.cuisine || ""
-      })) || [];
+      const transformedMeals = data?.map(entry => {
+        // Handle profile picture - convert hex bytes to string if needed
+        let pictureUri = entry.meals?.picture || null;
+        if (pictureUri && typeof pictureUri === 'string' && pictureUri.startsWith('\\x')) {
+          // Convert hex bytes back to string
+          const hexString = pictureUri.slice(2); // Remove \x prefix
+          const bytes = hexString.match(/.{1,2}/g) || [];
+          pictureUri = bytes.map(byte => String.fromCharCode(parseInt(byte, 16))).join('');
+        }
+
+        return {
+          id: entry.meals?.id || entry.meal_id,
+          name: entry.meals?.name || "Unknown Meal",
+          description: entry.meals?.description || "",
+          calories: entry.meals?.calories || 0,
+          protein: entry.meals?.protein || 0,
+          carbohydrates: entry.meals?.carbohydrates || 0,
+          fat: entry.meals?.fat || 0,
+          picture: pictureUri,
+          meal_type: entry.meal_type || "Other", // Get meal_type from meal_plan table
+          userName: entry.meals?.created_by || "",
+          visibility: entry.meals?.visibility || false,
+          averageRating: 0, // Not stored in database
+          reviewCount: 0, // Not stored in database
+          meal_plan_id: entry.meal_plan_id,
+          instructions: entry.meals?.instructions || "",
+          recipeLink: entry.meals?.recipeLink || "",
+          created_at: entry.meals?.created_at || "",
+          created_by_ai: entry.meals?.created_by_ai || false,
+          favorite: entry.meals?.favorite || false,
+          dietary_restrictions: entry.meals?.dietary_restrictions || "",
+          servings: entry.meals?.servings || 1,
+          cuisine: entry.meals?.cuisine || ""
+        };
+      }) || [];
 
       // Clear loading state for this date
       setLoadingDates(prev => ({ ...prev, [date]: false }));

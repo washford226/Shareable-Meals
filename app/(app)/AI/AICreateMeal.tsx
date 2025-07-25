@@ -217,18 +217,49 @@ const AICreateMeal = () => {
 
   const handleMealFieldChange = useCallback((field: string, value: string) => {
     setGeneratedMeal(prev => ({ ...prev, [field]: value }));
+    
+    // Clear validation error for this field when user types
     if (validationErrors[field]) {
       setValidationErrors(prev => ({ ...prev, [field]: '' }));
     }
+    
+    // Also validate the field immediately to check if it's now valid
+    const newErrors = { ...validationErrors };
+    
+    // Validate the specific field
+    if (field === 'name') {
+      if (value.trim() && value.length <= 100) {
+        delete newErrors.name;
+      }
+    } else if (field === 'description') {
+      if (value.trim() && value.length <= 500) {
+        delete newErrors.description;
+      }
+    } else if (field === 'servings') {
+      if (value && /^\d+$/.test(value) && parseInt(value) >= 1) {
+        delete newErrors.servings;
+      }
+    } else if (field === 'instructions') {
+      if (value.trim() && value.length <= 2000) {
+        delete newErrors.instructions;
+      }
+    }
+    
+    setValidationErrors(newErrors);
   }, [validationErrors]);
 
   const isMealValid = useCallback(() => {
     return generatedMeal.name.trim() && 
+           generatedMeal.name.length <= 100 &&
            generatedMeal.description.trim() && 
+           generatedMeal.description.length <= 500 &&
            generatedMeal.instructions.trim() && 
-           generatedMeal.ingredients.length > 0 &&
-           Object.keys(validationErrors).length === 0;
-  }, [generatedMeal, validationErrors]);
+           generatedMeal.instructions.length <= 2000 &&
+           generatedMeal.servings &&
+           /^\d+$/.test(generatedMeal.servings) &&
+           parseInt(generatedMeal.servings) >= 1 &&
+           generatedMeal.ingredients.length > 0;
+  }, [generatedMeal]);
 
   // Enhanced save function with validation and error handling
   const handleSaveMeal = useCallback(async () => {
@@ -412,7 +443,32 @@ const AICreateMeal = () => {
         name: data.name || "",
         description: data.description || "",
         servings: data.servings || "1",
-        ingredients: data.ingredients || [],
+        ingredients: (data.ingredients || []).map((ingredient: string[] | any) => {
+          // Handle 2D array format: [name, quantity, unit]
+          if (Array.isArray(ingredient) && ingredient.length >= 3) {
+            return {
+              name: ingredient[0] || "",
+              quantity: ingredient[1] || "",
+              unit: ingredient[2] || ""
+            };
+          }
+          // Fallback for old object format (just in case)
+          else if (typeof ingredient === 'object' && ingredient.name) {
+            return {
+              name: ingredient.name || "",
+              quantity: ingredient.quantity || "",
+              unit: ingredient.unit || ""
+            };
+          }
+          // Fallback for unexpected format
+          else {
+            return {
+              name: String(ingredient) || "",
+              quantity: "",
+              unit: ""
+            };
+          }
+        }),
         instructions: data.instructions || "",
       });
     } catch (error: any) {

@@ -11,7 +11,9 @@ import {
   ActivityIndicator,
   Switch,
   RefreshControl,
+  Image,
 } from "react-native";
+import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "../../../../context/ThemeContext";
 import RNPickerSelect from "react-native-picker-select";
@@ -38,6 +40,7 @@ export default function EditMealScreen() {
 
   const [name, setName] = useState<string>("");
   const [description, setDescription] = useState<string>("");
+  const [picture, setPicture] = useState<string>("");
   const [ingredients, setIngredients] = useState<{ name: string; quantity: string; unit: string }[]>([]);
   const [instructions, setInstructions] = useState<string>("");
   const [recipeLink, setRecipeLink] = useState<string>("");
@@ -116,6 +119,17 @@ export default function EditMealScreen() {
         // Set form data
         setName(mealData.name || "");
         setDescription(mealData.description || "");
+        // Handle picture with hex conversion
+        if (mealData.picture) {
+          const pictureUri = typeof mealData.picture === "string" 
+            ? mealData.picture.startsWith('\\x') 
+              ? mealData.picture.slice(2).match(/.{2}/g)?.map((hex: string) => String.fromCharCode(parseInt(hex, 16))).join('') || ''
+              : mealData.picture
+            : "";
+          setPicture(pictureUri);
+        } else {
+          setPicture("");
+        }
         setIngredients(
           ingredientsData.length > 0 
             ? ingredientsData.map(ing => ({
@@ -254,6 +268,7 @@ export default function EditMealScreen() {
             visibility,
             dietary_restrictions: dietaryRestriction || null,
             cuisine: cuisine || null,
+            picture: picture || null,
           })
           .eq("id", mealId)
           .eq("user_id", userId);
@@ -332,6 +347,7 @@ export default function EditMealScreen() {
     mealId,
     name,
     description,
+    picture,
     ingredients,
     instructions,
     recipeLink,
@@ -383,6 +399,50 @@ export default function EditMealScreen() {
       router.back();
     }
   }, [hasUnsavedChanges, router]);
+
+  // Handle image selection
+  const handleImagePicker = useCallback(async () => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Required', 'Sorry, we need camera roll permissions to upload images.');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: 'images',
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.8,
+        base64: true,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        const asset = result.assets[0];
+        if (asset.base64) {
+          const imageUri = `data:image/jpeg;base64,${asset.base64}`;
+          handleFieldChange(setPicture, imageUri);
+        } else {
+          Alert.alert('Error', 'Failed to process the selected image. Please try again.');
+        }
+      }
+    } catch (error) {
+      console.error('Error picking image:', error);
+      Alert.alert('Error', 'Failed to select image. Please try again.');
+    }
+  }, [handleFieldChange]);
+
+  // Handle image removal
+  const handleRemoveImage = useCallback(() => {
+    Alert.alert(
+      'Remove Image',
+      'Are you sure you want to remove the current image?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Remove', style: 'destructive', onPress: () => handleFieldChange(setPicture, '') }
+      ]
+    );
+  }, [handleFieldChange]);
 
   useEffect(() => {
     if (!mealId) {
@@ -533,6 +593,53 @@ export default function EditMealScreen() {
             numberOfLines={3}
           />
         </View>
+      </View>
+
+      {/* Image Card */}
+      <View style={[styles.formCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+        <View style={styles.cardHeader}>
+          <Ionicons name="image" size={24} color={theme.primary} />
+          <Text style={[styles.cardTitle, { color: theme.text }]}>Meal Image</Text>
+        </View>
+        
+        {picture ? (
+          <View style={styles.imageSection}>
+            <View style={[styles.imagePreview, { borderColor: theme.border }]}>
+              <Image
+                source={{ uri: picture }}
+                style={styles.previewImage}
+                resizeMode="cover"
+              />
+            </View>
+            <View style={styles.imageActions}>
+              <TouchableOpacity
+                style={[styles.imageButton, { borderColor: theme.primary }]}
+                onPress={handleImagePicker}
+              >
+                <Ionicons name="camera" size={16} color={theme.primary} />
+                <Text style={[styles.imageButtonText, { color: theme.primary }]}>Change Image</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.imageButton, styles.removeImageButton, { borderColor: theme.danger }]}
+                onPress={handleRemoveImage}
+              >
+                <Ionicons name="trash" size={16} color={theme.danger} />
+                <Text style={[styles.imageButtonText, { color: theme.danger }]}>Remove</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : (
+          <View style={styles.imageSection}>
+            <TouchableOpacity
+              style={[styles.imagePlaceholder, { borderColor: theme.border, backgroundColor: theme.background }]}
+              onPress={handleImagePicker}
+            >
+              <Ionicons name="camera" size={48} color={theme.subtext} />
+              <Text style={[styles.placeholderText, { color: theme.subtext }]}>Tap to add image</Text>
+              <Text style={[styles.placeholderSubtext, { color: theme.placeholder }]}>Optional</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
 
       {/* Ingredients Card */}
@@ -1054,6 +1161,61 @@ const styles = StyleSheet.create({
   secondaryButtonText: {
     fontSize: 16,
     fontWeight: '600',
+  },
+
+  // Image Styles
+  imageSection: {
+    marginTop: 8,
+  },
+  imagePreview: {
+    borderRadius: 12,
+    borderWidth: 1,
+    overflow: 'hidden',
+    marginBottom: 16,
+  },
+  previewImage: {
+    width: '100%',
+    height: 200,
+  },
+  imageActions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  imageButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: 8,
+  },
+  removeImageButton: {
+    // Additional styling for remove button if needed
+  },
+  imageButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  imagePlaceholder: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 40,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderStyle: 'dashed',
+    gap: 8,
+  },
+  placeholderText: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginTop: 8,
+  },
+  placeholderSubtext: {
+    fontSize: 14,
+    fontWeight: '500',
   },
 
   // Legacy styles for compatibility

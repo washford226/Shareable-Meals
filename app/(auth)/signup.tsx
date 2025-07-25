@@ -113,48 +113,24 @@ const SignUpScreen: React.FC = () => {
     }
   };
 
-  // Pick image and upload to Supabase Storage
+  // Pick image and convert to base64
   const pickImage = async () => {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
         aspect: [3, 3],
-        quality: 1,
+        quality: 0.8,
+        base64: true,
       });
 
-      if (!result.canceled) {
-        const uri = result.assets[0].uri;
-        setProfilePicture(uri);
+      if (!result.canceled && result.assets[0].base64) {
+        const base64Image = `data:image/jpeg;base64,${result.assets[0].base64}`;
+        setProfilePicture(base64Image);
       }
     } catch (error) {
       console.error("Error picking image:", error);
       Alert.alert("Error", "Failed to pick an image.");
-    }
-  };
-
-  // Upload image to Supabase Storage and return public URL
-  const uploadProfilePicture = async (userId: string, uri: string) => {
-    try {
-      const fileExt = uri.split(".").pop();
-      const fileName = `${userId}.${fileExt}`;
-      const response = await fetch(uri);
-      const blob = await response.blob();
-
-      const { error } = await supabase.storage
-        .from("profile-pictures")
-        .upload(fileName, blob, { upsert: true });
-
-      if (error) throw error;
-
-      const { data } = supabase.storage
-        .from("profile-pictures")
-        .getPublicUrl(fileName);
-
-      return data.publicUrl;
-    } catch (error) {
-      console.error("Error uploading profile picture:", error);
-      return null;
     }
   };
 
@@ -242,16 +218,7 @@ const SignUpScreen: React.FC = () => {
       }
       const userId = signUpData.user.id;
 
-      // 2. Upload profile picture if provided
-      let profilePictureUrl: string | null = null;
-      if (profilePicture) {
-        profilePictureUrl = await uploadProfilePicture(userId, profilePicture);
-        if (!profilePictureUrl) {
-          console.warn("Failed to upload profile picture, but continuing with signup");
-        }
-      }
-
-      // 3. Insert user profile in 'user_profiles' table
+      // 2. Insert user profile in 'user_profiles' table
       const { error: profileError } = await supabase.from("user_profiles").upsert([
         {
           id: userId,
@@ -260,7 +227,7 @@ const SignUpScreen: React.FC = () => {
           calories_goal: caloriesGoal ? parseInt(caloriesGoal) : null,
           dietary_restrictions: dietaryRestrictions || null,
           allergies: allergies || null,
-          profile_picture: profilePictureUrl,
+          profile_picture: profilePicture || null,
         },
       ]);
 

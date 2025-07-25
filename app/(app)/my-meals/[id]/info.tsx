@@ -433,7 +433,13 @@ const MyMealInfo = () => {
       {meal?.picture ? (
         <View style={[styles.imageCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
           <Image
-            source={{ uri: typeof meal.picture === "string" ? meal.picture : "" }}
+            source={{ 
+              uri: typeof meal.picture === "string" 
+                ? meal.picture.startsWith('\\x') 
+                  ? meal.picture.slice(2).match(/.{2}/g)?.map(hex => String.fromCharCode(parseInt(hex, 16))).join('') || ''
+                  : meal.picture
+                : "" 
+            }}
             style={styles.mealImage}
             resizeMode="cover"
           />

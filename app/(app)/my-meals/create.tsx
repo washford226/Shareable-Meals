@@ -82,24 +82,29 @@ const CreateMealScreen = () => {
     setUploadingImage(true);
     
     try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Required', 'Sorry, we need camera roll permissions to upload images.');
+        setUploadingImage(false);
+        return;
+      }
+
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ["images"],
+        mediaTypes: 'images',
         allowsEditing: true,
-        aspect: [3, 3],
-        quality: 1,
+        aspect: [4, 3],
+        quality: 0.8,
+        base64: true,
       });
 
-      if (!result.canceled) {
-        const uriParts = result.assets[0].uri.split(".");
-        const fileType = uriParts[uriParts.length - 1].toLowerCase();
-
-        if (!["jpg", "jpeg", "png"].includes(fileType)) {
-          setError("Only JPEG and PNG images are allowed.");
-          Alert.alert("Error", "Only JPEG and PNG images are allowed.");
-          return;
+      if (!result.canceled && result.assets[0]) {
+        const asset = result.assets[0];
+        if (asset.base64) {
+          const imageUri = `data:image/jpeg;base64,${asset.base64}`;
+          setMealPicture(imageUri);
+        } else {
+          Alert.alert('Error', 'Failed to process the selected image. Please try again.');
         }
-
-        setMealPicture(result.assets[0].uri);
       }
     } catch (error) {
       console.error("Error picking image:", error);
@@ -125,42 +130,6 @@ const CreateMealScreen = () => {
       newIngredients[index][field] = value;
       return newIngredients;
     });
-  }, []);
-
-  // Upload image to Supabase Storage and return the public URL
-  const uploadImageToSupabase = useCallback(async (uri: string): Promise<string | null> => {
-    try {
-      const response = await fetch(uri);
-      
-      if (!response.ok) {
-        throw new Error(`Failed to fetch image: ${response.status}`);
-      }
-      
-      const blob = await response.blob();
-      const fileExt = uri.split(".").pop();
-      const fileName = `meal_${Date.now()}.${fileExt}`;
-
-      const { data, error } = await supabase.storage
-        .from("meal-pictures")
-        .upload(fileName, blob, {
-          cacheControl: "3600",
-          upsert: false,
-        });
-
-      if (error) {
-        throw error;
-      }
-
-      // Get public URL
-      const { data: publicUrlData } = supabase.storage
-        .from("meal-pictures")
-        .getPublicUrl(fileName);
-
-      return publicUrlData?.publicUrl || null;
-    } catch (error) {
-      console.error("Image upload error:", error);
-      throw new Error("Failed to upload image. Please try again.");
-    }
   }, []);
 
   const validateForm = useCallback(() => {
@@ -236,16 +205,8 @@ const CreateMealScreen = () => {
         }
         const userId = userData.user.id;
 
-        let pictureUrl = null;
-        if (mealPicture) {
-          try {
-            pictureUrl = await uploadImageToSupabase(mealPicture);
-          } catch (imageError) {
-            console.error("Image upload failed:", imageError);
-            setError("Failed to upload image. Continuing without image...");
-            // Continue without image rather than failing entirely
-          }
-        }
+        // Use the picture directly as base64 data URI
+        const pictureData = mealPicture || null;
 
         // 1. Insert the meal (without ingredients)
         const { data: mealData, error: mealError } = await supabase.from("meals").insert([
@@ -259,7 +220,7 @@ const CreateMealScreen = () => {
             dietary_restrictions: mealDietaryRestriction || null,
             servings: mealServings ? parseInt(mealServings) : 1,
             cuisine: mealCuisine || null,
-            picture: pictureUrl,
+            picture: pictureData,
           },
         ]).select("id").single();
 
@@ -337,7 +298,6 @@ const CreateMealScreen = () => {
     mealDietaryRestriction, 
     mealCuisine, 
     mealServings, 
-    uploadImageToSupabase, 
     router
   ]);
 
@@ -428,42 +388,62 @@ const CreateMealScreen = () => {
       {/* Image Card */}
       <View style={[styles.formCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
         <View style={styles.cardHeader}>
-          <Ionicons name="camera" size={24} color={theme.primary} />
+          <Ionicons name="image" size={24} color={theme.primary} />
           <Text style={[styles.cardTitle, { color: theme.text }]}>Meal Image</Text>
         </View>
         
-        <TouchableOpacity 
-          style={[styles.imagePicker, { backgroundColor: theme.primary, borderColor: theme.primary }]} 
-          onPress={pickMealImage}
-          disabled={uploadingImage}
-        >
-          <View style={styles.imagePickerContent}>
+        {mealPicture ? (
+          <View style={styles.imageSection}>
+            <View style={[styles.imagePreviewContainer, { borderColor: theme.border }]}>
+              <Image 
+                source={{ uri: mealPicture }} 
+                style={styles.previewImage} 
+                resizeMode="cover"
+              />
+            </View>
+            <View style={styles.imageActions}>
+              <TouchableOpacity
+                style={[styles.imageButton, { borderColor: theme.primary }]}
+                onPress={pickMealImage}
+                disabled={uploadingImage}
+              >
+                {uploadingImage ? (
+                  <ActivityIndicator size="small" color={theme.primary} />
+                ) : (
+                  <Ionicons name="camera" size={16} color={theme.primary} />
+                )}
+                <Text style={[styles.imageButtonText, { color: theme.primary }]}>
+                  {uploadingImage ? "Updating..." : "Change Image"}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.imageButton, { borderColor: theme.danger }]}
+                onPress={() => setMealPicture(null)}
+              >
+                <Ionicons name="trash" size={16} color={theme.danger} />
+                <Text style={[styles.imageButtonText, { color: theme.danger }]}>Remove</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : (
+          <TouchableOpacity 
+            style={[styles.imagePlaceholder, { borderColor: theme.border, backgroundColor: theme.background }]}
+            onPress={pickMealImage}
+            disabled={uploadingImage}
+          >
             {uploadingImage ? (
               <>
-                <ActivityIndicator color={theme.buttonText} />
-                <Text style={[styles.imagePickerText, { color: theme.buttonText }]}>Uploading...</Text>
+                <ActivityIndicator size="large" color={theme.primary} />
+                <Text style={[styles.placeholderText, { color: theme.text }]}>Processing image...</Text>
               </>
             ) : (
               <>
-                <Ionicons name="image" size={24} color={theme.buttonText} />
-                <Text style={[styles.imagePickerText, { color: theme.buttonText }]}>
-                  {mealPicture ? "Change Image" : "Add Meal Image"}
-                </Text>
+                <Ionicons name="camera" size={48} color={theme.subtext} />
+                <Text style={[styles.placeholderText, { color: theme.subtext }]}>Tap to add image</Text>
+                <Text style={[styles.placeholderSubtext, { color: theme.placeholder }]}>Optional</Text>
               </>
             )}
-          </View>
-        </TouchableOpacity>
-        
-        {mealPicture && (
-          <View style={styles.imagePreview}>
-            <Image source={{ uri: mealPicture }} style={[styles.mealPicture, { borderColor: theme.border }]} />
-            <TouchableOpacity 
-              style={[styles.removeImageButton, { backgroundColor: theme.danger }]}
-              onPress={() => setMealPicture(null)}
-            >
-              <Ionicons name="close" size={16} color={theme.buttonText} />
-            </TouchableOpacity>
-          </View>
+          </TouchableOpacity>
         )}
       </View>
 
@@ -1069,6 +1049,55 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "bold",
   },
+
+  // Additional Image Styles
+  imageSection: {
+    marginTop: 8,
+  },
+  imagePreviewContainer: {
+    borderRadius: 12,
+    borderWidth: 1,
+    overflow: 'hidden',
+    marginBottom: 16,
+  },
+  previewImage: {
+    width: '100%',
+    height: 200,
+  },
+  imageButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: 8,
+  },
+  imageButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  imagePlaceholder: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 40,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderStyle: 'dashed',
+    gap: 8,
+  },
+  placeholderText: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginTop: 8,
+  },
+  placeholderSubtext: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+
   errorBanner: {
     flexDirection: "row",
     justifyContent: "space-between",

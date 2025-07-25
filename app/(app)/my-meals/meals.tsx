@@ -638,7 +638,14 @@ const applyFilters = useCallback(async () => {
 
               {/* Meal Image */}
               {item.picture && typeof item.picture === "string" ? (
-                <Image source={{ uri: item.picture }} style={styles.mealPicture} />
+                <Image 
+                  source={{ 
+                    uri: item.picture.startsWith('\\x') 
+                      ? item.picture.slice(2).match(/.{2}/g)?.map((hex: string) => String.fromCharCode(parseInt(hex, 16))).join('') || ''
+                      : item.picture
+                  }} 
+                  style={styles.mealPicture} 
+                />
               ) : (
                 <View style={[styles.mealPicturePlaceholder, { backgroundColor: theme.cardSecondary }]}>
                   <Ionicons name="image-outline" size={32} color={theme.subtext} />

@@ -353,7 +353,14 @@ const MealDetails = () => {
         {/* Meal Image Card */}
         <View style={[styles.imageCard, { backgroundColor: theme.card, shadowColor: theme.shadow }]}>
           {meal.picture && typeof meal.picture === "string" ? (
-            <Image source={{ uri: meal.picture }} style={styles.mealImage} />
+            <Image 
+              source={{ 
+                uri: meal.picture.startsWith('\\x') 
+                  ? meal.picture.slice(2).match(/.{2}/g)?.map((hex: string) => String.fromCharCode(parseInt(hex, 16))).join('') || ''
+                  : meal.picture
+              }} 
+              style={styles.mealImage} 
+            />
           ) : (
             <View style={[styles.imagePlaceholder, { backgroundColor: theme.border }]}>
               <Ionicons name="image" size={48} color={theme.subtext} />
