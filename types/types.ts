@@ -1,5 +1,5 @@
 export interface Meal {
-  id: number; // Ensure this matches the type used in your backend (number or string)
+  id: number | string; // Allow both number and string to support macro meal IDs like "macro_123"
   name: string;
   description: string;
   calories: number;
@@ -10,7 +10,7 @@ export interface Meal {
   visibility: boolean; // Indicates if the meal is public or private
   averageRating: number;
   reviewCount?: number;
-  meal_type: "Breakfast" | "Lunch" | "Dinner" | "Other";
+  meal_type: "Breakfast" | "Lunch" | "Dinner" | "Other" | "Scanned";
   picture: string | Blob | null; // Allow null if no picture is provided
   meal_plan_id?: number; // Optional if not part of a meal plan
   instructions?: string; // Optional field for meal preparation instructions
@@ -22,6 +22,7 @@ export interface Meal {
   servings?: number; // Optional field for number of servings
   cuisine?: string; // Optional field for cuisine type
   ingredients?: MealIngredient[]; // Optional array of ingredients from meal_ingredients table
+  isMacroMeal?: boolean; // Flag to identify meals from macro_meals table
 }
 
 export interface MealIngredient {

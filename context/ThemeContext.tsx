@@ -45,6 +45,7 @@ const lightTheme = {
     lunch: '#f0fdf4', // Light green (fresh/midday)
     dinner: '#fdf2f8', // Light pink (evening/sunset)
     other: '#f8fafc', // Light blue-gray (neutral)
+    scanned: '#fef3c7', // Light amber for AI-scanned meals
   },
   mealText: '#1a1a1a', // Consistent with main text
   mealAccent: { // Accent colors for meal categories
@@ -52,6 +53,7 @@ const lightTheme = {
     lunch: '#22c55e', // Green accent
     dinner: '#ec4899', // Pink accent
     other: '#64748b', // Gray accent
+    scanned: '#f59e0b', // Amber accent for scanned meals
   },
   
   // Nutrition macro colors
@@ -120,6 +122,7 @@ const darkTheme = {
     lunch: '#14532d', // Dark green
     dinner: '#831843', // Dark pink
     other: '#1e293b', // Dark blue-gray
+    scanned: '#78350f', // Dark amber for AI-scanned meals
   },
   mealText: '#f8fafc', // Light text
   mealAccent: { // Same accent colors work in dark
@@ -127,6 +130,7 @@ const darkTheme = {
     lunch: '#22c55e',
     dinner: '#ec4899',
     other: '#94a3b8',
+    scanned: '#f59e0b', // Amber accent for scanned meals
   },
   
   // Nutrition macro colors

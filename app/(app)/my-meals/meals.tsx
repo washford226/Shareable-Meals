@@ -71,7 +71,7 @@ const MyMeals: React.FC<MyMealsProps> = ({ onCreateMeal}) => {
   const [filtersLoaded, setFiltersLoaded] = useState(false);
   const [cuisineFilter, setCuisineFilter] = useState<string>("");
   const [tempCuisineFilter, setTempCuisineFilter] = useState<string>(cuisineFilter);
-  const [favoriteLoading, setFavoriteLoading] = useState<{ [key: number]: boolean }>({});
+  const [favoriteLoading, setFavoriteLoading] = useState<{ [key: string]: boolean }>({});
   const cuisineOptions = [
   { label: "All", value: "" },
   { label: "Italian", value: "Italian" },
@@ -107,8 +107,13 @@ const MyMeals: React.FC<MyMealsProps> = ({ onCreateMeal}) => {
     }
   }, []);
 
-  const toggleFavorite = async (mealId: number) => {
+  const toggleFavorite = async (mealId: number | string) => {
     if (favoriteLoading[mealId]) return; // Prevent multiple toggles
+    
+    // Skip toggle for macro meals (they don't have favorite status in database)
+    if (typeof mealId === 'string' && mealId.startsWith('macro_')) {
+      return;
+    }
     
     try {
       setFavoriteLoading(prev => ({ ...prev, [mealId]: true }));
@@ -596,7 +601,7 @@ const applyFilters = useCallback(async () => {
       ) : (
         <FlatList
           data={filteredMeals}
-          keyExtractor={(item) => item.id.toString()}
+          keyExtractor={(item) => String(item.id)}
           numColumns={2}
           refreshControl={
             <RefreshControl
@@ -985,7 +990,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: 'transparent',
-    paddingTop: 25, // Add top padding to avoid status bar overlap
+    paddingTop: 45, // Add top padding to avoid status bar overlap
   },
   centerContent: {
     flex: 1,

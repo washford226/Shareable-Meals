@@ -8,10 +8,16 @@ import {
   Alert,
   ActivityIndicator,
   RefreshControl,
+  Modal,
 } from "react-native";
 import { useTheme } from "../../../context/ThemeContext";
 import { useRouter } from "expo-router";
 import { supabase } from "utils/supabase";
+import * as ImagePicker from 'expo-image-picker';
+import * as ImageManipulator from 'expo-image-manipulator';
+import * as FileSystem from 'expo-file-system';
+import { Ionicons } from '@expo/vector-icons';
+import { checkScannerUsage, incrementScannerUsage, getScannerUsageStatus } from '../../../utils/aiUsageUtils';
 
 const PantryScreen = () => {
   const { theme } = useTheme();
@@ -31,6 +37,12 @@ const PantryScreen = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
   const [deletingId, setDeletingId] = useState<number | null>(null);
+  
+  // Camera scanning states
+  const [scanModalVisible, setScanModalVisible] = useState(false);
+  const [scanningItems, setScanningItems] = useState(false);
+  const [detectedItems, setDetectedItems] = useState<string[]>([]);
+  const [scannerUsage, setScannerUsage] = useState<{ used: number; remaining: number; total: number } | null>(null);
 
   // Fetch pantry items from Supabase
   const fetchPantryItems = useCallback(async (showLoading = true) => {
@@ -152,8 +164,160 @@ const PantryScreen = () => {
     return 'fresh';
   }, []);
 
+  // Load scanner usage status
+  const loadScannerUsage = useCallback(async () => {
+    const usage = await getScannerUsageStatus();
+    setScannerUsage(usage);
+  }, []);
+
+  // Camera functionality for pantry scanning
+  const resizeAndEncode = async (uri: string): Promise<string> => {
+    try {
+      // Resize image to 512x512 max and compress to JPEG with 70% quality
+      const manipResult = await ImageManipulator.manipulateAsync(
+        uri,
+        [{ resize: { width: 512 } }],
+        { 
+          compress: 0.7, // 70% quality (60-80% range)
+          format: ImageManipulator.SaveFormat.JPEG 
+        }
+      );
+
+      // Convert to base64
+      const base64 = await FileSystem.readAsStringAsync(manipResult.uri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+
+      // Log image size for debugging
+      console.log(`Resized image size: ${Math.round(base64.length * 0.75 / 1024)} KB`);
+      
+      return base64;
+    } catch (error) {
+      console.error('Error resizing image:', error);
+      throw new Error('Failed to process image. Please try again.');
+    }
+  };
+
+  const requestCameraPermissions = async () => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert(
+        'Camera Permission Required',
+        'Please enable camera permissions to scan pantry items.',
+        [{ text: 'OK' }]
+      );
+      return false;
+    }
+    return true;
+  };
+
+  const openCameraForPantryScan = async () => {
+    // Check usage limit first
+    const usageCheck = await checkScannerUsage();
+    if (!usageCheck.canUse) {
+      Alert.alert(
+        'Scanner Limit Reached',
+        usageCheck.message || 'You have reached your daily scanner limit.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
+    const hasPermission = await requestCameraPermissions();
+    if (!hasPermission) return;
+
+    try {
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 1.0, // Use highest quality from camera, we'll compress later
+        base64: false, // Don't need base64 from camera since we'll process it
+        exif: false,
+        allowsMultipleSelection: false,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        const imageUri = result.assets[0].uri;
+        if (imageUri) {
+          // Resize and compress the image before sending
+          const processedBase64 = await resizeAndEncode(imageUri);
+          await scanPantryImage(processedBase64);
+        }
+      }
+    } catch (error) {
+      console.error('Error opening camera:', error);
+      Alert.alert('Error', 'Failed to open camera. Please try again.');
+    }
+  };
+
+  const scanPantryImage = async (base64Image: string) => {
+    setScanningItems(true);
+    
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        throw new Error('Not authenticated');
+      }
+
+      console.log(`Scanning image - Size: ${Math.round(base64Image.length * 0.75 / 1024)} KB`);
+
+      // Create timeout promise
+      const timeout = (ms: number) => 
+        new Promise<never>((_, reject) => 
+          setTimeout(() => reject(new Error('Request timed out - please try again')), ms)
+        );
+
+      // Race between fetch and timeout
+      const response = await Promise.race([
+        fetch('https://zcnavyhdotofxjkxgcyl.supabase.co/functions/v1/Pantry_Scanner', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({
+            image: base64Image,
+          }),
+        }),
+        timeout(15000) // 15 second timeout
+      ]);
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      
+      if (result.success && result.added) {
+        // Increment usage count on successful scan
+        await incrementScannerUsage();
+        // Update local usage display
+        await loadScannerUsage();
+        
+        setDetectedItems(result.added);
+        setScanModalVisible(true);
+        // Refresh the pantry list to show new items
+        fetchPantryItems(false);
+        console.log(`Successfully detected ${result.added.length} items`);
+      } else {
+        throw new Error(result.error || 'Failed to scan image');
+      }
+    } catch (error) {
+      console.error('Error scanning pantry image:', error);
+      Alert.alert(
+        'Scan Failed',
+        error instanceof Error ? error.message : 'Failed to scan pantry items. Please try again.',
+        [{ text: 'OK' }]
+      );
+    } finally {
+      setScanningItems(false);
+    }
+  };
+
   useEffect(() => {
     fetchPantryItems();
+    loadScannerUsage();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -428,18 +592,109 @@ const PantryScreen = () => {
         }
       />
       
-      <TouchableOpacity
-        style={[styles.addButton, { 
-          backgroundColor: theme.primary,
-          shadowColor: theme.shadow,
-        }]}
-        onPress={() => router.push("/pantry/add")}
-        activeOpacity={0.8}
+      {/* Action buttons container */}
+      <View style={styles.actionButtonsContainer}>
+        <TouchableOpacity
+          style={[styles.addButton, { 
+            backgroundColor: theme.primary,
+            shadowColor: theme.shadow,
+          }]}
+          onPress={() => router.push("/pantry/add")}
+          activeOpacity={0.8}
+        >
+          <Text style={[styles.addButtonText, { color: theme.buttonTextPrimary }]}>
+            ➕ Add Item
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.scanButton, { 
+            backgroundColor: theme.success,
+            shadowColor: theme.shadow,
+          }]}
+          onPress={openCameraForPantryScan}
+          disabled={scanningItems}
+          activeOpacity={0.8}
+        >
+          {scanningItems ? (
+            <ActivityIndicator size="small" color={theme.buttonTextPrimary} />
+          ) : (
+            <>
+              <Ionicons name="camera" size={20} color={theme.buttonTextPrimary} />
+              <View style={styles.scanButtonContent}>
+                <Text style={[styles.scanButtonText, { color: theme.buttonTextPrimary }]}>
+                  Scan Items
+                </Text>
+                {scannerUsage && (
+                  <Text style={[styles.usageText, { color: theme.buttonTextPrimary }]}>
+                    {scannerUsage.remaining}/{scannerUsage.total} left
+                  </Text>
+                )}
+              </View>
+            </>
+          )}
+        </TouchableOpacity>
+      </View>
+
+      {/* Scan Results Modal */}
+      <Modal
+        visible={scanModalVisible}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setScanModalVisible(false)}
       >
-        <Text style={[styles.addButtonText, { color: theme.buttonTextPrimary }]}>
-          ➕ Add Item
-        </Text>
-      </TouchableOpacity>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContainer, { backgroundColor: theme.card }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: theme.text }]}>
+                Items Added to Pantry
+              </Text>
+              <TouchableOpacity
+                style={styles.closeButton}
+                onPress={() => setScanModalVisible(false)}
+              >
+                <Ionicons name="close" size={24} color={theme.text} />
+              </TouchableOpacity>
+            </View>
+            
+            <View style={styles.modalContent}>
+              <Text style={[styles.modalSubtitle, { color: theme.textSecondary }]}>
+                Successfully detected and added {detectedItems.length} items:
+              </Text>
+              
+              {detectedItems.map((item, index) => (
+                <View
+                  key={index}
+                  style={[styles.detectedItemRow, { 
+                    backgroundColor: theme.background,
+                    borderColor: theme.border,
+                  }]}
+                >
+                  <Text style={[styles.detectedItemText, { color: theme.text }]}>
+                    🥘 {item}
+                  </Text>
+                  <Ionicons name="checkmark-circle" size={20} color={theme.success} />
+                </View>
+              ))}
+            </View>
+            
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.modalButton, { 
+                  backgroundColor: theme.primary,
+                  shadowColor: theme.shadow,
+                }]}
+                onPress={() => setScanModalVisible(false)}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.addAllButtonText, { color: theme.buttonTextPrimary }]}>
+                  Done
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       <TouchableOpacity
         style={[styles.backButton, { 
@@ -675,11 +930,11 @@ const styles = StyleSheet.create({
   
   // Enhanced Footer Buttons
   addButton: {
+    flex: 1,
     paddingVertical: 16,
     paddingHorizontal: 24,
     borderRadius: 16,
     alignItems: "center",
-    marginTop: 16,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 8,
@@ -700,6 +955,115 @@ const styles = StyleSheet.create({
   backButtonText: {
     fontSize: 16,
     fontWeight: "600",
+  },
+  
+  // Camera scanning styles
+  actionButtonsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 16,
+    gap: 12,
+  },
+  scanButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    borderRadius: 16,
+    gap: 8,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  scanButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  scanButtonContent: {
+    alignItems: 'center',
+  },
+  usageText: {
+    fontSize: 12,
+    fontWeight: '500',
+    marginTop: 2,
+    opacity: 0.9,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContainer: {
+    width: '90%',
+    maxHeight: '80%',
+    borderRadius: 16,
+    padding: 20,
+    elevation: 5,
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+  },
+  closeButton: {
+    padding: 8,
+  },
+  modalContent: {
+    flex: 1,
+  },
+  modalSubtitle: {
+    fontSize: 16,
+    marginBottom: 16,
+    opacity: 0.8,
+  },
+  detectedItemRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  detectedItemText: {
+    fontSize: 16,
+    flex: 1,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginTop: 20,
+  },
+  modalButton: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  addAllButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
 

@@ -20,6 +20,11 @@ import { useTheme } from "../../../context/ThemeContext";
 import BottomNav from "../../../components/bottomNav";
 import { Dimensions } from "react-native";
 import { supabase } from "utils/supabase";
+import * as ImagePicker from 'expo-image-picker';
+import * as ImageManipulator from 'expo-image-manipulator';
+import * as FileSystem from 'expo-file-system';
+import { Ionicons } from '@expo/vector-icons';
+import { checkScannerUsage, incrementScannerUsage, getScannerUsageStatus } from '../../../utils/aiUsageUtils';
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
 const SCREEN_HEIGHT = Dimensions.get("window").height;
@@ -37,6 +42,13 @@ const MealPlanCalendar: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const scrollViewRef = useRef<ScrollView>(null);
+
+  // Meal scanning states
+  const [mealScanModalVisible, setMealScanModalVisible] = useState(false);
+  const [scanningMeal, setScanningMeal] = useState(false);
+  const [scannedMealData, setScannedMealData] = useState<any>(null);
+  const [selectedScanDate, setSelectedScanDate] = useState<string | null>(null);
+  const [scannerUsage, setScannerUsage] = useState<{ used: number; remaining: number; total: number } | null>(null);
 
   const startOfCurrentWeek = startOfWeek(today, { weekStartsOn: 0 });
 
@@ -71,40 +83,52 @@ const MealPlanCalendar: React.FC = () => {
         return [];
       }
 
-      // Fetch meal plan entries with full meal details
-      const { data, error } = await supabase
-        .from("meal_plan")
-        .select(`
-          *,
-          meals (
-            id,
-            name,
-            description,
-            calories,
-            protein,
-            carbohydrates,
-            fat,
-            picture,
-            instructions,
-            recipeLink,
-            created_at,
-            created_by_ai,
-            favorite,
-            dietary_restrictions,
-            servings,
-            cuisine,
-            visibility,
-            created_by
-          )
-        `)
-        .eq("user_id", userId)
-        .eq("date", date);
+      // Fetch both regular meal plan entries and macro meals
+      const [mealPlanData, macroMealsData] = await Promise.all([
+        // Fetch meal plan entries with full meal details
+        supabase
+          .from("meal_plan")
+          .select(`
+            *,
+            meals (
+              id,
+              name,
+              description,
+              calories,
+              protein,
+              carbohydrates,
+              fat,
+              picture,
+              instructions,
+              recipeLink,
+              created_at,
+              created_by_ai,
+              favorite,
+              dietary_restrictions,
+              servings,
+              cuisine,
+              visibility,
+              created_by
+            )
+          `)
+          .eq("user_id", userId)
+          .eq("date", date),
+        
+        // Fetch macro meals for this date
+        supabase
+          .from("macro_meals")
+          .select("*")
+          .eq("user_id", userId)
+          .gte("created_at", `${date}T00:00:00.000Z`)
+          .lt("created_at", `${date}T23:59:59.999Z`)
+      ]);
 
-      if (error) {
-        console.error(`Error fetching meals for date (${date}):`, error.message);
+      // Handle errors from either query
+      if (mealPlanData.error) {
+        console.error(`Error fetching meal plan for date (${date}):`, mealPlanData.error.message);
         
         // Retry logic for network errors
-        if (retryCount < 2 && (error.message.includes('network') || error.message.includes('timeout'))) {
+        if (retryCount < 2 && (mealPlanData.error.message.includes('network') || mealPlanData.error.message.includes('timeout'))) {
           console.log(`Retrying fetch for ${date}, attempt ${retryCount + 1}`);
           await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
           return fetchMealsForDate(date, retryCount + 1);
@@ -115,8 +139,13 @@ const MealPlanCalendar: React.FC = () => {
         return [];
       }
 
-      // Transform the data to match the expected Meal interface
-      const transformedMeals = data?.map(entry => {
+      if (macroMealsData.error) {
+        console.error(`Error fetching macro meals for date (${date}):`, macroMealsData.error.message);
+        // Continue without macro meals if there's an error, don't fail completely
+      }
+
+      // Transform regular meal plan data
+      const transformedMeals = mealPlanData.data?.map(entry => {
         // Handle profile picture - convert hex bytes to string if needed
         let pictureUri = entry.meals?.picture || null;
         if (pictureUri && typeof pictureUri === 'string' && pictureUri.startsWith('\\x')) {
@@ -148,14 +177,45 @@ const MealPlanCalendar: React.FC = () => {
           favorite: entry.meals?.favorite || false,
           dietary_restrictions: entry.meals?.dietary_restrictions || "",
           servings: entry.meals?.servings || 1,
-          cuisine: entry.meals?.cuisine || ""
+          cuisine: entry.meals?.cuisine || "",
+          isMacroMeal: false // Flag to identify regular meals
         };
       }) || [];
+
+      // Transform macro meals data
+      const transformedMacroMeals = macroMealsData.data?.map(macroMeal => ({
+        id: `macro_${macroMeal.id}`, // Prefix to avoid ID conflicts
+        name: macroMeal.meal_name || "Scanned Meal",
+        description: "AI-analyzed meal nutrition",
+        calories: macroMeal.calories || 0,
+        protein: macroMeal.protein || 0,
+        carbohydrates: macroMeal.carbs || 0, // Note: macro_meals uses 'carbs', Meal interface uses 'carbohydrates'
+        fat: macroMeal.fat || 0,
+        picture: null, // Macro meals don't have pictures
+        meal_type: "Scanned", // Special type for scanned meals
+        userName: "AI Scanner",
+        visibility: false,
+        averageRating: 0,
+        reviewCount: 0,
+        meal_plan_id: null,
+        instructions: "",
+        recipeLink: "",
+        created_at: macroMeal.created_at || "",
+        created_by_ai: true,
+        favorite: false,
+        dietary_restrictions: "",
+        servings: 1,
+        cuisine: "",
+        isMacroMeal: true // Flag to identify macro meals
+      })) || [];
+
+      // Combine both types of meals
+      const allMeals = [...transformedMeals, ...transformedMacroMeals];
 
       // Clear loading state for this date
       setLoadingDates(prev => ({ ...prev, [date]: false }));
       setError(null); // Clear any previous errors
-      return transformedMeals;
+      return allMeals;
     } catch (error) {
       console.error(`Unexpected error fetching meals for date (${date}):`, error);
       
@@ -207,6 +267,12 @@ const MealPlanCalendar: React.FC = () => {
 
   const handleRefresh = async () => {
     await fetchMealsForWeek(startOfCurrentWeek, true);
+  };
+
+  // Load scanner usage status
+  const loadScannerUsage = async () => {
+    const usage = await getScannerUsageStatus();
+    setScannerUsage(usage);
   };
 
   const deleteAllMealsForDate = async (date: string) => {
@@ -265,6 +331,7 @@ const MealPlanCalendar: React.FC = () => {
 
   useEffect(() => {
     fetchMealsForWeek(startOfCurrentWeek);
+    loadScannerUsage();
   }, []); // Only run on mount
 
   useEffect(() => {
@@ -374,6 +441,16 @@ const MealPlanCalendar: React.FC = () => {
 
   const handleMealSelect = (meal: Meal) => {
     try {
+      // Skip navigation for macro meals since they don't have detailed views
+      if (meal.isMacroMeal) {
+        Alert.alert(
+          "Scanned Meal", 
+          `This is an AI-scanned meal.\n\nName: ${meal.name}\nCalories: ${meal.calories}\nProtein: ${meal.protein}g\nCarbs: ${meal.carbohydrates}g\nFat: ${meal.fat}g`,
+          [{ text: 'OK' }]
+        );
+        return;
+      }
+
       if (!meal?.meal_plan_id) {
         Alert.alert("Error", "Invalid meal data. Please try refreshing the calendar.");
         return;
@@ -383,6 +460,154 @@ const MealPlanCalendar: React.FC = () => {
     } catch (error) {
       console.error("Error navigating to meal details:", error);
       Alert.alert("Error", "Failed to open meal details. Please try again.");
+    }
+  };
+
+  // Meal scanning functionality
+  const resizeAndEncode = async (uri: string): Promise<string> => {
+    try {
+      // Resize image to 512x512 max and compress to JPEG with 70% quality
+      const manipResult = await ImageManipulator.manipulateAsync(
+        uri,
+        [{ resize: { width: 512 } }],
+        { 
+          compress: 0.7, // 70% quality (60-80% range)
+          format: ImageManipulator.SaveFormat.JPEG 
+        }
+      );
+
+      // Convert to base64
+      const base64 = await FileSystem.readAsStringAsync(manipResult.uri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+
+      // Log image size for debugging
+      console.log(`Resized meal image size: ${Math.round(base64.length * 0.75 / 1024)} KB`);
+      
+      return base64;
+    } catch (error) {
+      console.error('Error resizing meal image:', error);
+      throw new Error('Failed to process image. Please try again.');
+    }
+  };
+
+  const requestCameraPermissions = async () => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert(
+        'Camera Permission Required',
+        'Please enable camera permissions to scan meal nutrition.',
+        [{ text: 'OK' }]
+      );
+      return false;
+    }
+    return true;
+  };
+
+  const openCameraForMealScan = async (dateKey: string) => {
+    // Check usage limit first
+    const usageCheck = await checkScannerUsage();
+    if (!usageCheck.canUse) {
+      Alert.alert(
+        'Scanner Limit Reached',
+        usageCheck.message || 'You have reached your daily scanner limit.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
+    const hasPermission = await requestCameraPermissions();
+    if (!hasPermission) return;
+
+    setSelectedScanDate(dateKey);
+
+    try {
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 1.0, // Use highest quality from camera, we'll compress later
+        base64: false, // Don't need base64 from camera since we'll process it
+        exif: false,
+        allowsMultipleSelection: false,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        const imageUri = result.assets[0].uri;
+        if (imageUri) {
+          // Resize and compress the image before sending
+          const processedBase64 = await resizeAndEncode(imageUri);
+          await scanMealImage(processedBase64, dateKey);
+        }
+      }
+    } catch (error) {
+      console.error('Error opening camera for meal scan:', error);
+      Alert.alert('Error', 'Failed to open camera. Please try again.');
+    }
+  };
+
+  const scanMealImage = async (base64Image: string, dateKey: string) => {
+    setScanningMeal(true);
+    
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        throw new Error('Not authenticated');
+      }
+
+      console.log(`Scanning meal image - Size: ${Math.round(base64Image.length * 0.75 / 1024)} KB`);
+
+      // Create timeout promise
+      const timeout = (ms: number) => 
+        new Promise<never>((_, reject) => 
+          setTimeout(() => reject(new Error('Request timed out - please try again')), ms)
+        );
+
+      // Race between fetch and timeout
+      const response = await Promise.race([
+        fetch('https://zcnavyhdotofxjkxgcyl.supabase.co/functions/v1/Meal_Scanner', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({
+            image: base64Image,
+            date: dateKey,
+          }),
+        }),
+        timeout(30000) // 30 second timeout
+      ]);
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      
+      if (result.success && result.data) {
+        // Increment usage count on successful scan
+        await incrementScannerUsage();
+        // Update local usage display
+        await loadScannerUsage();
+        
+        setScannedMealData(result.data);
+        setMealScanModalVisible(true);
+        // Refresh the meals for this date to show the new macro meal
+        await fetchMealsForDate(dateKey);
+        console.log(`Successfully analyzed meal nutrition:`, result.data);
+      } else {
+        throw new Error(result.error || 'Failed to analyze meal image');
+      }
+    } catch (error) {
+      console.error('Error scanning meal image:', error);
+      Alert.alert(
+        'Meal Scan Failed',
+        error instanceof Error ? error.message : 'Failed to analyze meal nutrition. Please try again.',
+        [{ text: 'OK' }]
+      );
+    } finally {
+      setScanningMeal(false);
     }
   };
 
@@ -432,6 +657,44 @@ const MealPlanCalendar: React.FC = () => {
             <Text style={[styles.headerButtonIcon, { color: theme.primary }]}>🏠</Text>
             <Text style={[styles.headerButtonText, { color: theme.primary }]}>Pantry</Text>
           </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.headerButton, styles.mealScanButton, { 
+              backgroundColor: theme.warningLight, 
+              borderColor: theme.warning 
+            }]}
+            onPress={() => {
+              // Show modal to select date for meal scan
+              Alert.alert(
+                "Scan Meal",
+                "Which date would you like to add the scanned meal to?",
+                [
+                  { text: "Today", onPress: () => openCameraForMealScan(format(today, 'yyyy-MM-dd')) },
+                  { text: "Select Date", onPress: () => {
+                    // For now, just use today - could enhance later with date picker
+                    openCameraForMealScan(format(today, 'yyyy-MM-dd'));
+                  }},
+                  { text: "Cancel", style: "cancel" }
+                ]
+              );
+            }}
+            disabled={scanningMeal}
+          >
+            {scanningMeal ? (
+              <ActivityIndicator size="small" color={theme.warning} />
+            ) : (
+              <>
+                <Ionicons name="camera" size={16} color={theme.warning} />
+                <View style={styles.scanButtonContent}>
+                  <Text style={[styles.headerButtonText, { color: theme.warning }]}>Scan Meal</Text>
+                  {scannerUsage && (
+                    <Text style={[styles.usageText, { color: theme.warning }]}>
+                      {scannerUsage.remaining}/{scannerUsage.total} left
+                    </Text>
+                  )}
+                </View>
+              </>
+            )}
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -446,6 +709,15 @@ const MealPlanCalendar: React.FC = () => {
           horizontal 
           style={styles.scrollView} 
           ref={scrollViewRef}
+          showsVerticalScrollIndicator={false}
+          showsHorizontalScrollIndicator={false}
+          bounces={false}
+          bouncesZoom={false}
+          alwaysBounceVertical={false}
+          alwaysBounceHorizontal={false}
+          scrollEnabled={true}
+          directionalLockEnabled={true}
+          contentContainerStyle={styles.scrollViewContent}
           refreshControl={
             <RefreshControl
               refreshing={isRefreshing}
@@ -529,13 +801,24 @@ const MealPlanCalendar: React.FC = () => {
                             </Text>
                           </View>
 
+                          {/* AI Scanner Badge for macro meals */}
+                          {meal.isMacroMeal && (
+                            <View style={[styles.aiScannerBadge, { backgroundColor: theme.aiAccent }]}>
+                              <Text style={[styles.aiScannerBadgeText, { color: theme.buttonTextPrimary }]}>
+                                🤖 AI
+                              </Text>
+                            </View>
+                          )}
+
                           {/* Meal Image */}
                           <View style={styles.mealImageContainer}>
-                            {meal.picture && typeof meal.picture === "string" ? (
+                            {meal.picture && typeof meal.picture === "string" && !meal.isMacroMeal ? (
                               <Image source={{ uri: meal.picture }} style={styles.mealImage} />
                             ) : (
                               <View style={[styles.mealImagePlaceholder, { backgroundColor: theme.divider }]}>
-                                <Text style={[styles.mealImagePlaceholderText, { color: theme.textSecondary }]}>🍽️</Text>
+                                <Text style={[styles.mealImagePlaceholderText, { color: theme.textSecondary }]}>
+                                  {meal.isMacroMeal ? '📸' : '🍽️'}
+                                </Text>
                               </View>
                             )}
                           </View>
@@ -692,6 +975,97 @@ const MealPlanCalendar: React.FC = () => {
           </View>
         </View>
       </Modal>
+
+      {/* Meal Scan Results Modal */}
+      <Modal visible={mealScanModalVisible} transparent animationType="slide">
+        <View style={styles.modalContainer}>
+          <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
+            <Text style={[styles.modalTitle, { color: theme.text }]}>
+              Scanned Meal Nutrition
+            </Text>
+            
+            {scannedMealData && (
+              <ScrollView style={styles.scanResultsContainer}>
+                <Text style={[styles.scanResultsTitle, { color: theme.text }]}>
+                  Meal Analysis:
+                </Text>
+                
+                <View style={[styles.scanResultItem, { backgroundColor: theme.border }]}>
+                  <Text style={[styles.scanResultItemName, { color: theme.text }]}>
+                    {scannedMealData.meal_name || 'Analyzed Meal'}
+                  </Text>
+                  <Text style={[styles.scanResultItemNutrition, { color: theme.text }]}>
+                    Calories: {scannedMealData.calories || 'N/A'}
+                  </Text>
+                  <Text style={[styles.scanResultItemNutrition, { color: theme.text }]}>
+                    Protein: {scannedMealData.protein || 'N/A'}g
+                  </Text>
+                  <Text style={[styles.scanResultItemNutrition, { color: theme.text }]}>
+                    Carbs: {scannedMealData.carbs || 'N/A'}g
+                  </Text>
+                  <Text style={[styles.scanResultItemNutrition, { color: theme.text }]}>
+                    Fat: {scannedMealData.fat || 'N/A'}g
+                  </Text>
+                </View>
+                
+                <View style={[styles.totalNutritionContainer, { backgroundColor: theme.primary }]}>
+                  <Text style={[styles.totalNutritionTitle, { color: theme.buttonText }]}>
+                    Nutrition Summary:
+                  </Text>
+                  <Text style={[styles.totalNutritionText, { color: theme.buttonText }]}>
+                    Calories: {scannedMealData.calories || 'N/A'}
+                  </Text>
+                  <Text style={[styles.totalNutritionText, { color: theme.buttonText }]}>
+                    Protein: {scannedMealData.protein || 'N/A'}g
+                  </Text>
+                  <Text style={[styles.totalNutritionText, { color: theme.buttonText }]}>
+                    Carbs: {scannedMealData.carbs || 'N/A'}g
+                  </Text>
+                  <Text style={[styles.totalNutritionText, { color: theme.buttonText }]}>
+                    Fat: {scannedMealData.fat || 'N/A'}g
+                  </Text>
+                </View>
+              </ScrollView>
+            )}
+            
+            <TouchableOpacity
+              style={[styles.modalButton, { backgroundColor: theme.primary }]}
+              onPress={() => {
+                // The meal has already been saved to the macro_meals table by the edge function
+                if (scannedMealData && selectedScanDate) {
+                  console.log('Meal macros saved to database:', scannedMealData);
+                  Alert.alert(
+                    'Success', 
+                    `Meal nutrition data has been saved and will appear in your daily totals!\n\nMeal: ${scannedMealData.meal_name || 'Analyzed Meal'}\nCalories: ${scannedMealData.calories}\nProtein: ${scannedMealData.protein}g`,
+                    [{ text: 'OK' }]
+                  );
+                }
+                setMealScanModalVisible(false);
+                setScannedMealData(null);
+                setSelectedScanDate(null);
+              }}
+            >
+              <Text style={[styles.modalButtonText, { color: theme.buttonText }]}>
+                Done
+              </Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity
+              style={[styles.modalCancelButton, { backgroundColor: theme.border }]}
+              onPress={() => {
+                setMealScanModalVisible(false);
+                setScannedMealData(null);
+                setSelectedScanDate(null);
+              }}
+            >
+              <Text style={[styles.modalCancelButtonText, { color: theme.text }]}>
+                Cancel
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       <BottomNav />
     </View>
   );
@@ -701,6 +1075,7 @@ const styles = StyleSheet.create({
   outerContainer: { 
     flex: 1,
     paddingTop: 20, // Add top padding to avoid status bar overlap
+    paddingBottom: 80, // Add bottom padding to avoid navigation overlap
   },
   errorBanner: {
     flexDirection: "row",
@@ -738,7 +1113,7 @@ const styles = StyleSheet.create({
   },
   headerContainer: {
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 8, // Reduced from 12 to 8
     marginBottom: 4,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -755,8 +1130,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 16,
-    paddingHorizontal: 20,
+    paddingVertical: 12, // Reduced from 16 to 12
+    paddingHorizontal: 16, // Reduced from 20 to 16
     borderRadius: 16,
     borderWidth: 2,
     gap: 8,
@@ -790,12 +1165,20 @@ pantryButtonText: {
   fontSize: 16,
   fontWeight: "bold",
 },
+mealScanButton: {
+  padding: 12,
+  borderRadius: 8,
+},
+mealScanButtonText: {
+  fontSize: 16,
+  fontWeight: "bold",
+},
   nutritionBlock: {
     position: "absolute", // Make the block absolute
     bottom: 0, // Anchor it to the bottom of the container
     left: 0, // Align it to the left
     right: 0, // Align it to the right
-    padding: 12,
+    padding: 10, // Reduced from 12 to 10
     borderRadius: 8,
     borderWidth: 1,
     borderColor: "#ccc",
@@ -893,11 +1276,16 @@ pantryButtonText: {
     padding: 8,
   },
   scrollView: { 
-    flex: 1 
+    flex: 1,
+    maxHeight: SCREEN_HEIGHT * 0.78, // Limit the height to prevent overlap
+  },
+  scrollViewContent: {
+    alignItems: 'flex-start',
   },
   container: { 
     flexDirection: "row", 
-    padding: 16 
+    padding: 16,
+    alignItems: 'flex-start', // Prevent vertical centering
   },
   mealPicture: {
     width: 150,
@@ -926,7 +1314,7 @@ pantryButtonText: {
     padding: 0,
     borderWidth: 2,
     borderRadius: 20,
-    height: SCREEN_HEIGHT * 0.75,
+    height: SCREEN_HEIGHT * 0.725, // Increased from 0.65 to 0.70
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,
     shadowRadius: 12,
@@ -985,7 +1373,7 @@ pantryButtonText: {
     paddingTop: 8,
   },
   mealsScrollContent: {
-    paddingBottom: 100, // Space for nutrition block
+    paddingBottom: 95, // Increased from 85 to 95 to account for larger container
   },
   mealCard: {
     marginBottom: 12,
@@ -1179,6 +1567,69 @@ pantryButtonText: {
     fontSize: 14,
     fontStyle: "italic",
     textAlign: "center",
+  },
+  scanResultsContainer: {
+    maxHeight: 300,
+    marginVertical: 16,
+  },
+  scanResultsTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    marginBottom: 12,
+    textAlign: "center",
+  },
+  scanResultItem: {
+    padding: 12,
+    marginBottom: 8,
+    borderRadius: 8,
+  },
+  scanResultItemName: {
+    fontSize: 16,
+    fontWeight: "bold",
+    marginBottom: 4,
+  },
+  scanResultItemNutrition: {
+    fontSize: 14,
+    marginBottom: 2,
+  },
+  totalNutritionContainer: {
+    padding: 16,
+    borderRadius: 12,
+    marginTop: 16,
+  },
+  totalNutritionTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    marginBottom: 8,
+    textAlign: "center",
+  },
+  totalNutritionText: {
+    fontSize: 16,
+    marginBottom: 4,
+    textAlign: "center",
+  },
+  aiScannerBadge: {
+    position: 'absolute',
+    top: 12,
+    left: 12,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+    zIndex: 1,
+  },
+  aiScannerBadgeText: {
+    fontSize: 8,
+    fontWeight: 'bold',
+    textTransform: 'uppercase',
+  },
+  scanButtonContent: {
+    alignItems: 'center',
+  },
+  usageText: {
+    fontSize: 10,
+    fontWeight: '500',
+    marginTop: 2,
+    opacity: 0.9,
   },
 });
 
