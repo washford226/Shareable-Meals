@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   RefreshControl,
   ScrollView,
+  Image,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
@@ -19,6 +20,16 @@ const CurrentMeals = () => {
   interface Meal {
     meal_id: number;
     name: string;
+    description: string;
+    picture?: string;
+    calories?: number;
+    protein?: number;
+    carbohydrates?: number;
+    fat?: number;
+    cuisine?: string;
+    dietary_restrictions?: string;
+    created_by_ai?: boolean;
+    servings?: number;
     votes: number;
     user_id: string;
     username?: string;
@@ -32,11 +43,29 @@ const CurrentMeals = () => {
     status: string;
   }
 
+  interface Winner {
+    winner_id: number;
+    competition_id: number;
+    meal_id: number;
+    user_id: string;
+    total_votes: number;
+    declared_at: string;
+    meal_name: string;
+    username: string;
+    theme_name: string;
+    competition_start_date: string;
+    competition_end_date: string;
+  }
+
+  const [activeTab, setActiveTab] = useState<'current' | 'winners'>('current');
   const [meals, setMeals] = useState<Meal[]>([]);
+  const [winners, setWinners] = useState<Winner[]>([]);
   const [loading, setLoading] = useState(true);
+  const [winnersLoading, setWinnersLoading] = useState(false);
   const [competitionId, setCompetitionId] = useState<number | null>(null);
   const [competitionTheme, setCompetitionTheme] = useState<string | null>(null);
   const [competitionStatus, setCompetitionStatus] = useState<string | null>(null);
+  const [competitionDates, setCompetitionDates] = useState<{start: string, end: string} | null>(null);
   const [voting, setVoting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -60,7 +89,68 @@ const CurrentMeals = () => {
     setRefreshing(true);
     setRetryCount(0);
     setError(null);
-    fetchLatestCompetition();
+    if (activeTab === 'current') {
+      fetchLatestCompetition();
+    } else {
+      fetchPastWinners();
+    }
+  }, [activeTab]);
+
+  // Fetch past winners
+  const fetchPastWinners = useCallback(async () => {
+    setWinnersLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from("weekly_winners")
+        .select(`
+          winner_id,
+          competition_id,
+          meal_id,
+          user_id,
+          total_votes,
+          declared_at,
+          meals!weekly_winners_meal_id_fkey (
+            name
+          ),
+          user_profiles!weekly_winners_user_id_fkey (
+            username
+          ),
+          weekly_competitions!weekly_winners_competition_id_fkey (
+            start_date,
+            end_date,
+            competition_themes!fk_theme_id (
+              theme_name
+            )
+          )
+        `)
+        .order("declared_at", { ascending: false });
+
+      if (error) {
+        throw error;
+      }
+
+      const formattedWinners: Winner[] = (data || []).map((winner: any) => ({
+        winner_id: winner.winner_id,
+        competition_id: winner.competition_id,
+        meal_id: winner.meal_id,
+        user_id: winner.user_id,
+        total_votes: winner.total_votes,
+        declared_at: winner.declared_at,
+        meal_name: winner.meals?.name || "Unknown Meal",
+        username: winner.user_profiles?.username || "Unknown User",
+        theme_name: winner.weekly_competitions?.competition_themes?.[0]?.theme_name || "Unknown Theme",
+        competition_start_date: winner.weekly_competitions?.start_date || "",
+        competition_end_date: winner.weekly_competitions?.end_date || "",
+      }));
+
+      setWinners(formattedWinners);
+    } catch (error) {
+      console.error("Error fetching past winners:", error);
+      Alert.alert("Error", "Failed to load past winners. Please try again.");
+    } finally {
+      setWinnersLoading(false);
+      setRefreshing(false);
+    }
   }, []);
 
   // Fetch the latest competition from Supabase
@@ -116,6 +206,10 @@ const CurrentMeals = () => {
         setCompetitionId(latestData.competition_id);
         setCompetitionTheme(latestData.competition_themes?.[0]?.theme_name || "Unknown Theme");
         setCompetitionStatus(latestData.status);
+        setCompetitionDates({
+          start: latestData.start_date,
+          end: latestData.end_date
+        });
         await fetchMeals(latestData.competition_id, showLoading);
         return;
       }
@@ -123,6 +217,10 @@ const CurrentMeals = () => {
       setCompetitionId(data.competition_id);
       setCompetitionTheme(data.competition_themes?.[0]?.theme_name || "Unknown Theme");
       setCompetitionStatus(data.status);
+      setCompetitionDates({
+        start: data.start_date,
+        end: data.end_date
+      });
       await fetchMeals(data.competition_id, showLoading);
       setRetryCount(0);
     } catch (error) {
@@ -144,7 +242,17 @@ const CurrentMeals = () => {
           meal_id,
           meals!competition_submissions_meal_id_fkey (
             id,
-            name
+            name,
+            description,
+            picture,
+            calories,
+            protein,
+            carbohydrates,
+            fat,
+            cuisine,
+            dietary_restrictions,
+            created_by_ai,
+            servings
           ),
           user_profiles!competition_submissions_user_id_fkey (
             id,
@@ -169,6 +277,16 @@ const CurrentMeals = () => {
           return {
             meal_id: submission.meal_id,
             name: submission.meals?.name || "Unknown Meal",
+            description: submission.meals?.description || "",
+            picture: submission.meals?.picture || undefined,
+            calories: submission.meals?.calories || undefined,
+            protein: submission.meals?.protein || undefined,
+            carbohydrates: submission.meals?.carbohydrates || undefined,
+            fat: submission.meals?.fat || undefined,
+            cuisine: submission.meals?.cuisine || undefined,
+            dietary_restrictions: submission.meals?.dietary_restrictions || undefined,
+            created_by_ai: submission.meals?.created_by_ai || false,
+            servings: submission.meals?.servings || undefined,
             votes: voteData?.length || 0,
             user_id: submission.user_profiles?.id || "",
             username: submission.user_profiles?.username || "Unknown User",
@@ -246,6 +364,38 @@ const CurrentMeals = () => {
   useEffect(() => {
     fetchLatestCompetition();
   }, []);
+
+  useEffect(() => {
+    if (activeTab === 'winners') {
+      fetchPastWinners();
+    }
+  }, [activeTab, fetchPastWinners]);
+
+  // Helper function to format dates
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', { 
+      month: 'short', 
+      day: 'numeric',
+      year: 'numeric'
+    });
+  };
+
+  // Helper function to get time remaining for active competitions
+  const getTimeRemaining = (endDate: string) => {
+    const end = new Date(endDate);
+    const now = new Date();
+    const diffMs = end.getTime() - now.getTime();
+    
+    if (diffMs <= 0) return "Ended";
+    
+    const days = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    const hours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+    
+    if (days > 0) return `${days}d ${hours}h left`;
+    if (hours > 0) return `${hours}h left`;
+    return "Ending soon";
+  };
 
   if (loading) {
     return (
@@ -420,14 +570,184 @@ const CurrentMeals = () => {
         <Text style={[styles.headerTitle, { color: theme.text }]}>
           Competition
         </Text>
-        <TouchableOpacity 
-          style={[styles.headerActionButton, { backgroundColor: theme.primary }]}
-          onPress={() => router.push("/competition/add-meal")}
+        {activeTab === 'current' && (
+          <TouchableOpacity 
+            style={[styles.headerActionButton, { backgroundColor: theme.primary }]}
+            onPress={() => router.push("/competition/add-meal")}
+          >
+            <Ionicons name="add" size={20} color={theme.buttonText} />
+          </TouchableOpacity>
+        )}
+        {activeTab === 'winners' && (
+          <View style={styles.headerActions} />
+        )}
+      </View>
+
+      {/* Tab Navigation */}
+      <View style={[styles.tabContainer, { backgroundColor: theme.card }]}>
+        <TouchableOpacity
+          style={[
+            styles.tab,
+            activeTab === 'current' && { backgroundColor: theme.primary }
+          ]}
+          onPress={() => setActiveTab('current')}
         >
-          <Ionicons name="add" size={20} color={theme.buttonText} />
+          <Ionicons 
+            name={activeTab === 'current' ? "trophy" : "trophy-outline"} 
+            size={20} 
+            color={activeTab === 'current' ? theme.buttonText : theme.textSecondary} 
+          />
+          <Text style={[
+            styles.tabText,
+            { color: activeTab === 'current' ? theme.buttonText : theme.textSecondary }
+          ]}>
+            Current
+          </Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity
+          style={[
+            styles.tab,
+            activeTab === 'winners' && { backgroundColor: theme.primary }
+          ]}
+          onPress={() => setActiveTab('winners')}
+        >
+          <Ionicons 
+            name={activeTab === 'winners' ? "medal" : "medal-outline"} 
+            size={20} 
+            color={activeTab === 'winners' ? theme.buttonText : theme.textSecondary} 
+          />
+          <Text style={[
+            styles.tabText,
+            { color: activeTab === 'winners' ? theme.buttonText : theme.textSecondary }
+          ]}>
+            Winners
+          </Text>
         </TouchableOpacity>
       </View>
 
+      {/* Tab Content */}
+      {activeTab === 'current' ? renderCurrentCompetition() : renderPastWinners()}
+    </View>
+  );
+
+  function renderCurrentCompetition() {
+    if (loading) {
+      return (
+        <ScrollView style={styles.scrollContainer} showsVerticalScrollIndicator={false}>
+          {/* Error Banner */}
+          {error && (
+            <View style={[styles.errorBanner, { 
+              backgroundColor: `${theme.danger}15`, 
+              borderColor: theme.danger 
+            }]}>
+              <Ionicons name="warning-outline" size={20} color={theme.danger} />
+              <Text style={[styles.errorBannerText, { color: theme.danger }]}>
+                {error}
+              </Text>
+              <TouchableOpacity
+                style={[styles.errorBannerButton, { backgroundColor: theme.danger }]}
+                onPress={handleRetry}
+              >
+                <Text style={[styles.errorBannerButtonText, { color: theme.buttonText }]}>
+                  Retry
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* Retry Banner */}
+          {retryCount > 0 && (
+            <View style={[styles.retryBanner, { 
+              backgroundColor: `${theme.warning}15`, 
+              borderColor: theme.warning 
+            }]}>
+              <Ionicons name="refresh-outline" size={16} color={theme.warning} />
+              <Text style={[styles.retryBannerText, { color: theme.warning }]}>
+                Retry attempt {retryCount}/3
+              </Text>
+            </View>
+          )}
+
+          <View style={styles.centerContent}>
+            <ActivityIndicator size="large" color={theme.primary} />
+            <Text style={[styles.loadingText, { color: theme.text }]}>Loading competitions...</Text>
+            
+            {error && (
+              <TouchableOpacity
+                style={[styles.retryButton, { backgroundColor: theme.primary, marginTop: 16 }]}
+                onPress={handleRetry}
+              >
+                <Text style={[styles.retryButtonText, { color: theme.buttonText }]}>
+                  Retry
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </ScrollView>
+      );
+    }
+
+    if (!competitionId) {
+      return (
+        <ScrollView style={styles.scrollContainer} showsVerticalScrollIndicator={false}>
+          {/* Error Banner */}
+          {error && (
+            <View style={[styles.errorBanner, { 
+              backgroundColor: `${theme.danger}15`, 
+              borderColor: theme.danger 
+            }]}>
+              <Ionicons name="warning-outline" size={20} color={theme.danger} />
+              <Text style={[styles.errorBannerText, { color: theme.danger }]}>
+                {error}
+              </Text>
+              <TouchableOpacity
+                style={[styles.errorBannerButton, { backgroundColor: theme.danger }]}
+                onPress={handleRetry}
+              >
+                <Text style={[styles.errorBannerButtonText, { color: theme.buttonText }]}>
+                  Retry
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* Empty State Card */}
+          <View style={[styles.emptyStateCard, { backgroundColor: theme.card }]}>
+            <View style={styles.cardHeader}>
+              <Ionicons name="trophy-outline" size={24} color={theme.textSecondary} />
+              <Text style={[styles.cardTitle, { color: theme.text }]}>
+                Competition
+              </Text>
+            </View>
+            
+            <View style={styles.emptyStateContent}>
+              <Ionicons name="calendar-outline" size={48} color={theme.textSecondary} />
+              <Text style={[styles.emptyTitle, { color: theme.text }]}>
+                No Active Competition
+              </Text>
+              <Text style={[styles.emptySubtext, { color: theme.textSecondary }]}>
+                {error || "There are no active competitions at this time. Check back later!"}
+              </Text>
+              
+              {!error && (
+                <TouchableOpacity
+                  style={[styles.actionButton, { backgroundColor: theme.primary }]}
+                  onPress={handleRetry}
+                >
+                  <Ionicons name="refresh-outline" size={16} color={theme.buttonText} />
+                  <Text style={[styles.actionButtonText, { color: theme.buttonText }]}>
+                    Check Again
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+        </ScrollView>
+      );
+    }
+
+    return (
       <View style={styles.scrollContainer}>
         {/* Competition Theme Card */}
         {competitionTheme && (
@@ -443,14 +763,32 @@ const CurrentMeals = () => {
               <Text style={[styles.themeText, { color: theme.text }]}>
                 {competitionTheme}
               </Text>
-              {competitionStatus && (
-                <View style={[styles.statusBadge, { 
-                  backgroundColor: competitionStatus === 'active' ? theme.success : theme.warning 
-                }]}>
-                  <Text style={[styles.statusText, { color: theme.buttonText }]}>
-                    {competitionStatus.charAt(0).toUpperCase() + competitionStatus.slice(1)}
-                  </Text>
-                </View>
+              
+              <View style={styles.competitionMeta}>
+                {competitionStatus && (
+                  <View style={[styles.statusBadge, { 
+                    backgroundColor: competitionStatus === 'active' ? theme.success : theme.warning 
+                  }]}>
+                    <Text style={[styles.statusText, { color: theme.buttonText }]}>
+                      {competitionStatus ? competitionStatus.charAt(0).toUpperCase() + competitionStatus.slice(1) : ''}
+                    </Text>
+                  </View>
+                )}
+                
+                {competitionDates && competitionStatus === 'active' && (
+                  <View style={[styles.timeRemainingBadge, { backgroundColor: `${theme.primary}20` }]}>
+                    <Ionicons name="time-outline" size={14} color={theme.primary} />
+                    <Text style={[styles.timeRemainingText, { color: theme.primary }]}>
+                      {getTimeRemaining(competitionDates.end)}
+                    </Text>
+                  </View>
+                )}
+              </View>
+
+              {competitionDates && (
+                <Text style={[styles.dateRangeText, { color: theme.textSecondary }]}>
+                  {formatDate(competitionDates.start)} - {formatDate(competitionDates.end)}
+                </Text>
               )}
             </View>
             
@@ -470,24 +808,77 @@ const CurrentMeals = () => {
         <FlatList
           data={meals}
           keyExtractor={(item) => item.meal_id.toString()}
+          numColumns={2}
           renderItem={({ item }) => (
-            <View style={[styles.mealCard, { backgroundColor: theme.card }]}>
-              <View style={styles.mealHeader}>
-                <View style={styles.mealInfo}>
-                  <Text style={[styles.mealName, { color: theme.text }]}>{item.name}</Text>
-                  <View style={styles.userRow}>
-                    <Ionicons name="person-circle-outline" size={16} color={theme.textSecondary} />
-                    <Text style={[styles.mealUser, { color: theme.textSecondary }]}>
-                      {item.username}
+            <TouchableOpacity 
+              style={[styles.mealCard, { backgroundColor: theme.card }]}
+              onPress={() => router.push(`/(app)/competition/${item.meal_id}/meal-info` as any)}
+              activeOpacity={0.7}
+            >
+              {/* Meal Image */}
+              <View style={styles.imageContainer}>
+                {item.picture && typeof item.picture === "string" ? (
+                  <Image 
+                    source={{ 
+                      uri: item.picture.startsWith('\\x') 
+                        ? item.picture.slice(2).match(/.{2}/g)?.map((hex: string) => String.fromCharCode(parseInt(hex, 16))).join('') || ''
+                        : item.picture 
+                    }} 
+                    style={styles.mealImage} 
+                  />
+                ) : (
+                  <View style={[styles.imagePlaceholder, { backgroundColor: theme.border }]}>
+                    <Ionicons name="image" size={32} color={theme.textSecondary} />
+                  </View>
+                )}
+                
+                {/* AI Generated Tag */}
+                {item.created_by_ai === true && (
+                  <View style={styles.aiTag}>
+                    <Ionicons name="sparkles" size={10} color="#fff" />
+                    <Text style={styles.aiTagText}>AI</Text>
+                  </View>
+                )}
+
+                {/* Vote Count Badge */}
+                <View style={[styles.voteBadge, { backgroundColor: theme.primary }]}>
+                  <Ionicons name="heart" size={12} color="#fff" />
+                  <Text style={styles.voteBadgeText}>{item.votes}</Text>
+                </View>
+              </View>
+
+              {/* Meal Info */}
+              <View style={styles.mealInfo}>
+                <Text style={[styles.mealName, { color: theme.text }]} numberOfLines={2}>
+                  {item.name}
+                </Text>
+                
+                <Text style={[styles.mealDescription, { color: theme.textSecondary }]} numberOfLines={2}>
+                  {item.description}
+                </Text>
+
+                {/* Nutrition Info */}
+                <View style={styles.nutritionInfo}>
+                  <View style={styles.nutritionItem}>
+                    <Text style={[styles.nutritionValue, { color: theme.primary }]}>
+                      {item.calories || 0}
                     </Text>
+                    <Text style={[styles.nutritionLabel, { color: theme.textSecondary }]}>cal</Text>
+                  </View>
+                  <View style={styles.nutritionItem}>
+                    <Text style={[styles.nutritionValue, { color: theme.success }]}>
+                      {item.protein || 0}g
+                    </Text>
+                    <Text style={[styles.nutritionLabel, { color: theme.textSecondary }]}>protein</Text>
                   </View>
                 </View>
-                
-                <View style={styles.voteSection}>
-                  <View style={styles.voteCount}>
-                    <Ionicons name="heart" size={16} color={theme.primary} />
-                    <Text style={[styles.voteText, { color: theme.text }]}>
-                      {item.votes}
+
+                {/* User and Vote Section */}
+                <View style={styles.bottomRow}>
+                  <View style={styles.userContainer}>
+                    <Ionicons name="person-circle" size={14} color={theme.textSecondary} />
+                    <Text style={[styles.userName, { color: theme.textSecondary }]} numberOfLines={1}>
+                      {item.username}
                     </Text>
                   </View>
                   
@@ -496,23 +887,41 @@ const CurrentMeals = () => {
                       backgroundColor: voting ? theme.border : theme.primary,
                       opacity: voting ? 0.6 : 1
                     }]}
-                    onPress={() => handleVote(item.meal_id)}
+                    onPress={(e) => {
+                      e.stopPropagation(); // Prevent triggering the card navigation
+                      handleVote(item.meal_id);
+                    }}
                     disabled={voting}
                   >
                     {voting ? (
                       <ActivityIndicator size="small" color={theme.buttonText} />
                     ) : (
-                      <>
-                        <Ionicons name="heart-outline" size={16} color={theme.buttonText} />
-                        <Text style={[styles.voteButtonText, { color: theme.buttonText }]}>
-                          Vote
-                        </Text>
-                      </>
+                      <Ionicons name="heart-outline" size={14} color={theme.buttonText} />
                     )}
                   </TouchableOpacity>
                 </View>
+
+                {/* Tags */}
+                {(item.dietary_restrictions || item.cuisine) && (
+                  <View style={styles.tagsContainer}>
+                    {item.dietary_restrictions && (
+                      <View style={[styles.tag, { backgroundColor: `${theme.success}20`, borderColor: theme.success }]}>
+                        <Text style={[styles.tagText, { color: theme.success }]}>
+                          {item.dietary_restrictions}
+                        </Text>
+                      </View>
+                    )}
+                    {item.cuisine && (
+                      <View style={[styles.tag, { backgroundColor: `${theme.primary}20`, borderColor: theme.primary }]}>
+                        <Text style={[styles.tagText, { color: theme.primary }]}>
+                          {item.cuisine}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                )}
               </View>
-            </View>
+            </TouchableOpacity>
           )}
           refreshControl={
             <RefreshControl
@@ -552,12 +961,106 @@ const CurrentMeals = () => {
               </View>
             </View>
           }
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={[styles.listContent, { paddingHorizontal: 10 }]}
           showsVerticalScrollIndicator={false}
         />
       </View>
-    </View>
-  );
+    );
+  }
+
+  function renderPastWinners() {
+    if (winnersLoading) {
+      return (
+        <View style={styles.centerContent}>
+          <ActivityIndicator size="large" color={theme.primary} />
+          <Text style={[styles.loadingText, { color: theme.text }]}>Loading past winners...</Text>
+        </View>
+      );
+    }
+
+    return (
+      <FlatList
+        data={winners}
+        keyExtractor={(item) => item.winner_id.toString()}
+        renderItem={({ item }) => (
+          <TouchableOpacity 
+            style={[styles.winnerCard, { backgroundColor: theme.card }]}
+            onPress={() => router.push(`/(app)/competition/${item.meal_id}/meal-info` as any)}
+            activeOpacity={0.7}
+          >
+            <View style={styles.winnerHeader}>
+              <View style={styles.winnerBadge}>
+                <Ionicons name="medal" size={20} color="#FFD700" />
+                <Text style={[styles.winnerBadgeText, { color: theme.text }]}>
+                  Winner
+                </Text>
+              </View>
+              <Text style={[styles.winnerDate, { color: theme.textSecondary }]}>
+                {formatDate(item.declared_at)}
+              </Text>
+            </View>
+            
+            <View style={styles.winnerContent}>
+              <Text style={[styles.winnerTheme, { color: theme.primary }]}>
+                {item.theme_name}
+              </Text>
+              <Text style={[styles.winnerMealName, { color: theme.text }]}>
+                {item.meal_name}
+              </Text>
+              <View style={styles.winnerUserRow}>
+                <Ionicons name="person-circle-outline" size={16} color={theme.textSecondary} />
+                <Text style={[styles.winnerUsername, { color: theme.textSecondary }]}>
+                  {item.username}
+                </Text>
+              </View>
+            </View>
+            
+            <View style={styles.winnerStats}>
+              <View style={styles.winnerVotes}>
+                <Ionicons name="heart" size={16} color={theme.primary} />
+                <Text style={[styles.winnerVotesText, { color: theme.text }]}>
+                  {item.total_votes} votes
+                </Text>
+              </View>
+              <Text style={[styles.competitionDates, { color: theme.textSecondary }]}>
+                {formatDate(item.competition_start_date)} - {formatDate(item.competition_end_date)}
+              </Text>
+            </View>
+          </TouchableOpacity>
+        )}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            colors={[theme.primary]}
+            tintColor={theme.primary}
+          />
+        }
+        ListEmptyComponent={
+          <View style={[styles.emptyStateCard, { backgroundColor: theme.card }]}>
+            <View style={styles.cardHeader}>
+              <Ionicons name="medal-outline" size={24} color={theme.textSecondary} />
+              <Text style={[styles.cardTitle, { color: theme.text }]}>
+                No Winners Yet
+              </Text>
+            </View>
+            
+            <View style={styles.emptyStateContent}>
+              <Ionicons name="trophy-outline" size={48} color={theme.textSecondary} />
+              <Text style={[styles.emptyTitle, { color: theme.text }]}>
+                Coming Soon
+              </Text>
+              <Text style={[styles.emptySubtext, { color: theme.textSecondary }]}>
+                No competitions have been completed yet. Check back after the first competition ends!
+              </Text>
+            </View>
+          </View>
+        }
+        contentContainerStyle={styles.listContent}
+        showsVerticalScrollIndicator={false}
+      />
+    );
+  }
 };
 
 const styles = StyleSheet.create({
@@ -661,14 +1164,14 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   mealCard: {
-    marginHorizontal: 16,
-    marginBottom: 12,
-    padding: 16,
+    flex: 1,
+    margin: 6,
     borderRadius: 12,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 3,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+    overflow: 'hidden',
   },
   cardHeader: {
     flexDirection: 'row',
@@ -723,7 +1226,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   mealInfo: {
-    flex: 1,
+    padding: 12,
   },
   mealName: {
     fontSize: 16,
@@ -862,6 +1365,235 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginTop: 8,
     textAlign: 'center',
+  },
+
+  // Tab styles
+  tabContainer: {
+    flexDirection: 'row',
+    marginHorizontal: 16,
+    borderRadius: 12,
+    overflow: 'hidden',
+    marginBottom: 16,
+  },
+  tab: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    gap: 8,
+  },
+  tabText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+
+  // Competition-specific styles
+  competitionMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 8,
+  },
+  timeRemainingBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  timeRemainingText: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  dateRangeText: {
+    fontSize: 12,
+    marginTop: 4,
+  },
+
+  // Winner card styles
+  winnerCard: {
+    marginHorizontal: 16,
+    marginBottom: 12,
+    borderRadius: 12,
+    padding: 16,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  winnerHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  winnerBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#FFD70020',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  winnerBadgeText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  winnerDate: {
+    fontSize: 12,
+  },
+  winnerContent: {
+    marginBottom: 12,
+  },
+  winnerTheme: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  winnerMealName: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 4,
+  },
+  winnerUserRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  winnerUsername: {
+    fontSize: 14,
+  },
+  winnerStats: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E5E5',
+  },
+  winnerVotes: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  winnerVotesText: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  competitionDates: {
+    fontSize: 12,
+  },
+
+  // New meal card styles for grid layout
+  imageContainer: {
+    position: 'relative',
+    width: '100%',
+    height: 120,
+    marginBottom: 12,
+  },
+  mealImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 8,
+    resizeMode: 'cover',
+  },
+  imagePlaceholder: {
+    width: '100%',
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 8,
+  },
+  aiTag: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#8B5CF6',
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 6,
+    gap: 3,
+  },
+  aiTagText: {
+    fontSize: 10,
+    fontWeight: 'bold',
+    color: '#fff',
+  },
+  voteBadge: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 6,
+    gap: 3,
+  },
+  voteBadgeText: {
+    fontSize: 10,
+    fontWeight: 'bold',
+    color: '#fff',
+  },
+  mealDescription: {
+    fontSize: 13,
+    lineHeight: 18,
+    marginBottom: 8,
+  },
+  nutritionInfo: {
+    flexDirection: 'row',
+    marginBottom: 8,
+    gap: 12,
+  },
+  nutritionItem: {
+    alignItems: 'center',
+  },
+  nutritionValue: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  nutritionLabel: {
+    fontSize: 10,
+    marginTop: 1,
+  },
+  bottomRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  userContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    flex: 1,
+  },
+  userName: {
+    fontSize: 12,
+    fontWeight: '500',
+    flex: 1,
+  },
+  tagsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 4,
+    marginTop: 4,
+  },
+  tag: {
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 4,
+    borderWidth: 1,
+  },
+  tagText: {
+    fontSize: 10,
+    fontWeight: '500',
   },
 });
 

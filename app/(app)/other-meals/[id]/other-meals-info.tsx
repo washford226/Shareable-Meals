@@ -203,8 +203,14 @@ const MealDetails = () => {
 
       // 3. Calculate nutrition data using the edge function
       try {
+        // Get the current session to include in the function call
+        const { data: { session } } = await supabase.auth.getSession();
+        
         const { error: nutritionError } = await supabase.functions.invoke('calculate-nutrition', {
-          body: { meal_id: newMealId }
+          body: { meal_id: newMealId },
+          headers: session?.access_token ? {
+            Authorization: `Bearer ${session.access_token}`
+          } : undefined
         });
         
         if (nutritionError) {

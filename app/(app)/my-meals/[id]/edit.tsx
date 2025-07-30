@@ -307,8 +307,14 @@ export default function EditMealScreen() {
 
         // Try to recalculate nutrition
         try {
+          // Get the current session to include in the function call
+          const { data: { session } } = await supabase.auth.getSession();
+          
           const { error: nutritionError } = await supabase.functions.invoke('calculate-nutrition', {
-            body: { meal_id: mealId }
+            body: { meal_id: mealId },
+            headers: session?.access_token ? {
+              Authorization: `Bearer ${session.access_token}`
+            } : undefined
           });
           
           if (nutritionError) {

@@ -101,44 +101,88 @@ const MonthNutritionScreen = () => {
       const userId = userData.user.id;
       const dates = getLast30Dates();
 
-      // For each date, fetch all meals for that day and sum macros
+      // For each date, fetch both meal plan data and macro meals data
       const results = await Promise.all(
         dates.map(async (d) => {
-          const { data: mealPlan, error } = await supabase
-            .from("meal_plan")
-            .select(
-              `
-              meal:meals (
-                calories,
-                protein,
-                carbohydrates,
-                fat
-              )
-            `
-            )
-            .eq("user_id", userId)
-            .eq("date", d);
+          try {
+            // Fetch both data sources in parallel
+            const [mealPlanResponse, macroMealsResponse] = await Promise.all([
+              supabase
+                .from("meal_plan")
+                .select(
+                  `
+                  meal:meals (
+                    calories,
+                    protein,
+                    carbohydrates,
+                    fat
+                  )
+                `
+                )
+                .eq("user_id", userId)
+                .eq("date", d),
+              
+              supabase
+                .from("macro_meals")
+                .select("calories, protein, carbs, fat")
+                .eq("user_id", userId)
+                .gte("created_at", `${d}T00:00:00.000Z`)
+                .lt("created_at", `${d}T23:59:59.999Z`)
+            ]);
 
-          if (error) {
+            if (mealPlanResponse.error) {
+              console.error(`Error fetching meal plan data for ${d}:`, mealPlanResponse.error.message);
+            }
+
+            if (macroMealsResponse.error) {
+              console.error(`Error fetching macro meals data for ${d}:`, macroMealsResponse.error.message);
+            }
+
+            // Calculate totals from meal plan data
+            const mealPlanTotals = (mealPlanResponse.data || []).reduce(
+              (acc, entry) => {
+                // Handle the case where meal might be an array or a single object
+                const meal = Array.isArray(entry.meal) ? entry.meal[0] : entry.meal;
+                return {
+                  calories: acc.calories + (meal?.calories ?? 0),
+                  protein: acc.protein + (meal?.protein ?? 0),
+                  carbs: acc.carbs + (meal?.carbohydrates ?? 0),
+                  fat: acc.fat + (meal?.fat ?? 0),
+                };
+              },
+              { calories: 0, protein: 0, carbs: 0, fat: 0 }
+            );
+
+            // Calculate totals from macro meals data (AI-scanned meals)
+            const macroMealsTotals = (macroMealsResponse.data || []).reduce(
+              (acc, macroMeal) => {
+                return {
+                  calories: acc.calories + (macroMeal.calories || 0),
+                  protein: acc.protein + (macroMeal.protein || 0),
+                  carbs: acc.carbs + (macroMeal.carbs || 0), // Note: macro_meals uses 'carbs' not 'carbohydrates'
+                  fat: acc.fat + (macroMeal.fat || 0),
+                };
+              },
+              { calories: 0, protein: 0, carbs: 0, fat: 0 }
+            );
+
+            // Combine totals from both sources
+            const combinedTotals = {
+              calories: mealPlanTotals.calories + macroMealsTotals.calories,
+              protein: mealPlanTotals.protein + macroMealsTotals.protein,
+              carbs: mealPlanTotals.carbs + macroMealsTotals.carbs,
+              fat: mealPlanTotals.fat + macroMealsTotals.fat,
+            };
+
+            return { date: d, ...combinedTotals };
+          } catch (dayError) {
+            console.error(`Unexpected error fetching data for ${d}:`, dayError);
             return { date: d, calories: 0, protein: 0, carbs: 0, fat: 0 };
           }
-
-          const totals = (mealPlan || []).reduce(
-            (acc, entry) => {
-              // Handle the case where meal might be an array or a single object
-              const meal = Array.isArray(entry.meal) ? entry.meal[0] : entry.meal;
-              return {
-                calories: acc.calories + (meal?.calories ?? 0),
-                protein: acc.protein + (meal?.protein ?? 0),
-                carbs: acc.carbs + (meal?.carbohydrates ?? 0),
-                fat: acc.fat + (meal?.fat ?? 0),
-              };
-            },
-            { calories: 0, protein: 0, carbs: 0, fat: 0 }
-          );
-          return { date: d, ...totals };
         })
       );
+      
+      console.log("Monthly nutrition data (including AI-scanned meals):", results);
       setMonthData(results);
     } catch (error) {
       console.error("Error fetching month data:", error);
@@ -211,34 +255,38 @@ const MonthNutritionScreen = () => {
         />
       }
     >
-      <NutritionNav />
+      <View style={{ paddingTop: 45 }}>
+        <NutritionNav />
 
-      {/* Error Banner */}
-      {error && (
-        <View style={[styles.errorBanner, { 
-          backgroundColor: theme.danger,
-          shadowColor: theme.shadow,
-        }]}>
-          <Text style={[styles.errorText, { color: theme.buttonTextPrimary }]}>
-            {error}
+        {/* Error Banner */}
+        {error && (
+          <View style={[styles.errorBanner, { 
+            backgroundColor: theme.danger,
+            shadowColor: theme.shadow,
+          }]}>
+            <Text style={[styles.errorText, { color: theme.buttonTextPrimary }]}>
+              {error}
+            </Text>
+            <TouchableOpacity
+              style={styles.retryButton}
+              onPress={handleRefresh}
+            >
+              <Text style={[styles.retryButtonText, { color: theme.buttonTextPrimary }]}>Retry</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        <View style={{ alignItems: 'center', marginBottom: 32 }}>
+          <Text style={[styles.title, { color: theme.text }]}>
+            📅 Monthly Nutrition
           </Text>
-          <TouchableOpacity
-            style={styles.retryButton}
-            onPress={handleRefresh}
-          >
-            <Text style={[styles.retryButtonText, { color: theme.buttonTextPrimary }]}>Retry</Text>
-          </TouchableOpacity>
+          <Text style={[{ fontSize: 16, color: theme.textSecondary, textAlign: 'center' }]}>
+            30-day nutrition overview and trends
+          </Text>
+          <Text style={[{ fontSize: 14, color: theme.textSecondary, textAlign: 'center', marginTop: 4, fontStyle: 'italic' }]}>
+            Includes planned meals and AI-scanned meals
+          </Text>
         </View>
-      )}
-
-      <View style={{ alignItems: 'center', marginBottom: 32 }}>
-        <Text style={[styles.title, { color: theme.text }]}>
-          📅 Monthly Nutrition
-        </Text>
-        <Text style={[{ fontSize: 16, color: theme.textSecondary, textAlign: 'center' }]}>
-          30-day nutrition overview and trends
-        </Text>
-      </View>
 
       {/* Enhanced Monthly Averages Block */}
       <View style={[styles.averagesContainer, { 
@@ -386,6 +434,7 @@ const MonthNutritionScreen = () => {
           ← Back to Calendar
         </Text>
       </TouchableOpacity>
+      </View>
     </ScrollView>
   );
 };

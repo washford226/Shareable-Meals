@@ -591,6 +591,13 @@ const MyMealInfo = () => {
                 {meal?.fat || 'N/A'}g
               </Text>
             </View>
+            <View style={[styles.nutritionItem, { backgroundColor: theme.background }]}>
+              <Ionicons name="restaurant-outline" size={20} color={theme.primary} />
+              <Text style={[styles.nutritionLabel, { color: theme.subtext }]}>Servings</Text>
+              <Text style={[styles.nutritionValue, { color: theme.text }]}>
+                {meal?.servings || 1}
+              </Text>
+            </View>
           </View>
         </View>
 

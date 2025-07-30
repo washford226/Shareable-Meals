@@ -72,6 +72,12 @@ const MyMeals: React.FC<MyMealsProps> = ({ onCreateMeal}) => {
   const [cuisineFilter, setCuisineFilter] = useState<string>("");
   const [tempCuisineFilter, setTempCuisineFilter] = useState<string>(cuisineFilter);
   const [favoriteLoading, setFavoriteLoading] = useState<{ [key: string]: boolean }>({});
+  const [macroUsageInfo, setMacroUsageInfo] = useState<{
+    daily_usage: number;
+    daily_limit: number;
+    remaining: number;
+  } | null>(null);
+  const [macroUsageLoading, setMacroUsageLoading] = useState<boolean>(false);
   const cuisineOptions = [
   { label: "All", value: "" },
   { label: "Italian", value: "Italian" },
@@ -106,6 +112,45 @@ const MyMeals: React.FC<MyMealsProps> = ({ onCreateMeal}) => {
       return null;
     }
   }, []);
+
+  const fetchMacroUsageInfo = useCallback(async () => {
+    try {
+      setMacroUsageLoading(true);
+      const userId = await getCurrentUserId();
+      if (!userId) return;
+
+      const today = new Date().toISOString().split('T')[0];
+      
+      const { data: userProfile, error } = await supabase
+        .from("user_profiles")
+        .select("macro_calculation_uses, macro_calculation_uses_last_date")
+        .eq("id", userId)
+        .single();
+
+      if (error) {
+        console.error("Error fetching macro usage info:", error);
+        return;
+      }
+
+      if (userProfile) {
+        const lastUsageDate = userProfile.macro_calculation_uses_last_date;
+        const currentUsageCount = userProfile.macro_calculation_uses || 0;
+
+        // Reset count if it's a new day
+        const dailyUsage = lastUsageDate === today ? currentUsageCount : 0;
+        
+        setMacroUsageInfo({
+          daily_usage: dailyUsage,
+          daily_limit: 20,
+          remaining: Math.max(0, 20 - dailyUsage)
+        });
+      }
+    } catch (error: any) {
+      console.error("Error fetching macro usage info:", error);
+    } finally {
+      setMacroUsageLoading(false);
+    }
+  }, [getCurrentUserId]);
 
   const toggleFavorite = async (mealId: number | string) => {
     if (favoriteLoading[mealId]) return; // Prevent multiple toggles
@@ -200,7 +245,8 @@ const MyMeals: React.FC<MyMealsProps> = ({ onCreateMeal}) => {
 
   useEffect(() => {
     restoreFiltersAndFetchMeals();
-  }, [restoreFiltersAndFetchMeals]);
+    fetchMacroUsageInfo();
+  }, [restoreFiltersAndFetchMeals, fetchMacroUsageInfo]);
 
 useEffect(() => {
   const restoreFiltersAndFetchMeals = async () => {
@@ -288,7 +334,8 @@ useEffect(() => {
   const handleRefresh = useCallback(() => {
     setRetryCount(0);
     fetchMyMeals(true);
-  }, [fetchMyMeals]);
+    fetchMacroUsageInfo(); // Also refresh usage info
+  }, [fetchMyMeals, fetchMacroUsageInfo]);
 
   useEffect(() => {
     fetchMyMeals();
@@ -571,6 +618,42 @@ const applyFilters = useCallback(async () => {
         <Ionicons name="add-circle-outline" size={24} color={theme.buttonText} style={{ marginRight: 8 }} />
         <Text style={[styles.createMealButtonText, { color: theme.buttonText }]}>Create New Meal</Text>
       </TouchableOpacity>
+
+      {/* Macro Usage Info */}
+      {macroUsageInfo && (
+        <View style={[styles.usageInfoContainer, { backgroundColor: theme.card, borderColor: theme.border }]}>
+          <View style={styles.usageInfoHeader}>
+            <Ionicons name="calculator-outline" size={20} color={theme.primary} />
+            <Text style={[styles.usageInfoTitle, { color: theme.text }]}>
+              AI Macro Calculations
+            </Text>
+          </View>
+          <View style={styles.usageInfoContent}>
+            <Text style={[styles.usageInfoText, { color: theme.subtext }]}>
+              Today: {macroUsageInfo.daily_usage}/{macroUsageInfo.daily_limit} used
+            </Text>
+            <View style={[styles.usageProgressBar, { backgroundColor: theme.cardSecondary }]}>
+              <View 
+                style={[
+                  styles.usageProgressFill, 
+                  { 
+                    backgroundColor: macroUsageInfo.remaining <= 5 ? theme.danger : theme.primary,
+                    width: `${(macroUsageInfo.daily_usage / macroUsageInfo.daily_limit) * 100}%`
+                  }
+                ]} 
+              />
+            </View>
+            <Text style={[
+              styles.usageRemainingText, 
+              { 
+                color: macroUsageInfo.remaining <= 5 ? theme.danger : theme.success 
+              }
+            ]}>
+              {macroUsageInfo.remaining} calculations remaining
+            </Text>
+          </View>
+        </View>
+      )}
 
       {filteredMeals.length === 0 ? (
         <View style={styles.emptyStateContainer}>
@@ -1434,6 +1517,50 @@ const styles = StyleSheet.create({
   mealsGrid: {
     paddingHorizontal: 8,
     paddingBottom: 100,
+  },
+
+  // Usage Info Styles
+  usageInfoContainer: {
+    marginHorizontal: 16,
+    marginBottom: 16,
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  usageInfoHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  usageInfoTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginLeft: 8,
+  },
+  usageInfoContent: {
+    gap: 8,
+  },
+  usageInfoText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  usageProgressBar: {
+    height: 6,
+    borderRadius: 3,
+    overflow: 'hidden',
+  },
+  usageProgressFill: {
+    height: '100%',
+    borderRadius: 3,
+  },
+  usageRemainingText: {
+    fontSize: 12,
+    fontWeight: '600',
+    textAlign: 'right',
   },
 
   // Legacy compatibility

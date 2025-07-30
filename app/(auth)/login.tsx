@@ -1,11 +1,11 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { View, Text, TextInput, StyleSheet, Alert, TouchableOpacity, Image, ActivityIndicator, ScrollView, Platform } from "react-native";
 import { useRouter } from "expo-router";
 import { supabase } from "utils/supabase";
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "context/ThemeContext";
 
-const logo = require("../../assets/images/logo-transparent-png.png"); // Update if needed
+const logo = require("../../assets/images/ShareableMeals logo.png");
 
 const LoginScreen = () => {
   const router = useRouter();
@@ -16,6 +16,23 @@ const LoginScreen = () => {
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({ email: "", password: "" });
+
+  // Check if user is already logged in
+  useEffect(() => {
+    checkExistingSession();
+  }, []);
+
+  const checkExistingSession = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        // User is already logged in, redirect to main app
+        router.replace("/(app)/meal-plan/calendar");
+      }
+    } catch (error) {
+      console.error("Error checking existing session:", error);
+    }
+  };
 
   // Email validation
   const validateEmail = (email: string) => {
@@ -87,7 +104,7 @@ const LoginScreen = () => {
         }
       } else {
         // Success - navigate to main app
-        router.replace("../meal-plan/calendar");
+        router.replace("/(app)/meal-plan/calendar");
       }
     } catch (error) {
       console.error("Login error:", error);
@@ -107,9 +124,9 @@ const LoginScreen = () => {
         {/* Logo Section */}
         <View style={styles.logoSection}>
           <Image source={logo} style={styles.logo} />
-          <Text style={[styles.title, { color: theme.text }]}>Welcome Back</Text>
+          <Text style={[styles.title, { color: theme.text }]}>Welcome to Shareable Meals</Text>
           <Text style={[styles.subtitle, { color: theme.subtext }]}>
-            Sign in to continue to your meal planning
+            Sign in to start planning and sharing your meals
           </Text>
         </View>
 
@@ -277,15 +294,17 @@ const styles = StyleSheet.create({
     marginBottom: 32,
   },
   logo: { 
-    width: 120, 
-    height: 120, 
-    marginBottom: 16 
+    width: 140, 
+    height: 140, 
+    marginBottom: 16,
+    resizeMode: 'contain'
   },
   title: { 
-    fontSize: 28, 
+    fontSize: 26, 
     fontWeight: '700',
     marginBottom: 8,
-    textAlign: 'center'
+    textAlign: 'center',
+    lineHeight: 32,
   },
   subtitle: {
     fontSize: 16,

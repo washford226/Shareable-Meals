@@ -151,25 +151,36 @@ const NutritionScreen = () => {
         return false;
       }
 
-      // Get all meals for this user and date from meal_plan, join meals table for macros
-      const { data, error } = await supabase
-        .from("meal_plan")
-        .select(`
-          meals (
-            calories,
-            protein,
-            carbohydrates,
-            fat
-          )
-        `)
-        .eq("user_id", userId)
-        .eq("date", date);
+      // Fetch both meal plan data and macro meals data for this date
+      const [mealPlanResponse, macroMealsResponse] = await Promise.all([
+        // Get all meals for this user and date from meal_plan, join meals table for macros
+        supabase
+          .from("meal_plan")
+          .select(`
+            meals (
+              calories,
+              protein,
+              carbohydrates,
+              fat
+            )
+          `)
+          .eq("user_id", userId)
+          .eq("date", date),
+        
+        // Get macro meals for this date (AI-scanned meals)
+        supabase
+          .from("macro_meals")
+          .select("calories, protein, carbs, fat")
+          .eq("user_id", userId)
+          .gte("created_at", `${date}T00:00:00.000Z`)
+          .lt("created_at", `${date}T23:59:59.999Z`)
+      ]);
 
-      if (error) {
-        console.error("Error fetching day macros:", error.message);
+      if (mealPlanResponse.error) {
+        console.error("Error fetching meal plan data:", mealPlanResponse.error.message);
         
         // Retry logic for network errors
-        if (retryCount < 2 && (error.message.includes('network') || error.message.includes('timeout'))) {
+        if (retryCount < 2 && (mealPlanResponse.error.message.includes('network') || mealPlanResponse.error.message.includes('timeout'))) {
           console.log(`Retrying fetchDayMacros, attempt ${retryCount + 1}`);
           await new Promise(resolve => setTimeout(resolve, 1000));
           return fetchDayMacros(retryCount + 1);
@@ -179,8 +190,14 @@ const NutritionScreen = () => {
         return false;
       }
 
-      // Sum up macros with better data handling
-      const totals = (data || []).reduce(
+      if (macroMealsResponse.error) {
+        console.error("Error fetching macro meals data:", macroMealsResponse.error.message);
+        // Don't fail completely if macro meals fail, just log the error
+        console.warn("Continuing without macro meals data due to error:", macroMealsResponse.error.message);
+      }
+
+      // Sum up macros from meal plan data
+      const mealPlanTotals = (mealPlanResponse.data || []).reduce(
         (acc, entry) => {
           const meal = entry.meals;
           // Handle both single object and array responses
@@ -198,8 +215,35 @@ const NutritionScreen = () => {
         },
         { calories: 0, protein: 0, carbs: 0, fat: 0 }
       );
+
+      // Sum up macros from macro meals data (AI-scanned meals)
+      const macroMealsTotals = (macroMealsResponse.data || []).reduce(
+        (acc, macroMeal) => {
+          return {
+            calories: acc.calories + (macroMeal.calories || 0),
+            protein: acc.protein + (macroMeal.protein || 0),
+            carbs: acc.carbs + (macroMeal.carbs || 0), // Note: macro_meals uses 'carbs' not 'carbohydrates'
+            fat: acc.fat + (macroMeal.fat || 0),
+          };
+        },
+        { calories: 0, protein: 0, carbs: 0, fat: 0 }
+      );
+
+      // Combine totals from both sources
+      const combinedTotals = {
+        calories: mealPlanTotals.calories + macroMealsTotals.calories,
+        protein: mealPlanTotals.protein + macroMealsTotals.protein,
+        carbs: mealPlanTotals.carbs + macroMealsTotals.carbs,
+        fat: mealPlanTotals.fat + macroMealsTotals.fat,
+      };
       
-      setActualMacros(totals);
+      console.log(`Nutrition data for ${date}:`, {
+        mealPlan: mealPlanTotals,
+        macroMeals: macroMealsTotals,
+        combined: combinedTotals
+      });
+      
+      setActualMacros(combinedTotals);
       return true;
     } catch (error) {
       console.error("Unexpected error fetching day macros:", error);
@@ -418,10 +462,13 @@ const NutritionScreen = () => {
         <Text style={[styles.summaryTitle, { color: theme.text }]}>
           📈 Daily Summary
         </Text>
+        <Text style={[styles.summarySubtitle, { color: theme.textSecondary }]}>
+          Includes planned meals + AI-scanned items
+        </Text>
         <View style={styles.summaryRow}>
           <View style={styles.summaryItem}>
             <Text style={[styles.summaryValue, { color: theme.primary }]}>
-              {actualMacros.calories}
+              {Math.round(actualMacros.calories)}
             </Text>
             <Text style={[styles.summaryLabel, { color: theme.textSecondary }]}>
               Total Calories
@@ -439,7 +486,7 @@ const NutritionScreen = () => {
           <View style={styles.summaryDivider} />
           <View style={styles.summaryItem}>
             <Text style={[styles.summaryValue, { color: theme.protein }]}>
-              {actualMacros.protein + actualMacros.carbs + actualMacros.fat}g
+              {Math.round(actualMacros.protein + actualMacros.carbs + actualMacros.fat)}g
             </Text>
             <Text style={[styles.summaryLabel, { color: theme.textSecondary }]}>
               Total Macros
@@ -538,6 +585,7 @@ const NutritionScreen = () => {
 const styles = StyleSheet.create({
   container: {
     padding: 20,
+    paddingTop: 45, // Add top padding to avoid status bar overlap
     backgroundColor: "#fff",
     flexGrow: 1,
   },
@@ -702,7 +750,14 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "700",
     textAlign: "center",
+    marginBottom: 8,
+  },
+  summarySubtitle: {
+    fontSize: 14,
+    fontWeight: "500",
+    textAlign: "center",
     marginBottom: 16,
+    fontStyle: 'italic',
   },
   summaryRow: {
     flexDirection: 'row',
