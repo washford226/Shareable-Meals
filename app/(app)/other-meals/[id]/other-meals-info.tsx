@@ -11,6 +11,7 @@ import {
   ScrollView,
   ActivityIndicator,
   RefreshControl,
+  Linking,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useTheme } from "../../../../context/ThemeContext";
@@ -162,6 +163,15 @@ const MealDetails = () => {
       }
       const userId = userData.user.id;
 
+      // Get user's username from user_profiles
+      const { data: profileData, error: profileError } = await supabase
+        .from("user_profiles")
+        .select("username")
+        .eq("user_id", userId)
+        .single();
+
+      const username = profileData?.username || "Unknown User";
+
       // Copy meal without id and ingredients (we'll handle ingredients separately)
       const { id: _id, ingredients: _ingredients, ...mealData } = meal;
       
@@ -171,6 +181,8 @@ const MealDetails = () => {
           ...mealData,
           user_id: userId,
           visibility: true, // Make copied meals public by default
+          created_by: username,
+          AI_Macros: false, // Copied meals keep original macro values, not AI-generated
         },
       ]).select("id").single();
 
@@ -388,6 +400,38 @@ const MealDetails = () => {
           <Text style={[styles.mealTitle, { color: theme.text }]}>{meal.name}</Text>
           <Text style={[styles.mealDescription, { color: theme.subtext }]}>{meal.description}</Text>
           
+          {/* Creator Info */}
+          {meal.created_by && (
+            <View style={styles.tagsContainer}>
+              <View style={[styles.tag, { backgroundColor: theme.info + '20', borderColor: theme.info }]}>
+                <Ionicons name="person" size={12} color={theme.info} />
+                <Text style={[styles.tagText, { color: theme.info }]}>Created by: {meal.created_by}</Text>
+              </View>
+            </View>
+          )}
+          
+          {/* Status Tags */}
+          <View style={styles.tagsContainer}>
+            {meal.favorite && (
+              <View style={[styles.tag, { backgroundColor: theme.warning + '20', borderColor: theme.warning }]}>
+                <Ionicons name="heart" size={12} color={theme.warning} />
+                <Text style={[styles.tagText, { color: theme.warning }]}>Favorite</Text>
+              </View>
+            )}
+            {meal.visibility === false && (
+              <View style={[styles.tag, { backgroundColor: theme.danger + '20', borderColor: theme.danger }]}>
+                <Ionicons name="eye-off" size={12} color={theme.danger} />
+                <Text style={[styles.tagText, { color: theme.danger }]}>Private</Text>
+              </View>
+            )}
+            {meal.AI_Macros && (
+              <View style={[styles.tag, { backgroundColor: theme.info + '20', borderColor: theme.info }]}>
+                <Ionicons name="calculator" size={12} color={theme.info} />
+                <Text style={[styles.tagText, { color: theme.info }]}>AI Macros</Text>
+              </View>
+            )}
+          </View>
+          
           {/* Tags */}
           <View style={styles.tagsContainer}>
             {meal.cuisine && (
@@ -428,6 +472,10 @@ const MealDetails = () => {
               <Text style={[styles.nutritionValue, { color: theme.fat }]}>{meal.fat || 0}g</Text>
               <Text style={[styles.nutritionLabel, { color: theme.subtext }]}>Fat</Text>
             </View>
+            <View style={styles.nutritionItem}>
+              <Text style={[styles.nutritionValue, { color: theme.text }]}>{meal.servings || 1}</Text>
+              <Text style={[styles.nutritionLabel, { color: theme.subtext }]}>Servings</Text>
+            </View>
           </View>
         </View>
 
@@ -457,8 +505,27 @@ const MealDetails = () => {
             <Ionicons name="receipt" size={20} color={theme.warning} />
             <Text style={[styles.cardTitle, { color: theme.text }]}>Instructions</Text>
           </View>
-          <Text style={[styles.instructionsText, { color: theme.text }]}>{meal.instructions}</Text>
+          <Text style={[styles.instructionsText, { color: theme.text }]}>{meal.instructions || "No instructions provided"}</Text>
         </View>
+
+        {/* Recipe Link Card */}
+        {meal.recipeLink && meal.recipeLink.trim() !== '' ? (
+          <TouchableOpacity 
+            style={[styles.linkCard, { backgroundColor: theme.primaryLight, borderColor: theme.primary }]}
+            onPress={() => meal.recipeLink && Linking.openURL(meal.recipeLink)}
+          >
+            <Ionicons name="link-outline" size={24} color={theme.primary} />
+            <View style={styles.linkContent}>
+              <Text style={[styles.linkTitle, { color: theme.primary }]}>
+                View Full Recipe
+              </Text>
+              <Text style={[styles.linkSubtext, { color: theme.primary }]} numberOfLines={1}>
+                {meal.recipeLink}
+              </Text>
+            </View>
+            <Ionicons name="arrow-forward-outline" size={20} color={theme.primary} />
+          </TouchableOpacity>
+        ) : null}
 
         {/* Action Buttons */}
         <View style={styles.actionButtons}>
@@ -784,6 +851,35 @@ const styles = StyleSheet.create({
   instructionsText: {
     fontSize: 15,
     lineHeight: 24,
+  },
+
+  // Link Card
+  linkCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    margin: 16,
+    marginTop: 8,
+    padding: 20,
+    borderRadius: 16,
+    borderWidth: 2,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 5,
+    gap: 16,
+  },
+  linkContent: {
+    flex: 1,
+  },
+  linkTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  linkSubtext: {
+    fontSize: 14,
+    fontWeight: '500',
+    opacity: 0.8,
   },
 
   // Action Buttons

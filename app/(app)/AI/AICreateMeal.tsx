@@ -28,12 +28,24 @@ const AICreateMeal = () => {
     servings: string;
     ingredients: { name: string; quantity: string; unit: string }[];
     instructions: string;
+    macros?: {
+      calories: number;
+      protein: number;
+      fat: number;
+      carbohydrates: number;
+    };
   }>({
     name: "",
     description: "",
     servings: "1",
     ingredients: [],
     instructions: "",
+    macros: {
+      calories: 0,
+      protein: 0,
+      fat: 0,
+      carbohydrates: 0
+    }
   });
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -276,6 +288,15 @@ const AICreateMeal = () => {
         throw new Error("User not authenticated. Please log in.");
       }
 
+      // Get user's username from user_profiles
+      const { data: profileData, error: profileError } = await supabase
+        .from("user_profiles")
+        .select("username")
+        .eq("user_id", userId)
+        .single();
+
+      const username = profileData?.username || "Unknown User";
+
       // 1. Insert the meal (without ingredients)
       const { data: mealData, error: mealError } = await supabase.from("meals").insert([
         {
@@ -287,6 +308,12 @@ const AICreateMeal = () => {
           visibility: true, // Default to public for AI-created meals
           dietary_restrictions: dietaryRestrictions,
           created_by_ai: true,
+          created_by: username,
+          AI_Macros: true, // AI-created meals always use AI for nutrition calculation
+          calories: generatedMeal.macros?.calories || 0,
+          protein: generatedMeal.macros?.protein || 0,
+          fat: generatedMeal.macros?.fat || 0,
+          carbohydrates: generatedMeal.macros?.carbohydrates || 0,
         },
       ]).select("id").single();
 
@@ -320,27 +347,6 @@ const AICreateMeal = () => {
         if (ingredientsError) {
           throw ingredientsError;
         }
-      }
-
-      // 3. Calculate nutrition data using the edge function
-      try {
-        // Get the current session to include in the function call
-        const { data: { session } } = await supabase.auth.getSession();
-        
-        const { error: nutritionError } = await supabase.functions.invoke('calculate-nutrition', {
-          body: { meal_id: mealId },
-          headers: session?.access_token ? {
-            Authorization: `Bearer ${session.access_token}`
-          } : undefined
-        });
-        
-        if (nutritionError) {
-          console.warn("Failed to calculate nutrition:", nutritionError);
-          // Don't fail the whole process if nutrition calculation fails
-        }
-      } catch (nutritionErr) {
-        console.warn("Nutrition calculation error:", nutritionErr);
-        // Continue even if nutrition calculation fails
       }
 
       Alert.alert("Success", "Meal added successfully!", [
@@ -408,6 +414,12 @@ const AICreateMeal = () => {
       servings: "1",
       ingredients: [],
       instructions: "",
+      macros: {
+        calories: 0,
+        protein: 0,
+        fat: 0,
+        carbohydrates: 0
+      }
     });
 
     try {
@@ -476,6 +488,12 @@ const AICreateMeal = () => {
           }
         }),
         instructions: data.instructions || "",
+        macros: data.macros || {
+          calories: 0,
+          protein: 0,
+          fat: 0,
+          carbohydrates: 0
+        }
       });
     } catch (error: any) {
       console.error("AI generation error:", error);
@@ -880,6 +898,48 @@ const AICreateMeal = () => {
               )}
             </View>
 
+            {/* Macros Section */}
+            <View style={styles.formSection}>
+              <Text style={[styles.sectionLabel, { color: theme.text }]}>Nutritional Information</Text>
+              <View style={styles.macroContainer}>
+                <View style={styles.macroGrid}>
+                  <View style={styles.macroItem}>
+                    <Text style={[styles.macroLabel, { color: theme.text }]}>Calories</Text>
+                    <Text style={[styles.macroValue, { color: theme.primary }]}>
+                      {generatedMeal.macros?.calories || 0}
+                    </Text>
+                  </View>
+                  
+                  <View style={styles.macroItem}>
+                    <Text style={[styles.macroLabel, { color: theme.text }]}>Protein</Text>
+                    <Text style={[styles.macroValue, { color: theme.primary }]}>
+                      {generatedMeal.macros?.protein || 0}g
+                    </Text>
+                  </View>
+                  
+                  <View style={styles.macroItem}>
+                    <Text style={[styles.macroLabel, { color: theme.text }]}>Fat</Text>
+                    <Text style={[styles.macroValue, { color: theme.primary }]}>
+                      {generatedMeal.macros?.fat || 0}g
+                    </Text>
+                  </View>
+                  
+                  <View style={styles.macroItem}>
+                    <Text style={[styles.macroLabel, { color: theme.text }]}>Carbs</Text>
+                    <Text style={[styles.macroValue, { color: theme.primary }]}>
+                      {generatedMeal.macros?.carbohydrates || 0}g
+                    </Text>
+                  </View>
+                </View>
+                
+                <View style={[styles.macroNote, { backgroundColor: theme.successLight }]}>
+                  <Text style={[styles.macroNoteText, { color: theme.success }]}>
+                    🤖 AI-calculated nutrition per serving
+                  </Text>
+                </View>
+              </View>
+            </View>
+
             {/* Save Button */}
             <TouchableOpacity
               style={[
@@ -1250,6 +1310,49 @@ const styles = StyleSheet.create({
   placeholderText: {
     fontSize: 16,
     textAlign: "center",
+  },
+  
+  // Macro Styles
+  macroContainer: {
+    marginTop: 16,
+  },
+  macroGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+    gap: 12,
+  },
+  macroItem: {
+    width: '48%',
+    minWidth: 120,
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  macroLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    marginBottom: 4,
+    opacity: 0.8,
+  },
+  macroValue: {
+    fontSize: 20,
+    fontWeight: 'bold',
+  },
+  macroNote: {
+    padding: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  macroNoteText: {
+    fontSize: 14,
+    fontWeight: '500',
+    textAlign: 'center',
   },
 });
 

@@ -160,13 +160,33 @@ const OtherMeals: React.FC = () => {
         });
       }
 
-      // 3. Combine meals and usernames
+      // 3. Fetch review counts for all meals
+      const mealIds = (mealsData || []).map(meal => meal.id);
+      let mealIdToReviewCount: Record<string, number> = {};
+      if (mealIds.length > 0) {
+        const { data: reviewCounts, error: reviewError } = await supabase
+          .from("reviews")
+          .select("meal_id")
+          .in("meal_id", mealIds);
+
+        if (reviewError) throw reviewError;
+
+        // Count reviews per meal
+        (reviewCounts || []).forEach(review => {
+          mealIdToReviewCount[review.meal_id] = (mealIdToReviewCount[review.meal_id] || 0) + 1;
+        });
+      }
+
+      // 4. Combine meals, usernames, and review counts
       const mealsWithUsernames = (mealsData || []).map(meal => ({
         ...meal,
         userName: userIdToUsername[meal.user_id] || "Unknown",
         averageRating: 0,
-        reviewCount: 0,
+        reviewCount: mealIdToReviewCount[meal.id] || 0,
       }));
+
+      // 5. Sort by review count (descending)
+      mealsWithUsernames.sort((a, b) => b.reviewCount - a.reviewCount);
 
       setMeals(mealsWithUsernames);
       setFilteredMeals(mealsWithUsernames);
@@ -336,54 +356,48 @@ const OtherMeals: React.FC = () => {
         </View>
       )}
 
-      {/* Search and Filter Card */}
-      <View style={[styles.searchCard, { backgroundColor: theme.card, shadowColor: theme.shadow }]}>
-        <View style={styles.searchContainer}>
-          <View style={[styles.searchInputContainer, { borderColor: theme.border }]}>
-            <Ionicons name="search" size={20} color={theme.subtext} style={styles.searchIcon} />
-            <TextInput
-              style={[styles.searchInput, { color: theme.text }]}
-              placeholder="Search meals, descriptions, or users..."
-              placeholderTextColor={theme.placeholder}
-              value={searchQuery}
-              onChangeText={handleSearchChange}
-            />
-            {searchQuery.length > 0 && (
-              <TouchableOpacity
-                style={styles.clearButton}
-                onPress={() => setSearchQuery("")}
-              >
-                <Ionicons name="close-circle" size={20} color={theme.subtext} />
-              </TouchableOpacity>
-            )}
-          </View>
-          <TouchableOpacity
-            style={[
-              styles.filterButton,
-              { 
-                backgroundColor: isFilterActive ? theme.primary : theme.button,
-                borderColor: isFilterActive ? theme.primary : theme.border 
-              },
-            ]}
-            onPress={() => {
-              setTempAiFilter(aiFilter);
-              setTempDietaryRestrictionFilter(dietaryRestrictionFilter);
-              setTempCuisineFilter(cuisineFilter);
-              setIsFilterModalVisible(true);
-            }}
-          >
-            <Ionicons 
-              name="options" 
-              size={20} 
-              color={isFilterActive ? theme.buttonText : theme.text} 
-            />
-            {isFilterActive && (
-              <View style={[styles.filterBadge, { backgroundColor: theme.buttonText }]}>
-                <Text style={[styles.filterBadgeText, { color: theme.primary }]}>!</Text>
-              </View>
-            )}
-          </TouchableOpacity>
+      {/* Search and Filter Bar */}
+      <View style={styles.searchBarContainer}>
+        <View style={[styles.searchInputContainer, { backgroundColor: theme.card, borderColor: theme.border }]}>
+          <Ionicons name="search" size={20} color={theme.subtext} style={styles.searchIcon} />
+          <TextInput
+            style={[styles.searchBar, { color: theme.text }]}
+            placeholder="Search meals, descriptions, or users..."
+            placeholderTextColor={theme.placeholder}
+            value={searchQuery}
+            onChangeText={handleSearchChange}
+          />
         </View>
+        <TouchableOpacity
+          style={[
+            styles.filterButton,
+            { 
+              backgroundColor: isFilterActive ? theme.primary : theme.card,
+              borderColor: theme.border
+            }
+          ]}
+          onPress={() => {
+            setTempAiFilter(aiFilter);
+            setTempDietaryRestrictionFilter(dietaryRestrictionFilter);
+            setTempCuisineFilter(cuisineFilter);
+            setIsFilterModalVisible(true);
+          }}
+        >
+          <Ionicons 
+            name="filter" 
+            size={20} 
+            color={isFilterActive ? theme.buttonText : theme.text} 
+          />
+          <Text style={[
+            styles.filterButtonText, 
+            { color: isFilterActive ? theme.buttonText : theme.text }
+          ]}>
+            Filter
+          </Text>
+          {isFilterActive && (
+            <View style={[styles.filterActiveDot, { backgroundColor: theme.warning }]} />
+          )}
+        </TouchableOpacity>
       </View>
 
       {/* Weekly Meals Button */}
@@ -457,16 +471,22 @@ const OtherMeals: React.FC = () => {
               {/* Nutrition Info */}
               <View style={styles.nutritionInfo}>
                 <View style={styles.nutritionItem}>
-                  <Text style={[styles.nutritionValue, { color: theme.primary }]}>
+                  <Ionicons name="flame-outline" size={12} color="#FF8C00" />
+                  <Text style={[styles.nutritionValue, { color: theme.subtext }]}>
                     {item.calories || 0}
                   </Text>
-                  <Text style={[styles.nutritionInfoLabel, { color: theme.subtext }]}>cal</Text>
                 </View>
                 <View style={styles.nutritionItem}>
-                  <Text style={[styles.nutritionValue, { color: theme.protein }]}>
+                  <Ionicons name="barbell-outline" size={12} color="#FF0000" />
+                  <Text style={[styles.nutritionValue, { color: theme.subtext }]}>
                     {item.protein || 0}g
                   </Text>
-                  <Text style={[styles.nutritionInfoLabel, { color: theme.subtext }]}>protein</Text>
+                </View>
+                <View style={styles.nutritionItem}>
+                  <Ionicons name="analytics-outline" size={12} color="#0066FF" />
+                  <Text style={[styles.nutritionValue, { color: theme.subtext }]}>
+                    {item.carbohydrates || 0}g
+                  </Text>
                 </View>
               </View>
 
@@ -529,9 +549,12 @@ const OtherMeals: React.FC = () => {
             <ScrollView style={styles.modalScrollView} showsVerticalScrollIndicator={false}>
               {/* Modal Header */}
               <View style={styles.modalHeader}>
-                <Text style={[styles.modalTitle, { color: theme.text }]}>Filter Meals</Text>
+                <View style={styles.modalHeaderContent}>
+                  <Ionicons name="filter" size={28} color={theme.primary} />
+                  <Text style={[styles.modalTitle, { color: theme.text }]}>Filter Meals</Text>
+                </View>
                 <TouchableOpacity
-                  style={styles.modalCloseButton}
+                  style={[styles.modalCloseButton, { backgroundColor: theme.background }]}
                   onPress={() => {
                     setTempAiFilter(aiFilter);
                     setTempDietaryRestrictionFilter(dietaryRestrictionFilter);
@@ -539,8 +562,66 @@ const OtherMeals: React.FC = () => {
                     setIsFilterModalVisible(false);
                   }}
                 >
-                  <Ionicons name="close" size={24} color={theme.subtext} />
+                  <Ionicons name="close" size={20} color={theme.subtext} />
                 </TouchableOpacity>
+              </View>
+
+              <Text style={[styles.modalSubtitle, { color: theme.subtext }]}>
+                Refine your meal search with these filters
+              </Text>
+
+              {/* Quick Filter Chips */}
+              <View style={styles.quickFiltersSection}>
+                <Text style={[styles.sectionTitle, { color: theme.text }]}>
+                  <Ionicons name="flash" size={18} color={theme.primary} /> Quick Filters
+                </Text>
+                <View style={styles.quickFiltersContainer}>
+                  <TouchableOpacity
+                    style={[
+                      styles.quickFilterChip,
+                      { 
+                        backgroundColor: tempAiFilter === "ai" ? theme.aiAccent : theme.background,
+                        borderColor: tempAiFilter === "ai" ? theme.aiAccent : theme.border
+                      }
+                    ]}
+                    onPress={() => setTempAiFilter(tempAiFilter === "ai" ? "" : "ai")}
+                  >
+                    <Ionicons 
+                      name="sparkles" 
+                      size={16} 
+                      color={tempAiFilter === "ai" ? theme.buttonText : theme.text} 
+                    />
+                    <Text style={[
+                      styles.quickFilterChipText, 
+                      { color: tempAiFilter === "ai" ? theme.buttonText : theme.text }
+                    ]}>
+                      AI Generated
+                    </Text>
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity
+                    style={[
+                      styles.quickFilterChip,
+                      { 
+                        backgroundColor: tempAiFilter === "not_ai" ? theme.success : theme.background,
+                        borderColor: tempAiFilter === "not_ai" ? theme.success : theme.border
+                      }
+                    ]}
+                    onPress={() => setTempAiFilter(tempAiFilter === "not_ai" ? "" : "not_ai")}
+                  >
+                    <Ionicons 
+                      name="person" 
+                      size={16} 
+                      color={tempAiFilter === "not_ai" ? theme.buttonText : theme.text} 
+                    />
+                    <Text style={[
+                      styles.quickFilterChipText, 
+                      { color: tempAiFilter === "not_ai" ? theme.buttonText : theme.text }
+                    ]}>
+                      Manual
+                    </Text>
+                  </TouchableOpacity>
+                </View>
               </View>
 
               {/* Nutrition Filters */}
@@ -600,10 +681,10 @@ const OtherMeals: React.FC = () => {
                     items={dietaryOptions}
                     value={tempDietaryRestrictionFilter}
                     style={{
-                      inputIOS: [styles.pickerInput, { color: theme.text }],
-                      inputAndroid: [styles.pickerInput, { color: theme.text }],
-                      iconContainer: styles.pickerIcon,
+                      inputIOS: [styles.pickerInput, { color: tempDietaryRestrictionFilter ? theme.text : theme.placeholder }],
+                      inputAndroid: [styles.pickerInput, { color: tempDietaryRestrictionFilter ? theme.text : theme.placeholder }],
                       placeholder: { color: theme.placeholder },
+                      iconContainer: styles.pickerIcon,
                     }}
                     useNativeAndroidPickerStyle={false}
                     Icon={() => <Ionicons name="chevron-down" size={20} color={theme.text} />}
@@ -623,10 +704,10 @@ const OtherMeals: React.FC = () => {
                     items={cuisineOptions}
                     value={tempCuisineFilter}
                     style={{
-                      inputIOS: [styles.pickerInput, { color: theme.text }],
-                      inputAndroid: [styles.pickerInput, { color: theme.text }],
-                      iconContainer: styles.pickerIcon,
+                      inputIOS: [styles.pickerInput, { color: tempCuisineFilter ? theme.text : theme.placeholder }],
+                      inputAndroid: [styles.pickerInput, { color: tempCuisineFilter ? theme.text : theme.placeholder }],
                       placeholder: { color: theme.placeholder },
+                      iconContainer: styles.pickerIcon,
                     }}
                     useNativeAndroidPickerStyle={false}
                     Icon={() => <Ionicons name="chevron-down" size={20} color={theme.text} />}
@@ -646,10 +727,10 @@ const OtherMeals: React.FC = () => {
                     items={aiOptions}
                     value={tempAiFilter}
                     style={{
-                      inputIOS: [styles.pickerInput, { color: theme.text }],
-                      inputAndroid: [styles.pickerInput, { color: theme.text }],
-                      iconContainer: styles.pickerIcon,
+                      inputIOS: [styles.pickerInput, { color: tempAiFilter ? theme.text : theme.placeholder }],
+                      inputAndroid: [styles.pickerInput, { color: tempAiFilter ? theme.text : theme.placeholder }],
                       placeholder: { color: theme.placeholder },
+                      iconContainer: styles.pickerIcon,
                     }}
                     useNativeAndroidPickerStyle={false}
                     Icon={() => <Ionicons name="chevron-down" size={20} color={theme.text} />}
@@ -689,7 +770,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#fff',
-    paddingTop: 20, // Added top padding
+    paddingTop: 50, // Added more top padding
   },
   
   // Header Card Styles
@@ -720,66 +801,60 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
 
-  // Search Card Styles
-  searchCard: {
-    margin: 16,
-    marginTop: 16,
-    marginBottom: 8,
-    padding: 16,
-    borderRadius: 12,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  searchContainer: {
+  // Search Bar Styles (matching meals.tsx)
+  searchBarContainer: {
     flexDirection: 'row',
     alignItems: 'center',
+    marginBottom: 16,
+    marginHorizontal: 16,
     gap: 12,
   },
   searchInputContainer: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
+    borderRadius: 12,
     borderWidth: 1,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    height: 44,
+    paddingHorizontal: 16,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
   },
   searchIcon: {
-    marginRight: 8,
+    marginRight: 12,
   },
-  searchInput: {
+  searchBar: {
     flex: 1,
+    height: 48,
     fontSize: 16,
-    height: '100%',
-  },
-  clearButton: {
-    padding: 4,
+    fontWeight: '500',
   },
   filterButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    borderRadius: 10,
+    borderRadius: 12,
     borderWidth: 1,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
     position: 'relative',
   },
-  filterBadge: {
-    position: 'absolute',
-    top: -6,
-    right: -6,
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
+  filterButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginLeft: 8,
   },
-  filterBadgeText: {
-    fontSize: 10,
-    fontWeight: 'bold',
+  filterActiveDot: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
 
   // Action Card Styles
@@ -867,19 +942,18 @@ const styles = StyleSheet.create({
   // Nutrition Info Styles
   nutritionInfo: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     marginBottom: 8,
-    gap: 12,
+    gap: 8,
   },
   nutritionItem: {
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: 4,
   },
   nutritionValue: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
-  },
-  nutritionInfoLabel: {
-    fontSize: 10,
-    marginTop: 1,
   },
   
   // Bottom Row Styles
@@ -1038,12 +1112,48 @@ const styles = StyleSheet.create({
     padding: 20,
     paddingBottom: 16,
   },
+  modalHeaderContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
   modalTitle: {
     fontSize: 20,
     fontWeight: 'bold',
+    marginLeft: 12,
   },
   modalCloseButton: {
-    padding: 4,
+    padding: 8,
+    borderRadius: 20,
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    paddingHorizontal: 20,
+    marginBottom: 20,
+  },
+
+  // Quick Filters Section
+  quickFiltersSection: {
+    paddingHorizontal: 20,
+    marginBottom: 16,
+  },
+  quickFiltersContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  quickFilterChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    gap: 6,
+  },
+  quickFilterChipText: {
+    fontSize: 12,
+    fontWeight: '600',
   },
 
   // Filter Section Styles
@@ -1098,15 +1208,17 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 8,
     overflow: 'hidden',
+    minHeight: 56,
   },
   pickerInput: {
     paddingVertical: 16,
     paddingHorizontal: 12,
     fontSize: 16,
     paddingRight: 40,
+    minHeight: 56,
   },
   pickerIcon: {
-    top: 20,
+    top: 18,
     right: 12,
   },
 
@@ -1164,23 +1276,6 @@ const styles = StyleSheet.create({
   mealPicturePlaceholderText: {
     fontSize: 12,
     color: "#888",
-  },
-  searchBarContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    margin: 16,
-  },
-  searchBar: {
-    flex: 1,
-    height: 40,
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 8,
-    fontSize: 16,
-  },
-  filterButtonText: {
-    fontSize: 16,
-    fontWeight: "bold",
   },
   mealUser: {
     fontSize: 12,

@@ -393,20 +393,24 @@ const MyMealInfo = () => {
   }
 
   return (
-    <ScrollView 
-      contentContainerStyle={[styles.scrollContainer, { backgroundColor: theme.background }]}
-      refreshControl={
-        <RefreshControl
-          refreshing={refreshing}
-          onRefresh={handleRefresh}
-          colors={[theme.primary]}
-          tintColor={theme.primary}
-        />
-      }
-    >
-      {error && (
-        <View style={[styles.errorBanner, { backgroundColor: theme.card, borderColor: theme.danger }]}>
-          <Ionicons name="warning" size={20} color={theme.danger} />
+    <View style={[styles.container, { backgroundColor: theme.background }]}>
+      {/* Top Back Button */}
+      <View style={[styles.topNavContainer, { backgroundColor: theme.background }]}>
+        <TouchableOpacity
+          style={[styles.topBackButton, { backgroundColor: theme.card }]}
+          onPress={() => router.push("/(app)/my-meals/meals")}
+        >
+          <Ionicons name="arrow-back" size={24} color={theme.text} />
+        </TouchableOpacity>
+      </View>
+
+      {/* Error Banner */}
+      {error && !loading && (
+        <View style={[styles.errorBanner, { 
+          backgroundColor: `${theme.danger}15`, 
+          borderColor: theme.danger 
+        }]}>
+          <Ionicons name="alert-circle" size={20} color={theme.danger} />
           <Text style={[styles.errorBannerText, { color: theme.danger }]}>
             {error}
           </Text>
@@ -421,94 +425,173 @@ const MyMealInfo = () => {
         </View>
       )}
 
-      {retryCount > 0 && (
-        <View style={[styles.retryBanner, { backgroundColor: theme.card, borderColor: theme.warning }]}>
+      {/* Retry Banner */}
+      {retryCount > 0 && !loading && (
+        <View style={[styles.retryBanner, { 
+          backgroundColor: `${theme.warning}15`, 
+          borderColor: theme.warning 
+        }]}>
+          <Ionicons name="time" size={16} color={theme.warning} />
           <Text style={[styles.retryBannerText, { color: theme.warning }]}>
-            Retry attempt {retryCount}/3...
+            Retry attempt {retryCount}/3
           </Text>
         </View>
       )}
 
-      {/* Meal Picture */}
-      {meal?.picture ? (
-        <View style={[styles.imageCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
-          <Image
-            source={{ 
-              uri: typeof meal.picture === "string" 
-                ? meal.picture.startsWith('\\x') 
-                  ? meal.picture.slice(2).match(/.{2}/g)?.map(hex => String.fromCharCode(parseInt(hex, 16))).join('') || ''
-                  : meal.picture
-                : "" 
-            }}
-            style={styles.mealImage}
-            resizeMode="cover"
+      <ScrollView 
+        contentContainerStyle={styles.scrollContainer}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            colors={[theme.primary]}
+            tintColor={theme.primary}
           />
+        }
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Meal Image Card */}
+        <View style={[styles.imageCard, { backgroundColor: theme.card, shadowColor: theme.shadow }]}>
+          {meal?.picture && typeof meal.picture === "string" ? (
+            <Image 
+              source={{ 
+                uri: meal.picture.startsWith('\\x') 
+                  ? meal.picture.slice(2).match(/.{2}/g)?.map((hex: string) => String.fromCharCode(parseInt(hex, 16))).join('') || ''
+                  : meal.picture
+              }} 
+              style={styles.mealImage} 
+            />
+          ) : (
+            <View style={[styles.imagePlaceholder, { backgroundColor: theme.border }]}>
+              <Ionicons name="image" size={48} color={theme.subtext} />
+              <Text style={[styles.imagePlaceholderText, { color: theme.subtext }]}>No Image</Text>
+            </View>
+          )}
+          
+          {/* AI Tag */}
+          {meal?.created_by_ai && (
+            <View style={styles.aiTag}>
+              <Ionicons name="sparkles" size={12} color="#fff" />
+              <Text style={styles.aiTagText}>AI Generated</Text>
+            </View>
+          )}
         </View>
-      ) : (
-        <View style={[styles.placeholder, { backgroundColor: theme.card, borderColor: theme.border }]}>
-          <Ionicons name="image-outline" size={48} color={theme.subtext} />
-          <Text style={[styles.placeholderText, { color: theme.subtext }]}>
-            No Image Available
-          </Text>
-        </View>
-      )}
 
-      <View style={[styles.contentContainer, { backgroundColor: theme.background }]}>
-        {/* Meal Title Card */}
-        <View style={[styles.titleCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
-          <View style={styles.titleHeader}>
-            <Ionicons name="restaurant-outline" size={28} color={theme.primary} />
-            <Text style={[styles.title, { color: theme.text }]}>{meal?.name || "Unknown Meal"}</Text>
-            {meal?.created_by_ai && (
-              <View style={[styles.aiTag, { backgroundColor: theme.aiAccent }]}>
-                <Ionicons name="sparkles" size={14} color={theme.buttonText} />
-                <Text style={[styles.aiTagText, { color: theme.buttonText }]}>AI</Text>
+        {/* Meal Info Card */}
+        <View style={[styles.infoCard, { backgroundColor: theme.card, shadowColor: theme.shadow }]}>
+          <Text style={[styles.mealTitle, { color: theme.text }]}>{meal?.name || "Unknown Meal"}</Text>
+          <Text style={[styles.mealDescription, { color: theme.subtext }]}>{meal?.description || "No description available"}</Text>
+          
+          {/* Creator Info */}
+          {meal?.created_by && (
+            <View style={styles.tagsContainer}>
+              <View style={[styles.tag, { backgroundColor: theme.info + '20', borderColor: theme.info }]}>
+                <Ionicons name="person" size={12} color={theme.info} />
+                <Text style={[styles.tagText, { color: theme.info }]}>Created by: {meal.created_by}</Text>
+              </View>
+            </View>
+          )}
+          
+          {/* Status Tags */}
+          <View style={styles.tagsContainer}>
+            {meal?.favorite && (
+              <View style={[styles.tag, { backgroundColor: theme.warning + '20', borderColor: theme.warning }]}>
+                <Ionicons name="heart" size={12} color={theme.warning} />
+                <Text style={[styles.tagText, { color: theme.warning }]}>Favorite</Text>
+              </View>
+            )}
+            {meal?.visibility === false && (
+              <View style={[styles.tag, { backgroundColor: theme.danger + '20', borderColor: theme.danger }]}>
+                <Ionicons name="eye-off" size={12} color={theme.danger} />
+                <Text style={[styles.tagText, { color: theme.danger }]}>Private</Text>
+              </View>
+            )}
+            {meal?.AI_Macros && (
+              <View style={[styles.tag, { backgroundColor: theme.info + '20', borderColor: theme.info }]}>
+                <Ionicons name="calculator" size={12} color={theme.info} />
+                <Text style={[styles.tagText, { color: theme.info }]}>AI Macros</Text>
               </View>
             )}
           </View>
-          <Text style={[styles.description, { color: theme.subtext }]}>
-            {meal?.description || "No description available"}
-          </Text>
+          
+          {/* Tags */}
+          <View style={styles.tagsContainer}>
+            {meal?.cuisine && (
+              <View style={[styles.tag, { backgroundColor: theme.primary + '20', borderColor: theme.primary }]}>
+                <Ionicons name="globe" size={12} color={theme.primary} />
+                <Text style={[styles.tagText, { color: theme.primary }]}>{meal.cuisine}</Text>
+              </View>
+            )}
+            {meal?.dietary_restrictions && (
+              <View style={[styles.tag, { backgroundColor: theme.success + '20', borderColor: theme.success }]}>
+                <Ionicons name="leaf" size={12} color={theme.success} />
+                <Text style={[styles.tagText, { color: theme.success }]}>{meal.dietary_restrictions}</Text>
+              </View>
+            )}
+          </View>
         </View>
 
-        {/* Meal Details Cards */}
-        {meal?.dietary_restrictions && (
-          <View style={[styles.infoCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
-            <View style={styles.cardHeader}>
-              <Ionicons name="leaf-outline" size={24} color={theme.success} />
-              <Text style={[styles.cardTitle, { color: theme.text }]}>Dietary Restriction</Text>
-            </View>
-            <Text style={[styles.cardContent, { color: theme.subtext }]}>
-              {meal.dietary_restrictions}
-            </Text>
+        {/* Nutrition Card */}
+        <View style={[styles.nutritionCard, { backgroundColor: theme.card, shadowColor: theme.shadow }]}>
+          <View style={styles.cardHeader}>
+            <Ionicons name="nutrition" size={20} color={theme.primary} />
+            <Text style={[styles.cardTitle, { color: theme.text }]}>Nutrition Facts</Text>
           </View>
-        )}
+          <View style={styles.nutritionGrid}>
+            <View style={styles.nutritionItem}>
+              <Text style={[styles.nutritionValue, { color: '#FF8C00' }]}>{meal?.calories || 0}</Text>
+              <Text style={[styles.nutritionLabel, { color: theme.subtext }]}>Calories</Text>
+            </View>
+            <View style={styles.nutritionItem}>
+              <Text style={[styles.nutritionValue, { color: '#FF0000' }]}>{meal?.protein || 0}g</Text>
+              <Text style={[styles.nutritionLabel, { color: theme.subtext }]}>Protein</Text>
+            </View>
+            <View style={styles.nutritionItem}>
+              <Text style={[styles.nutritionValue, { color: '#0066FF' }]}>{meal?.carbohydrates || 0}g</Text>
+              <Text style={[styles.nutritionLabel, { color: theme.subtext }]}>Carbs</Text>
+            </View>
+            <View style={styles.nutritionItem}>
+              <Text style={[styles.nutritionValue, { color: theme.fat }]}>{meal?.fat || 0}g</Text>
+              <Text style={[styles.nutritionLabel, { color: theme.subtext }]}>Fat</Text>
+            </View>
+            <View style={styles.nutritionItem}>
+              <Text style={[styles.nutritionValue, { color: theme.text }]}>{meal?.servings || 1}</Text>
+              <Text style={[styles.nutritionLabel, { color: theme.subtext }]}>Servings</Text>
+            </View>
+          </View>
+        </View>
 
-        {meal?.cuisine && (
-          <View style={[styles.infoCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
-            <View style={styles.cardHeader}>
-              <Ionicons name="globe-outline" size={24} color={theme.info} />
-              <Text style={[styles.cardTitle, { color: theme.text }]}>Cuisine</Text>
-            </View>
-            <Text style={[styles.cardContent, { color: theme.subtext }]}>
-              {meal.cuisine}
-            </Text>
+        {/* Ingredients Card */}
+        <View style={[styles.ingredientsCard, { backgroundColor: theme.card, shadowColor: theme.shadow }]}>
+          <View style={styles.cardHeader}>
+            <Ionicons name="list" size={20} color={theme.success} />
+            <Text style={[styles.cardTitle, { color: theme.text }]}>Ingredients</Text>
           </View>
-        )}
+          {meal?.ingredients && Array.isArray(meal.ingredients) && meal.ingredients.length > 0 ? (
+            meal.ingredients.map((ingredient, index) => (
+              <View key={index} style={styles.ingredientItem}>
+                <View style={[styles.ingredientBullet, { backgroundColor: theme.primary }]} />
+                <Text style={[styles.ingredientText, { color: theme.text }]}>
+                  {ingredient.quantity} {ingredient.unit || ''} {ingredient.raw_name}
+                </Text>
+              </View>
+            ))
+          ) : (
+            <Text style={[styles.emptyText, { color: theme.subtext }]}>No ingredients listed</Text>
+          )}
+        </View>
 
         {/* Instructions Card */}
-        <View style={[styles.contentCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+        <View style={[styles.instructionsCard, { backgroundColor: theme.card, shadowColor: theme.shadow }]}>
           <View style={styles.cardHeader}>
-            <Ionicons name="book-outline" size={24} color={theme.primary} />
-            <Text style={[styles.sectionTitle, { color: theme.text }]}>Instructions</Text>
+            <Ionicons name="receipt" size={20} color={theme.warning} />
+            <Text style={[styles.cardTitle, { color: theme.text }]}>Instructions</Text>
           </View>
-          <Text style={[styles.details, { color: theme.subtext }]}>
-            {meal?.instructions || "No instructions provided"}
-          </Text>
+          <Text style={[styles.instructionsText, { color: theme.text }]}>{meal?.instructions || "No instructions provided"}</Text>
         </View>
 
         {/* Recipe Link Card */}
-        {meal?.recipeLink && (
+        {meal?.recipeLink && meal.recipeLink.trim() !== '' ? (
           <TouchableOpacity 
             style={[styles.linkCard, { backgroundColor: theme.primaryLight, borderColor: theme.primary }]}
             onPress={() => meal?.recipeLink && Linking.openURL(meal.recipeLink)}
@@ -524,146 +607,61 @@ const MyMealInfo = () => {
             </View>
             <Ionicons name="arrow-forward-outline" size={20} color={theme.primary} />
           </TouchableOpacity>
-        )}
-
-        {/* Ingredients Card */}
-        <View style={[styles.contentCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
-          <View style={styles.cardHeader}>
-            <Ionicons name="list-outline" size={24} color={theme.success} />
-            <Text style={[styles.sectionTitle, { color: theme.text }]}>Ingredients</Text>
-          </View>
-          {meal?.ingredients && Array.isArray(meal.ingredients) ? (
-            meal.ingredients.length > 0 ? (
-              <View style={styles.ingredientsList}>
-                {meal.ingredients.map((ing, idx: number) => (
-                  <View key={idx} style={styles.ingredientItem}>
-                    <Ionicons name="ellipse" size={6} color={theme.success} style={{ marginTop: 6 }} />
-                    <Text style={[styles.ingredientText, { color: theme.subtext }]}>
-                      {ing.quantity} {ing.unit || ''} {ing.raw_name}
-                    </Text>
-                  </View>
-                ))}
-              </View>
-            ) : (
-              <Text style={[styles.emptyText, { color: theme.subtext }]}>
-                No ingredients listed.
-              </Text>
-            )
-          ) : (
-            <Text style={[styles.emptyText, { color: theme.subtext }]}>
-              No ingredients available.
-            </Text>
-          )}
-        </View>
-
-        {/* Nutrition Card */}
-        <View style={[styles.nutritionCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
-          <View style={styles.cardHeader}>
-            <Ionicons name="fitness-outline" size={24} color={theme.primary} />
-            <Text style={[styles.sectionTitle, { color: theme.text }]}>Nutrition Information</Text>
-          </View>
-          <View style={styles.nutritionGrid}>
-            <View style={[styles.nutritionItem, { backgroundColor: theme.background }]}>
-              <Ionicons name="flame-outline" size={20} color={theme.warning} />
-              <Text style={[styles.nutritionLabel, { color: theme.subtext }]}>Calories</Text>
-              <Text style={[styles.nutritionValue, { color: theme.text }]}>
-                {meal?.calories || 'N/A'}
-              </Text>
-            </View>
-            <View style={[styles.nutritionItem, { backgroundColor: theme.background }]}>
-              <Ionicons name="barbell-outline" size={20} color={theme.protein} />
-              <Text style={[styles.nutritionLabel, { color: theme.subtext }]}>Protein</Text>
-              <Text style={[styles.nutritionValue, { color: theme.text }]}>
-                {meal?.protein || 'N/A'}g
-              </Text>
-            </View>
-            <View style={[styles.nutritionItem, { backgroundColor: theme.background }]}>
-              <Ionicons name="analytics-outline" size={20} color={theme.carbs} />
-              <Text style={[styles.nutritionLabel, { color: theme.subtext }]}>Carbs</Text>
-              <Text style={[styles.nutritionValue, { color: theme.text }]}>
-                {meal?.carbohydrates || 'N/A'}g
-              </Text>
-            </View>
-            <View style={[styles.nutritionItem, { backgroundColor: theme.background }]}>
-              <Ionicons name="water-outline" size={20} color={theme.fat} />
-              <Text style={[styles.nutritionLabel, { color: theme.subtext }]}>Fat</Text>
-              <Text style={[styles.nutritionValue, { color: theme.text }]}>
-                {meal?.fat || 'N/A'}g
-              </Text>
-            </View>
-            <View style={[styles.nutritionItem, { backgroundColor: theme.background }]}>
-              <Ionicons name="restaurant-outline" size={20} color={theme.primary} />
-              <Text style={[styles.nutritionLabel, { color: theme.subtext }]}>Servings</Text>
-              <Text style={[styles.nutritionValue, { color: theme.text }]}>
-                {meal?.servings || 1}
-              </Text>
-            </View>
-          </View>
-        </View>
+        ) : null}
 
         {/* Action Buttons */}
-        <View style={styles.actionContainer}>
+        <View style={styles.actionButtons}>
           <TouchableOpacity
-            style={[styles.primaryButton, { backgroundColor: theme.primary }]}
+            style={[styles.actionButton, styles.primaryButton, { backgroundColor: theme.primary }]}
             onPress={() => setIsModalVisible(true)}
             disabled={addingToMealPlan}
           >
             {addingToMealPlan ? (
-              <ActivityIndicator color={theme.buttonText} size="small" />
+              <ActivityIndicator size="small" color={theme.buttonText} />
             ) : (
-              <View style={styles.buttonContent}>
+              <>
                 <Ionicons name="calendar-outline" size={20} color={theme.buttonText} />
-                <Text style={[styles.buttonText, { color: theme.buttonText }]}>
-                  Add to Meal Plan
-                </Text>
-              </View>
+                <Text style={[styles.actionButtonText, { color: theme.buttonText }]}>Add to Meal Plan</Text>
+              </>
             )}
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[styles.secondaryButton, { backgroundColor: theme.button, borderColor: theme.border }]}
-            onPress={() => router.push(`/my-meals/${id}/edit`)}
-            disabled={deleting}
-          >
-            <View style={styles.buttonContent}>
-              <Ionicons name="create-outline" size={20} color={theme.text} />
-              <Text style={[styles.secondaryButtonText, { color: theme.text }]}>
-                Edit Meal
-              </Text>
-            </View>
-          </TouchableOpacity>
+          <View style={styles.secondaryActions}>
+            <TouchableOpacity
+              style={[styles.actionButton, styles.secondaryButton, { backgroundColor: theme.button, borderColor: theme.border }]}
+              onPress={() => router.push(`/my-meals/${id}/edit`)}
+              disabled={deleting}
+            >
+              <Ionicons name="create" size={18} color={theme.text} />
+              <Text style={[styles.secondaryButtonText, { color: theme.text }]}>Edit Meal</Text>
+            </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[styles.dangerButton, { backgroundColor: theme.danger }]}
-            onPress={handleDeleteMeal}
-            disabled={deleting}
-          >
-            {deleting ? (
-              <ActivityIndicator color={theme.buttonText} size="small" />
-            ) : (
-              <View style={styles.buttonContent}>
-                <Ionicons name="trash-outline" size={20} color={theme.buttonText} />
-                <Text style={[styles.buttonText, { color: theme.buttonText }]}>
-                  Delete Meal
-                </Text>
-              </View>
-            )}
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.secondaryButton, { backgroundColor: theme.background, borderColor: theme.border }]}
-            onPress={() => router.push("/(app)/my-meals/meals")}
-            disabled={deleting}
-          >
-            <View style={styles.buttonContent}>
-              <Ionicons name="arrow-back-outline" size={20} color={theme.text} />
-              <Text style={[styles.secondaryButtonText, { color: theme.text }]}>
-                Back to Meals
-              </Text>
-            </View>
-          </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.actionButton, styles.dangerButton, { backgroundColor: theme.danger }]}
+              onPress={handleDeleteMeal}
+              disabled={deleting}
+            >
+              {deleting ? (
+                <ActivityIndicator size="small" color={theme.buttonText} />
+              ) : (
+                <>
+                  <Ionicons name="trash" size={18} color={theme.buttonText} />
+                  <Text style={[styles.secondaryButtonText, { color: theme.buttonText }]}>Delete</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
         </View>
-      </View>
+
+        {/* Bottom Back Button */}
+        <TouchableOpacity
+          style={[styles.actionButton, styles.backToMealsButton, { backgroundColor: theme.background, borderColor: theme.border }]}
+          onPress={() => router.push("/(app)/my-meals/meals")}
+        >
+          <Ionicons name="arrow-back-outline" size={20} color={theme.text} />
+          <Text style={[styles.secondaryButtonText, { color: theme.text }]}>Back to Meals</Text>
+        </TouchableOpacity>
+      </ScrollView>
 
       {/* Enhanced Modal for Adding to Meal Plan */}
       <Modal visible={isModalVisible} transparent animationType="slide">
@@ -761,287 +759,224 @@ const MyMealInfo = () => {
           </View>
         </View>
       </Modal>
-    </ScrollView>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: 'transparent',
-  },
-  scrollContainer: {
-    flexGrow: 1,
-  },
-  centerContent: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
   },
 
-  // Enhanced Loading Card
-  loadingCard: {
-    padding: 40,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 5,
-    maxWidth: '90%',
-  },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-    textAlign: 'center',
-    fontWeight: '600',
-  },
-  retryText: {
-    fontSize: 14,
-    marginTop: 8,
-    textAlign: 'center',
-    fontWeight: '500',
-  },
-
-  // Enhanced Error Styles
-  errorContainer: {
-    padding: 32,
-    borderRadius: 16,
-    alignItems: 'center',
-    maxWidth: '90%',
-    borderWidth: 2,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 5,
-  },
-  errorTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginBottom: 12,
-    marginTop: 16,
-    textAlign: 'center',
-  },
-  errorText: {
-    fontSize: 16,
-    marginBottom: 20,
-    textAlign: 'center',
-    lineHeight: 24,
-  },
-  retryButton: {
+  // Top Navigation Styles
+  topNavContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 24,
+    paddingHorizontal: 16,
     paddingVertical: 12,
-    borderRadius: 12,
-    marginBottom: 12,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+    paddingTop: Platform.OS === 'ios' ? 50 : 12,
+    zIndex: 1000,
   },
-  retryButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  backButton: {
-    flexDirection: 'row',
+  topBackButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: 'center',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-
-  // Error Banner
-  errorBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-    marginHorizontal: 16,
-    marginBottom: 16,
-    borderRadius: 12,
-    borderWidth: 1,
+    justifyContent: 'center',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
   },
-  errorBannerText: {
-    flex: 1,
-    fontSize: 14,
-    fontWeight: '600',
-    marginLeft: 8,
-  },
-  errorBannerButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  errorBannerButtonText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  retryBanner: {
-    padding: 12,
-    marginHorizontal: 16,
-    marginBottom: 10,
-    borderRadius: 8,
-    borderWidth: 1,
-    alignItems: "center",
-  },
-  retryBannerText: {
-    fontSize: 14,
-    fontWeight: "bold",
+  
+  // Content Styles
+  scrollContainer: {
+    paddingBottom: 20,
   },
 
-  // Enhanced Image Card
+  // Image Card Styles
   imageCard: {
-    marginHorizontal: 16,
-    marginBottom: 20,
+    margin: 16,
     borderRadius: 16,
-    borderWidth: 1,
     overflow: 'hidden',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
     elevation: 6,
+    position: 'relative',
   },
   mealImage: {
-    width: "100%",
-    height: 250,
+    width: '100%',
+    height: 240,
     resizeMode: 'cover',
   },
-  placeholder: {
-    width: "100%",
-    height: 250,
-    borderRadius: 16,
-    borderWidth: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    marginHorizontal: 16,
-    marginBottom: 20,
-    gap: 12,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  placeholderText: {
-    fontSize: 16,
-    fontWeight: "600",
-  },
-
-  // Content Container
-  contentContainer: {
-    padding: 16,
-    gap: 16,
-  },
-
-  // Enhanced Title Card
-  titleCard: {
-    padding: 20,
-    borderRadius: 16,
-    borderWidth: 1,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 5,
-  },
-  titleHeader: {
-    flexDirection: 'row',
+  imagePlaceholder: {
+    width: '100%',
+    height: 240,
     alignItems: 'center',
-    marginBottom: 12,
-    gap: 12,
+    justifyContent: 'center',
   },
-  title: {
-    fontSize: 24,
-    fontWeight: "800",
-    flex: 1,
-    lineHeight: 32,
+  imagePlaceholderText: {
+    fontSize: 14,
+    marginTop: 8,
   },
   aiTag: {
+    position: 'absolute',
+    top: 12,
+    left: 12,
     flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: '#8B5CF6',
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 12,
+    borderRadius: 6,
     gap: 4,
   },
   aiTagText: {
-    fontSize: 10,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  description: {
-    fontSize: 16,
-    lineHeight: 24,
-    fontWeight: '500',
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#fff',
   },
 
-  // Info Cards
+  // Info Card Styles
   infoCard: {
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 1,
+    margin: 16,
+    marginTop: 8,
+    padding: 20,
+    borderRadius: 16,
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
+    shadowOpacity: 0.1,
     shadowRadius: 4,
-    elevation: 2,
+    elevation: 3,
+  },
+  mealTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  mealDescription: {
+    fontSize: 16,
+    lineHeight: 24,
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  tagsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  tag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: 4,
+  },
+  tagText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+
+  // Card Components
+  nutritionCard: {
+    margin: 16,
+    marginTop: 8,
+    padding: 20,
+    borderRadius: 16,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  ingredientsCard: {
+    margin: 16,
+    marginTop: 8,
+    padding: 20,
+    borderRadius: 16,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  instructionsCard: {
+    margin: 16,
+    marginTop: 8,
+    padding: 20,
+    borderRadius: 16,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   cardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
-    gap: 12,
+    marginBottom: 16,
+    gap: 8,
   },
   cardTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  cardContent: {
-    fontSize: 15,
-    fontWeight: '500',
-    lineHeight: 22,
+    fontSize: 18,
+    fontWeight: '600',
   },
 
-  // Content Cards
-  contentCard: {
-    padding: 20,
-    borderRadius: 16,
-    borderWidth: 1,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 5,
+  // Nutrition Styles
+  nutritionGrid: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
   },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '700',
+  nutritionItem: {
+    alignItems: 'center',
   },
-  details: {
+  nutritionValue: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 4,
+  },
+  nutritionLabel: {
+    fontSize: 12,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+
+  // Ingredients Styles
+  ingredientItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+    gap: 12,
+  },
+  ingredientBullet: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  ingredientText: {
     fontSize: 15,
-    lineHeight: 24,
-    fontWeight: '500',
+    lineHeight: 22,
+    flex: 1,
   },
   emptyText: {
     fontSize: 15,
-    fontStyle: "italic",
-    textAlign: "center",
-    fontWeight: '500',
+    fontStyle: 'italic',
+    textAlign: 'center',
+  },
+
+  // Instructions Styles
+  instructionsText: {
+    fontSize: 15,
+    lineHeight: 24,
   },
 
   // Link Card
   linkCard: {
     flexDirection: 'row',
     alignItems: 'center',
+    margin: 16,
+    marginTop: 8,
     padding: 20,
     borderRadius: 16,
     borderWidth: 2,
@@ -1065,24 +1000,153 @@ const styles = StyleSheet.create({
     opacity: 0.8,
   },
 
-  // Ingredients List
-  ingredientsList: {
-    gap: 8,
-  },
-  ingredientItem: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
+  // Action Buttons
+  actionButtons: {
+    margin: 16,
+    marginTop: 8,
     gap: 12,
   },
-  ingredientText: {
+  actionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    gap: 8,
+  },
+  primaryButton: {
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  secondaryButton: {
+    borderWidth: 1,
+  },
+  dangerButton: {
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  actionButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  secondaryButtonText: {
     fontSize: 15,
-    lineHeight: 22,
     fontWeight: '500',
-    flex: 1,
+  },
+  secondaryActions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  backToMealsButton: {
+    borderWidth: 1,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
   },
 
-  // Nutrition Card
-  nutritionCard: {
+  // Loading and Error States
+  centerContent: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  loadingCard: {
+    padding: 40,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 5,
+    maxWidth: '90%',
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    textAlign: 'center',
+  },
+  errorContainer: {
+    padding: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    maxWidth: '90%',
+    borderWidth: 2,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 5,
+  },
+  errorTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 12,
+    marginTop: 16,
+    textAlign: 'center',
+  },
+  errorText: {
+    fontSize: 16,
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  retryButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+    marginVertical: 5,
+  },
+  retryButtonText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  retryText: {
+    fontSize: 14,
+    marginTop: 10,
+    textAlign: 'center',
+  },
+  backButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  placeholder: {
+    width: "100%",
+    height: 250,
+    borderRadius: 16,
+    borderWidth: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    marginHorizontal: 16,
+    marginBottom: 20,
+    gap: 12,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  placeholderText: {
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  contentContainer: {
+    padding: 16,
+    gap: 16,
+  },
+  titleCard: {
     padding: 20,
     borderRadius: 16,
     borderWidth: 1,
@@ -1091,111 +1155,89 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     elevation: 5,
   },
-  nutritionGrid: {
+  titleHeader: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    alignItems: 'center',
+    marginBottom: 12,
     gap: 12,
   },
-  nutritionItem: {
-    flex: 1,
-    minWidth: '45%',
-    alignItems: 'center',
-    padding: 16,
-    borderRadius: 12,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
+  cardContent: {
+    fontSize: 15,
+    fontWeight: '500',
+    lineHeight: 22,
   },
-  nutritionLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    marginTop: 8,
-    marginBottom: 4,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
+  contentCard: {
+    padding: 20,
+    borderRadius: 16,
+    borderWidth: 1,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 5,
   },
-  nutritionValue: {
-    fontSize: 18,
-    fontWeight: '800',
+  ingredientsList: {
+    gap: 8,
   },
-
-  // Action Container
   actionContainer: {
     gap: 16,
     paddingBottom: 20,
   },
-  buttonContent: {
+  errorBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    padding: 12,
+    marginHorizontal: 16,
+    marginTop: 8,
+    borderRadius: 8,
+    borderWidth: 1,
     gap: 8,
   },
-
-  // Enhanced Buttons
-  primaryButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 16,
-    paddingHorizontal: 24,
-    borderRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
+  errorBannerText: {
+    flex: 1,
+    fontSize: 14,
   },
-  secondaryButton: {
+  errorBannerButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  errorBannerButtonText: {
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  retryBanner: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 14,
-    paddingHorizontal: 24,
-    borderRadius: 12,
+    padding: 12,
+    marginHorizontal: 16,
+    marginTop: 8,
+    borderRadius: 8,
     borderWidth: 1,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
+    gap: 6,
   },
-  dangerButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 16,
-    paddingHorizontal: 24,
-    borderRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  buttonText: {
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  secondaryButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
+  retryBannerText: {
+    fontSize: 14,
+    fontWeight: '500',
   },
 
-  // Enhanced Modal
+  // Enhanced Modal Styles
   modalContainer: {
     flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
     padding: 20,
   },
   modalContent: {
-    width: "100%",
+    width: '100%',
     maxWidth: 400,
+    borderRadius: 16,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 8,
     padding: 24,
-    borderRadius: 20,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.2,
-    shadowRadius: 16,
-    elevation: 10,
   },
   modalHeader: {
     flexDirection: 'row',
@@ -1204,9 +1246,8 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   modalTitle: {
-    fontSize: 22,
-    fontWeight: "800",
-    flex: 1,
+    fontSize: 20,
+    fontWeight: 'bold',
   },
   modalCloseButton: {
     padding: 4,
@@ -1271,32 +1312,48 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
   },
+  buttonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  buttonText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
 
   // Legacy compatibility styles
+  title: {
+    fontSize: 24,
+    fontWeight: "bold",
+    marginBottom: 16,
+    textAlign: "center",
+  },
+  description: {
+    fontSize: 16,
+    marginBottom: 16,
+    textAlign: "center",
+    color: "#6c757d",
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    marginTop: 16,
+    marginBottom: 8,
+    textAlign: "left",
+  },
+  details: {
+    fontSize: 14,
+    marginBottom: 8,
+    lineHeight: 20,
+    textAlign: "left",
+  },
   button: {
     padding: 12,
     borderRadius: 8,
-    marginVertical: 8,
     alignItems: "center",
-  },
-  linkText: {
-    fontSize: 16,
-    textDecorationLine: "underline",
-  },
-  input: {
-    borderWidth: 1,
-    borderRadius: 8,
-    padding: 10,
     marginBottom: 16,
-  },
-  nutritionContainer: {
-    flexDirection: "row",
-    justifyContent: "space-around",
-    marginBottom: 16,
-  },
-  nutritionText: {
-    fontSize: 14,
-    fontWeight: "bold",
+    width: "100%",
   },
 });
 

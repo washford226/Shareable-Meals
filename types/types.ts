@@ -17,12 +17,14 @@ export interface Meal {
   recipeLink?: string; // Optional field for an external recipe link
   created_at?: string; // Optional field for the creation timestamp
   created_by_ai: boolean; // Indicates if the meal was created by AI
+  created_by?: string; // Optional field for who created the meal
   favorite: boolean; // Indicates if the meal is a favorite
   dietary_restrictions?: string; // Optional field for dietary restrictions
   servings?: number; // Optional field for number of servings
   cuisine?: string; // Optional field for cuisine type
   ingredients?: MealIngredient[]; // Optional array of ingredients from meal_ingredients table
   isMacroMeal?: boolean; // Flag to identify meals from macro_meals table
+  AI_Macros?: boolean; // Indicates if AI was used to calculate macros
 }
 
 export interface MealIngredient {

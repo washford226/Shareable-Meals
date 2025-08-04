@@ -43,18 +43,7 @@ const cuisineOptions = [
   { label: "French", value: "French" },
 ];
 
-const unitOptions = [
-  { label: "g", value: "g" },
-  { label: "kg", value: "kg" },
-  { label: "oz", value: "oz" },
-  { label: "lb", value: "lb" },
-  { label: "cup", value: "cup" },
-  { label: "tbsp", value: "tbsp" },
-  { label: "tsp", value: "tsp" },
-  { label: "ml", value: "ml" },
-  { label: "l", value: "l" },
-  { label: "piece", value: "piece" },
-];
+
 
 const CreateMealScreen = () => {
   const { theme } = useTheme();
@@ -76,6 +65,13 @@ const CreateMealScreen = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [useAIMacros, setUseAIMacros] = useState(true);
+  const [manualMacros, setManualMacros] = useState({
+    calories: "",
+    protein: "",
+    fat: "",
+    carbohydrates: ""
+  });
 
   const pickMealImage = useCallback(async () => {
     setError(null);
@@ -151,9 +147,26 @@ const CreateMealScreen = () => {
     if (mealServings && (isNaN(parseInt(mealServings)) || parseInt(mealServings) <= 0)) {
       errors.push("Servings must be a positive number");
     }
+
+    // Validate manual macros if not using AI
+    if (!useAIMacros) {
+      if (!manualMacros.calories.trim()) errors.push("Calories is required when using manual macros");
+      if (!manualMacros.protein.trim()) errors.push("Protein is required when using manual macros");
+      if (!manualMacros.fat.trim()) errors.push("Fat is required when using manual macros");
+      if (!manualMacros.carbohydrates.trim()) errors.push("Carbohydrates is required when using manual macros");
+
+      const invalidMacros = [
+        parseFloat(manualMacros.calories),
+        parseFloat(manualMacros.protein),
+        parseFloat(manualMacros.fat),
+        parseFloat(manualMacros.carbohydrates)
+      ].some(val => isNaN(val) || val < 0);
+
+      if (invalidMacros) errors.push("All macro values must be non-negative numbers");
+    }
     
     return errors;
-  }, [mealName, mealDescription, ingredients, mealServings]);
+  }, [mealName, mealDescription, ingredients, mealServings, useAIMacros, manualMacros]);
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -171,6 +184,13 @@ const CreateMealScreen = () => {
       setMealDietaryRestriction("");
       setMealCuisine("");
       setMealServings("1");
+      setUseAIMacros(true);
+      setManualMacros({
+        calories: "",
+        protein: "",
+        fat: "",
+        carbohydrates: ""
+      });
       setRetryCount(0);
     } catch (error) {
       console.error("Error refreshing form:", error);
@@ -205,30 +225,50 @@ const CreateMealScreen = () => {
         }
         const userId = userData.user.id;
 
+        // Get user's username from user_profiles
+        const { data: profileData, error: profileError } = await supabase
+          .from("user_profiles")
+          .select("username")
+          .eq("user_id", userId)
+          .single();
+
+        const username = profileData?.username || "Unknown User";
+
         // Use the picture directly as base64 data URI
         const pictureData = mealPicture || null;
 
+        // Prepare meal data with conditional macros
+        const mealData: any = {
+          user_id: userId,
+          name: mealName.trim(),
+          description: mealDescription.trim(),
+          instructions: mealInstructions.trim() || null,
+          recipeLink: mealRecipeLink.trim() || null,
+          visibility: mealVisibility,
+          dietary_restrictions: mealDietaryRestriction || null,
+          servings: mealServings ? parseInt(mealServings) : 1,
+          cuisine: mealCuisine || null,
+          picture: pictureData,
+          AI_Macros: useAIMacros,
+          created_by: username,
+        };
+
+        // Add manual macros if not using AI
+        if (!useAIMacros) {
+          mealData.calories = Math.round(parseFloat(manualMacros.calories));
+          mealData.protein = Math.round(parseFloat(manualMacros.protein));
+          mealData.fat = Math.round(parseFloat(manualMacros.fat));
+          mealData.carbohydrates = Math.round(parseFloat(manualMacros.carbohydrates));
+        }
+
         // 1. Insert the meal (without ingredients)
-        const { data: mealData, error: mealError } = await supabase.from("meals").insert([
-          {
-            user_id: userId,
-            name: mealName.trim(),
-            description: mealDescription.trim(),
-            instructions: mealInstructions.trim() || null,
-            recipeLink: mealRecipeLink.trim() || null,
-            visibility: mealVisibility,
-            dietary_restrictions: mealDietaryRestriction || null,
-            servings: mealServings ? parseInt(mealServings) : 1,
-            cuisine: mealCuisine || null,
-            picture: pictureData,
-          },
-        ]).select("id").single();
+        const { data: mealDataResult, error: mealError } = await supabase.from("meals").insert([mealData]).select("id").single();
 
         if (mealError) {
           throw mealError;
         }
 
-        const mealId = mealData?.id;
+        const mealId = mealDataResult?.id;
         if (!mealId) {
           throw new Error("Failed to get new meal ID.");
         }
@@ -249,25 +289,27 @@ const CreateMealScreen = () => {
           throw ingredientsError;
         }
 
-        // 3. Calculate nutrition data using the edge function
-        try {
-          // Get the current session to include in the function call
-          const { data: { session } } = await supabase.auth.getSession();
-          
-          const { error: nutritionError } = await supabase.functions.invoke('calculate-nutrition', {
-            body: { meal_id: mealId },
-            headers: session?.access_token ? {
-              Authorization: `Bearer ${session.access_token}`
-            } : undefined
-          });
-          
-          if (nutritionError) {
-            console.warn("Failed to calculate nutrition:", nutritionError);
-            // Don't fail the whole process if nutrition calculation fails
+        // 3. Calculate nutrition data using AI if enabled
+        if (useAIMacros) {
+          try {
+            // Get the current session to include in the function call
+            const { data: { session } } = await supabase.auth.getSession();
+            
+            const { error: nutritionError } = await supabase.functions.invoke('calculate-ai-nutrition', {
+              body: { meal_id: mealId },
+              headers: session?.access_token ? {
+                Authorization: `Bearer ${session.access_token}`
+              } : undefined
+            });
+            
+            if (nutritionError) {
+              console.warn("Failed to calculate nutrition:", nutritionError);
+              // Don't fail the whole process if nutrition calculation fails
+            }
+          } catch (nutritionErr) {
+            console.warn("Nutrition calculation error:", nutritionErr);
+            // Continue even if nutrition calculation fails
           }
-        } catch (nutritionErr) {
-          console.warn("Nutrition calculation error:", nutritionErr);
-          // Continue even if nutrition calculation fails
         }
 
         Alert.alert("Success", "Meal added successfully!");
@@ -303,7 +345,9 @@ const CreateMealScreen = () => {
     mealVisibility, 
     mealDietaryRestriction, 
     mealCuisine, 
-    mealServings, 
+    mealServings,
+    useAIMacros,
+    manualMacros,
     router
   ]);
 
@@ -477,21 +521,13 @@ const CreateMealScreen = () => {
               onChangeText={text => updateIngredient(idx, "quantity", text)}
               keyboardType="numeric"
             />
-            <View style={[styles.ingredientInput, styles.ingredientUnit, { backgroundColor: theme.background, borderColor: theme.border }]}>
-              <RNPickerSelect
-                onValueChange={value => updateIngredient(idx, "unit", value)}
-                items={unitOptions}
-                value={ingredient.unit}
-                placeholder={{ label: "Unit", value: "" }}
-                style={{
-                  inputIOS: [styles.unitPickerInput, { color: ingredient.unit ? theme.text : theme.placeholder }],
-                  inputAndroid: [styles.unitPickerInput, { color: ingredient.unit ? theme.text : theme.placeholder }],
-                  placeholder: { color: theme.placeholder },
-                }}
-                useNativeAndroidPickerStyle={false}
-                Icon={() => <Ionicons name="chevron-down" size={16} color={theme.text} style={styles.unitPickerArrow} />}
-              />
-            </View>
+            <TextInput
+              style={[styles.ingredientInput, styles.ingredientUnit, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
+              placeholder="Unit"
+              placeholderTextColor={theme.placeholder}
+              value={ingredient.unit}
+              onChangeText={text => updateIngredient(idx, "unit", text)}
+            />
             <TouchableOpacity 
               style={styles.removeButton}
               onPress={() => removeIngredient(idx)}
@@ -508,6 +544,88 @@ const CreateMealScreen = () => {
           <Ionicons name="add-circle" size={20} color={theme.primary} />
           <Text style={[styles.addButtonText, { color: theme.primary }]}>Add Ingredient</Text>
         </TouchableOpacity>
+      </View>
+
+      {/* Macronutrients Card */}
+      <View style={[styles.formCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+        <View style={styles.cardHeader}>
+          <Ionicons name="fitness" size={24} color={theme.primary} />
+          <Text style={[styles.cardTitle, { color: theme.text }]}>Macronutrients</Text>
+        </View>
+        
+        <View style={styles.switchRow}>
+          <View style={styles.switchInfo}>
+            <View style={styles.switchHeader}>
+              <Ionicons name="sparkles" size={20} color={theme.primary} />
+              <Text style={[styles.label, { color: theme.text, marginTop: 0, marginBottom: 0, marginLeft: 8 }]}>Use AI Calculation</Text>
+            </View>
+            <Text style={[styles.switchSubtext, { color: theme.textSecondary }]}>
+              {useAIMacros ? "AI will calculate macros from ingredients" : "Enter macros manually"}
+            </Text>
+          </View>
+          <Switch
+            value={useAIMacros}
+            onValueChange={setUseAIMacros}
+            trackColor={{ false: theme.border, true: theme.primary }}
+            thumbColor={useAIMacros ? theme.buttonText : theme.textSecondary}
+          />
+        </View>
+
+        {!useAIMacros && (
+          <View style={styles.macroInputsContainer}>
+            <Text style={[styles.label, { color: theme.text, marginBottom: 16 }]}>Enter Nutrition Values (per serving)</Text>
+            
+            <View style={styles.macroGrid}>
+              <View style={styles.macroInput}>
+                <Text style={[styles.macroLabel, { color: theme.text }]}>Calories</Text>
+                <TextInput
+                  style={[styles.input, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
+                  placeholder="0"
+                  placeholderTextColor={theme.placeholder}
+                  value={manualMacros.calories}
+                  onChangeText={(text) => setManualMacros(prev => ({ ...prev, calories: text }))}
+                  keyboardType="numeric"
+                />
+              </View>
+              
+              <View style={styles.macroInput}>
+                <Text style={[styles.macroLabel, { color: theme.text }]}>Protein (g)</Text>
+                <TextInput
+                  style={[styles.input, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
+                  placeholder="0"
+                  placeholderTextColor={theme.placeholder}
+                  value={manualMacros.protein}
+                  onChangeText={(text) => setManualMacros(prev => ({ ...prev, protein: text }))}
+                  keyboardType="numeric"
+                />
+              </View>
+              
+              <View style={styles.macroInput}>
+                <Text style={[styles.macroLabel, { color: theme.text }]}>Fat (g)</Text>
+                <TextInput
+                  style={[styles.input, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
+                  placeholder="0"
+                  placeholderTextColor={theme.placeholder}
+                  value={manualMacros.fat}
+                  onChangeText={(text) => setManualMacros(prev => ({ ...prev, fat: text }))}
+                  keyboardType="numeric"
+                />
+              </View>
+              
+              <View style={styles.macroInput}>
+                <Text style={[styles.macroLabel, { color: theme.text }]}>Carbs (g)</Text>
+                <TextInput
+                  style={[styles.input, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
+                  placeholder="0"
+                  placeholderTextColor={theme.placeholder}
+                  value={manualMacros.carbohydrates}
+                  onChangeText={(text) => setManualMacros(prev => ({ ...prev, carbohydrates: text }))}
+                  keyboardType="numeric"
+                />
+              </View>
+            </View>
+          </View>
+        )}
       </View>
 
       {/* Additional Details Card */}
@@ -976,25 +1094,6 @@ const styles = StyleSheet.create({
     width: 80,
     marginRight: 8,
   },
-  unitPickerInput: {
-    fontSize: 14,
-    paddingVertical: 0,
-    paddingRight: 20,
-  },
-  unitPickerArrow: {
-    position: 'absolute',
-    right: 8,
-    top: '50%',
-    transform: [{ translateY: -8 }],
-  },
-  unitPickerContainer: {
-    width: 100,
-    borderWidth: 1,
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    marginRight: 8,
-  },
   removeButton: {
     padding: 6,
     borderRadius: 4,
@@ -1139,6 +1238,25 @@ const styles = StyleSheet.create({
   retryBannerText: {
     fontSize: 14,
     fontWeight: "bold",
+  },
+
+  // Macro Styles
+  macroInputsContainer: {
+    marginTop: 16,
+  },
+  macroGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  macroInput: {
+    flex: 1,
+    minWidth: '45%',
+  },
+  macroLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 8,
   },
 });
 

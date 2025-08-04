@@ -143,18 +143,24 @@ const AccountScreen: React.FC = () => {
               
               const userId = userData.user.id;
 
-              // Note: supabase.auth.admin.deleteUser() requires service role key
-              // For client-side deletion, we'll delete the profile and let RLS handle cleanup
-              const { error: deleteProfileError } = await supabase
-                .from('user_profiles')
-                .delete()
-                .eq('id', userId);
+              // Call the edge function to delete both user profile and auth user
+              const { data, error } = await supabase.functions.invoke('Delete_User', {
+                body: { user_id: userId },
+              });
 
-              if (deleteProfileError) {
-                throw new Error(`Failed to delete profile: ${deleteProfileError.message}`);
+              console.log('Edge function response:', { data, error });
+
+              if (error) {
+                console.error('Edge function error details:', error);
+                throw new Error(`Failed to delete account: ${error.message || JSON.stringify(error)}`);
               }
 
-              // Sign out the user
+              if (data && data.error) {
+                console.error('Edge function returned error in data:', data.error);
+                throw new Error(`Failed to delete account: ${data.error}`);
+              }
+
+              // Sign out the user (in case the edge function didn't handle it)
               await supabase.auth.signOut();
 
               Alert.alert("Success", "Account deleted successfully", [

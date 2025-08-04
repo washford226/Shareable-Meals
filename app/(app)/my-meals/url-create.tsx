@@ -8,7 +8,8 @@ import {
   StyleSheet, 
   ScrollView, 
   ActivityIndicator,
-  RefreshControl 
+  RefreshControl,
+  Switch 
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
@@ -76,6 +77,13 @@ const URLCreateMealScreen: React.FC = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
+  const [useAIMacros, setUseAIMacros] = useState(true);
+  const [manualMacros, setManualMacros] = useState({
+    calories: "",
+    protein: "",
+    fat: "",
+    carbohydrates: ""
+  });
 
   // Validation function
   const validateForm = useCallback(() => {
@@ -112,15 +120,38 @@ const URLCreateMealScreen: React.FC = () => {
     if (!servings.trim() || isNaN(servingsNum) || servingsNum <= 0) {
       errors.servings = "Servings must be a positive number";
     }
+
+    // Validate manual macros if not using AI
+    if (!useAIMacros) {
+      if (!manualMacros.calories.trim() || isNaN(parseFloat(manualMacros.calories)) || parseFloat(manualMacros.calories) < 0) {
+        errors.manualCalories = "Calories must be a non-negative number";
+      }
+      if (!manualMacros.protein.trim() || isNaN(parseFloat(manualMacros.protein)) || parseFloat(manualMacros.protein) < 0) {
+        errors.manualProtein = "Protein must be a non-negative number";
+      }
+      if (!manualMacros.fat.trim() || isNaN(parseFloat(manualMacros.fat)) || parseFloat(manualMacros.fat) < 0) {
+        errors.manualFat = "Fat must be a non-negative number";
+      }
+      if (!manualMacros.carbohydrates.trim() || isNaN(parseFloat(manualMacros.carbohydrates)) || parseFloat(manualMacros.carbohydrates) < 0) {
+        errors.manualCarbohydrates = "Carbohydrates must be a non-negative number";
+      }
+    }
     
     setValidationErrors(errors);
     return Object.keys(errors).length === 0;
-  }, [recipeUrl, mealName, description, instructions, ingredients, servings]);
+  }, [recipeUrl, mealName, description, instructions, ingredients, servings, useAIMacros, manualMacros]);
 
   const handleRefresh = useCallback(() => {
     setRefreshing(true);
     setError(null);
     setRetryCount(0);
+    setUseAIMacros(true);
+    setManualMacros({
+      calories: "",
+      protein: "",
+      fat: "",
+      carbohydrates: ""
+    });
     setTimeout(() => {
       setRefreshing(false);
     }, 1000);
@@ -311,19 +342,29 @@ const URLCreateMealScreen: React.FC = () => {
       }
       const userId = userData.user.id;
 
+      // Prepare meal data with conditional macros
+      const mealDataToInsert: any = {
+        user_id: userId,
+        name: mealName.trim(),
+        description: description.trim(),
+        servings: parseInt(servings),
+        instructions: instructions.trim(),
+        recipeLink: recipeUrl.trim(),
+        visibility: true, // Default to public for URL-created meals
+        created_by: recipeUrl.trim(), // Set created_by to the URL the user entered
+        AI_Macros: useAIMacros,
+      };
+
+      // Add manual macros if not using AI
+      if (!useAIMacros) {
+        mealDataToInsert.calories = Math.round(parseFloat(manualMacros.calories));
+        mealDataToInsert.protein = Math.round(parseFloat(manualMacros.protein));
+        mealDataToInsert.fat = Math.round(parseFloat(manualMacros.fat));
+        mealDataToInsert.carbohydrates = Math.round(parseFloat(manualMacros.carbohydrates));
+      }
+
       // 1. Insert the meal (without ingredients)
-      const { data: mealData, error: mealError } = await supabase.from("meals").insert([
-        {
-          user_id: userId,
-          name: mealName.trim(),
-          description: description.trim(),
-          servings: parseInt(servings),
-          instructions: instructions.trim(),
-          recipeLink: recipeUrl.trim(),
-          visibility: true, // Default to public for URL-created meals
-          created_by: recipeUrl.trim(),
-        },
-      ]).select("id").single();
+      const { data: mealData, error: mealError } = await supabase.from("meals").insert([mealDataToInsert]).select("id").single();
 
       if (mealError) {
         throw mealError;
@@ -356,25 +397,27 @@ const URLCreateMealScreen: React.FC = () => {
         }
       }
 
-      // 3. Calculate nutrition data using the edge function
-      try {
-        // Get the current session to include in the function call
-        const { data: { session } } = await supabase.auth.getSession();
-        
-        const { error: nutritionError } = await supabase.functions.invoke('calculate-nutrition', {
-          body: { meal_id: mealId },
-          headers: session?.access_token ? {
-            Authorization: `Bearer ${session.access_token}`
-          } : undefined
-        });
-        
-        if (nutritionError) {
-          console.warn("Failed to calculate nutrition:", nutritionError);
-          // Don't fail the whole process if nutrition calculation fails
+      // 3. Calculate nutrition data using the edge function only if using AI
+      if (useAIMacros) {
+        try {
+          // Get the current session to include in the function call
+          const { data: { session } } = await supabase.auth.getSession();
+          
+          const { error: nutritionError } = await supabase.functions.invoke('calculate-ai-nutrition', {
+            body: { meal_id: mealId },
+            headers: session?.access_token ? {
+              Authorization: `Bearer ${session.access_token}`
+            } : undefined
+          });
+          
+          if (nutritionError) {
+            console.warn("Failed to calculate nutrition:", nutritionError);
+            // Don't fail the whole process if nutrition calculation fails
+          }
+        } catch (nutritionErr) {
+          console.warn("Nutrition calculation error:", nutritionErr);
+          // Continue even if nutrition calculation fails
         }
-      } catch (nutritionErr) {
-        console.warn("Nutrition calculation error:", nutritionErr);
-        // Continue even if nutrition calculation fails
       }
 
       Alert.alert("Success", "Meal added successfully!", [
@@ -624,6 +667,130 @@ const URLCreateMealScreen: React.FC = () => {
             </Text>
           )}
         </View>
+      </View>
+
+      {/* Macro Information Card */}
+      <View style={[styles.formCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+        <View style={styles.cardHeader}>
+          <Ionicons name="nutrition" size={24} color={theme.primary} />
+          <Text style={[styles.cardTitle, { color: theme.text }]}>Macro Information</Text>
+        </View>
+        
+        <View style={styles.inputGroup}>
+          <View style={styles.macroToggleContainer}>
+            <Text style={[styles.macroToggleLabel, { color: theme.text }]}>
+              {useAIMacros ? "AI will calculate macros from ingredients" : "Enter macros manually"}
+            </Text>
+            <Switch
+              value={useAIMacros}
+              onValueChange={setUseAIMacros}
+              trackColor={{ false: theme.border, true: theme.primary }}
+              thumbColor={useAIMacros ? theme.buttonText : theme.textSecondary}
+            />
+          </View>
+        </View>
+        
+        {!useAIMacros && (
+          <View style={styles.macroInputsContainer}>
+            <View style={styles.macroGrid}>
+              <View style={styles.macroInput}>
+                <Text style={[styles.macroLabel, { color: theme.text }]}>Calories</Text>
+                <TextInput
+                  style={[
+                    styles.input,
+                    { 
+                      borderColor: validationErrors.manualCalories ? theme.danger : theme.border,
+                      backgroundColor: theme.background,
+                      color: theme.text 
+                    }
+                  ]}
+                  placeholder="0"
+                  placeholderTextColor={theme.placeholder}
+                  value={manualMacros.calories}
+                  onChangeText={(text) => setManualMacros(prev => ({ ...prev, calories: text }))}
+                  keyboardType="numeric"
+                />
+                {validationErrors.manualCalories && (
+                  <Text style={[styles.errorText, { color: theme.danger }]}>
+                    {validationErrors.manualCalories}
+                  </Text>
+                )}
+              </View>
+              
+              <View style={styles.macroInput}>
+                <Text style={[styles.macroLabel, { color: theme.text }]}>Protein (g)</Text>
+                <TextInput
+                  style={[
+                    styles.input,
+                    { 
+                      borderColor: validationErrors.manualProtein ? theme.danger : theme.border,
+                      backgroundColor: theme.background,
+                      color: theme.text 
+                    }
+                  ]}
+                  placeholder="0"
+                  placeholderTextColor={theme.placeholder}
+                  value={manualMacros.protein}
+                  onChangeText={(text) => setManualMacros(prev => ({ ...prev, protein: text }))}
+                  keyboardType="numeric"
+                />
+                {validationErrors.manualProtein && (
+                  <Text style={[styles.errorText, { color: theme.danger }]}>
+                    {validationErrors.manualProtein}
+                  </Text>
+                )}
+              </View>
+              
+              <View style={styles.macroInput}>
+                <Text style={[styles.macroLabel, { color: theme.text }]}>Fat (g)</Text>
+                <TextInput
+                  style={[
+                    styles.input,
+                    { 
+                      borderColor: validationErrors.manualFat ? theme.danger : theme.border,
+                      backgroundColor: theme.background,
+                      color: theme.text 
+                    }
+                  ]}
+                  placeholder="0"
+                  placeholderTextColor={theme.placeholder}
+                  value={manualMacros.fat}
+                  onChangeText={(text) => setManualMacros(prev => ({ ...prev, fat: text }))}
+                  keyboardType="numeric"
+                />
+                {validationErrors.manualFat && (
+                  <Text style={[styles.errorText, { color: theme.danger }]}>
+                    {validationErrors.manualFat}
+                  </Text>
+                )}
+              </View>
+              
+              <View style={styles.macroInput}>
+                <Text style={[styles.macroLabel, { color: theme.text }]}>Carbs (g)</Text>
+                <TextInput
+                  style={[
+                    styles.input,
+                    { 
+                      borderColor: validationErrors.manualCarbohydrates ? theme.danger : theme.border,
+                      backgroundColor: theme.background,
+                      color: theme.text 
+                    }
+                  ]}
+                  placeholder="0"
+                  placeholderTextColor={theme.placeholder}
+                  value={manualMacros.carbohydrates}
+                  onChangeText={(text) => setManualMacros(prev => ({ ...prev, carbohydrates: text }))}
+                  keyboardType="numeric"
+                />
+                {validationErrors.manualCarbohydrates && (
+                  <Text style={[styles.errorText, { color: theme.danger }]}>
+                    {validationErrors.manualCarbohydrates}
+                  </Text>
+                )}
+              </View>
+            </View>
+          </View>
+        )}
       </View>
 
       {/* Ingredients Card */}
@@ -975,6 +1142,38 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     alignItems: "center",
     marginBottom: 20,
+  },
+
+  // Macro Styles
+  macroToggleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+  },
+  macroToggleLabel: {
+    fontSize: 16,
+    fontWeight: '500',
+    flex: 1,
+    marginRight: 12,
+  },
+  macroInputsContainer: {
+    marginTop: 16,
+  },
+  macroGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  macroInput: {
+    width: '48%',
+    minWidth: 140,
+  },
+  macroLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    marginBottom: 6,
   },
 });
 

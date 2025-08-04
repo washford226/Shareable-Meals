@@ -118,7 +118,7 @@ const CurrentMeals = () => {
           weekly_competitions!weekly_winners_competition_id_fkey (
             start_date,
             end_date,
-            competition_themes!fk_theme_id (
+            competition_themes (
               theme_name
             )
           )
@@ -168,7 +168,8 @@ const CurrentMeals = () => {
           start_date,
           end_date,
           status,
-          competition_themes!fk_theme_id (
+          theme_id,
+          competition_themes (
             theme_name
           )
         `)
@@ -186,7 +187,8 @@ const CurrentMeals = () => {
             start_date,
             end_date,
             status,
-            competition_themes!fk_theme_id (
+            theme_id,
+            competition_themes (
               theme_name
             )
           `)
@@ -811,108 +813,115 @@ const CurrentMeals = () => {
           numColumns={2}
           renderItem={({ item }) => (
             <TouchableOpacity 
-              style={[styles.mealCard, { backgroundColor: theme.card }]}
+              style={[styles.mealItem, { backgroundColor: theme.card, borderColor: theme.border }]}
               onPress={() => router.push(`/(app)/competition/${item.meal_id}/meal-info` as any)}
               activeOpacity={0.7}
             >
-              {/* Meal Image */}
-              <View style={styles.imageContainer}>
-                {item.picture && typeof item.picture === "string" ? (
-                  <Image 
-                    source={{ 
-                      uri: item.picture.startsWith('\\x') 
-                        ? item.picture.slice(2).match(/.{2}/g)?.map((hex: string) => String.fromCharCode(parseInt(hex, 16))).join('') || ''
-                        : item.picture 
-                    }} 
-                    style={styles.mealImage} 
-                  />
+              {/* Vote Count Badge */}
+              <TouchableOpacity
+                style={styles.voteIcon}
+                onPress={(e) => {
+                  e.stopPropagation(); // Prevent triggering the card navigation
+                  handleVote(item.meal_id);
+                }}
+                disabled={voting}
+              >
+                {voting ? (
+                  <ActivityIndicator size="small" color={theme.primary} />
                 ) : (
-                  <View style={[styles.imagePlaceholder, { backgroundColor: theme.border }]}>
-                    <Ionicons name="image" size={32} color={theme.textSecondary} />
-                  </View>
+                  <>
+                    <Ionicons
+                      name="heart"
+                      size={24}
+                      color={theme.primary}
+                    />
+                    <Text style={[styles.voteCount, { color: theme.primary }]}>
+                      {item.votes}
+                    </Text>
+                  </>
                 )}
-                
-                {/* AI Generated Tag */}
-                {item.created_by_ai === true && (
-                  <View style={styles.aiTag}>
-                    <Ionicons name="sparkles" size={10} color="#fff" />
-                    <Text style={styles.aiTagText}>AI</Text>
-                  </View>
-                )}
+              </TouchableOpacity>
 
-                {/* Vote Count Badge */}
-                <View style={[styles.voteBadge, { backgroundColor: theme.primary }]}>
-                  <Ionicons name="heart" size={12} color="#fff" />
-                  <Text style={styles.voteBadgeText}>{item.votes}</Text>
+              {/* AI Tag */}
+              {item.created_by_ai === true && (
+                <View style={[styles.aiTag, { backgroundColor: theme.aiAccent }]}>
+                  <Ionicons name="sparkles" size={12} color={theme.buttonText} />
+                  <Text style={[styles.aiTagText, { color: theme.buttonText }]}>AI</Text>
                 </View>
-              </View>
+              )}
+
+              {/* Meal Image */}
+              {item.picture && typeof item.picture === "string" ? (
+                <Image 
+                  source={{ 
+                    uri: item.picture.startsWith('\\x') 
+                      ? item.picture.slice(2).match(/.{2}/g)?.map((hex: string) => String.fromCharCode(parseInt(hex, 16))).join('') || ''
+                      : item.picture 
+                  }} 
+                  style={styles.mealPicture} 
+                />
+              ) : (
+                <View style={[styles.mealPicturePlaceholder, { backgroundColor: theme.cardSecondary }]}>
+                  <Ionicons name="image-outline" size={32} color={theme.subtext} />
+                  <Text style={[styles.mealPicturePlaceholderText, { color: theme.subtext }]}>
+                    No Image
+                  </Text>
+                </View>
+              )}
 
               {/* Meal Info */}
               <View style={styles.mealInfo}>
                 <Text style={[styles.mealName, { color: theme.text }]} numberOfLines={2}>
                   {item.name}
                 </Text>
-                
-                <Text style={[styles.mealDescription, { color: theme.textSecondary }]} numberOfLines={2}>
-                  {item.description}
+                <Text style={[styles.mealDescription, { color: theme.subtext }]} numberOfLines={3}>
+                  {item.description.length > 80
+                    ? `${item.description.slice(0, 80)}...`
+                    : item.description}
                 </Text>
-
-                {/* Nutrition Info */}
-                <View style={styles.nutritionInfo}>
+                
+                {/* Nutrition Preview */}
+                <View style={styles.nutritionPreview}>
                   <View style={styles.nutritionItem}>
-                    <Text style={[styles.nutritionValue, { color: theme.primary }]}>
-                      {item.calories || 0}
+                    <Ionicons name="flame-outline" size={14} color={theme.warning} />
+                    <Text style={[styles.nutritionText, { color: theme.subtext }]}>
+                      {item.calories}
                     </Text>
-                    <Text style={[styles.nutritionLabel, { color: theme.textSecondary }]}>cal</Text>
                   </View>
                   <View style={styles.nutritionItem}>
-                    <Text style={[styles.nutritionValue, { color: theme.success }]}>
-                      {item.protein || 0}g
+                    <Ionicons name="barbell-outline" size={14} color={theme.protein} />
+                    <Text style={[styles.nutritionText, { color: theme.subtext }]}>
+                      {item.protein}g
                     </Text>
-                    <Text style={[styles.nutritionLabel, { color: theme.textSecondary }]}>protein</Text>
+                  </View>
+                  <View style={styles.nutritionItem}>
+                    <Ionicons name="analytics-outline" size={14} color={theme.carbs} />
+                    <Text style={[styles.nutritionText, { color: theme.subtext }]}>
+                      {item.carbohydrates}g
+                    </Text>
                   </View>
                 </View>
 
-                {/* User and Vote Section */}
-                <View style={styles.bottomRow}>
-                  <View style={styles.userContainer}>
-                    <Ionicons name="person-circle" size={14} color={theme.textSecondary} />
-                    <Text style={[styles.userName, { color: theme.textSecondary }]} numberOfLines={1}>
-                      {item.username}
-                    </Text>
-                  </View>
-                  
-                  <TouchableOpacity
-                    style={[styles.voteButton, { 
-                      backgroundColor: voting ? theme.border : theme.primary,
-                      opacity: voting ? 0.6 : 1
-                    }]}
-                    onPress={(e) => {
-                      e.stopPropagation(); // Prevent triggering the card navigation
-                      handleVote(item.meal_id);
-                    }}
-                    disabled={voting}
-                  >
-                    {voting ? (
-                      <ActivityIndicator size="small" color={theme.buttonText} />
-                    ) : (
-                      <Ionicons name="heart-outline" size={14} color={theme.buttonText} />
-                    )}
-                  </TouchableOpacity>
+                {/* User Row */}
+                <View style={styles.userRow}>
+                  <Ionicons name="person-circle" size={14} color={theme.subtext} />
+                  <Text style={[styles.userName, { color: theme.subtext }]} numberOfLines={1}>
+                    {item.username}
+                  </Text>
                 </View>
 
                 {/* Tags */}
                 {(item.dietary_restrictions || item.cuisine) && (
                   <View style={styles.tagsContainer}>
                     {item.dietary_restrictions && (
-                      <View style={[styles.tag, { backgroundColor: `${theme.success}20`, borderColor: theme.success }]}>
+                      <View style={[styles.tag, { backgroundColor: theme.success + '20', borderColor: theme.success }]}>
                         <Text style={[styles.tagText, { color: theme.success }]}>
                           {item.dietary_restrictions}
                         </Text>
                       </View>
                     )}
                     {item.cuisine && (
-                      <View style={[styles.tag, { backgroundColor: `${theme.primary}20`, borderColor: theme.primary }]}>
+                      <View style={[styles.tag, { backgroundColor: theme.primary + '20', borderColor: theme.primary }]}>
                         <Text style={[styles.tagText, { color: theme.primary }]}>
                           {item.cuisine}
                         </Text>
@@ -961,7 +970,7 @@ const CurrentMeals = () => {
               </View>
             </View>
           }
-          contentContainerStyle={[styles.listContent, { paddingHorizontal: 10 }]}
+          contentContainerStyle={styles.mealsGrid}
           showsVerticalScrollIndicator={false}
         />
       </View>
@@ -1488,7 +1497,66 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
 
-  // New meal card styles for grid layout
+  // New meal card styles for grid layout (matching meals.tsx)
+  mealItem: {
+    flex: 1,
+    margin: 8,
+    borderRadius: 16,
+    borderWidth: 1,
+    overflow: 'hidden',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 6,
+    maxWidth: '46%',
+  },
+  voteIcon: {
+    position: "absolute",
+    top: 12,
+    right: 12,
+    zIndex: 2,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    borderRadius: 20,
+    padding: 6,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 32,
+    minHeight: 32,
+  },
+  mealPicture: {
+    width: "100%",
+    height: 140,
+    resizeMode: 'cover',
+  },
+  mealPicturePlaceholder: {
+    width: "100%",
+    height: 140,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  mealPicturePlaceholderText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  nutritionPreview: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 8,
+    marginBottom: 8,
+  },
+  nutritionText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  mealsGrid: {
+    paddingHorizontal: 8,
+    paddingBottom: 100,
+  },
   imageContainer: {
     position: 'relative',
     width: '100%',
@@ -1509,21 +1577,26 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   aiTag: {
-    position: 'absolute',
-    top: 8,
-    left: 8,
+    position: "absolute",
+    top: 12,
+    left: 12,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#8B5CF6',
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    borderRadius: 6,
-    gap: 3,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    zIndex: 2,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
   },
   aiTagText: {
     fontSize: 10,
-    fontWeight: 'bold',
-    color: '#fff',
+    fontWeight: '700',
+    marginLeft: 4,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   voteBadge: {
     position: 'absolute',
@@ -1542,9 +1615,10 @@ const styles = StyleSheet.create({
     color: '#fff',
   },
   mealDescription: {
-    fontSize: 13,
-    lineHeight: 18,
-    marginBottom: 8,
+    fontSize: 14,
+    lineHeight: 20,
+    marginBottom: 12,
+    fontWeight: '500',
   },
   nutritionInfo: {
     flexDirection: 'row',
@@ -1552,7 +1626,9 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   nutritionItem: {
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: 4,
   },
   nutritionValue: {
     fontSize: 13,

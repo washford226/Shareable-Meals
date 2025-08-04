@@ -11,6 +11,8 @@ import {
   ScrollView,
   ActivityIndicator,
   RefreshControl,
+  Platform,
+  Linking,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useTheme } from "../../../../context/ThemeContext";
@@ -38,6 +40,7 @@ interface CompetitionMeal {
   visibility?: boolean;
   created_at?: string;
   forever_invis?: boolean;
+  AI_Macros?: boolean; // Indicates if AI was used to calculate macros
   ingredients?: MealIngredient[];
 }
 
@@ -123,9 +126,9 @@ const CompetitionMealDetails = () => {
 
       if (competitionData) {
         setCompetitionInfo({
-          theme: "Competition Theme", // We'll handle this differently
+          theme: competitionData.weekly_competitions?.[0]?.competition_themes?.[0]?.theme_name || "Competition Theme",
           votes: voteData?.length || 0,
-          username: "Competition User" // We'll handle this differently
+          username: competitionData.user_profiles?.[0]?.username || "Unknown User"
         });
       }
 
@@ -494,28 +497,52 @@ const CompetitionMealDetails = () => {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
-      {/* Header */}
-      <View style={[styles.header, { backgroundColor: theme.background }]}>
-        <TouchableOpacity 
-          style={[styles.backButton, { backgroundColor: `${theme.text}15` }]}
+      {/* Top Back Button */}
+      <View style={[styles.topNavContainer, { backgroundColor: theme.background }]}>
+        <TouchableOpacity
+          style={[styles.topBackButton, { backgroundColor: theme.card }]}
           onPress={() => router.back()}
         >
-          <Ionicons name="arrow-back" size={20} color={theme.text} />
-        </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: theme.text }]}>
-          Competition Meal
-        </Text>
-        <TouchableOpacity 
-          style={[styles.headerActionButton, { backgroundColor: `${theme.text}15` }]}
-          onPress={() => setIsReportModalVisible(true)}
-        >
-          <Ionicons name="flag-outline" size={20} color={theme.text} />
+          <Ionicons name="arrow-back" size={24} color={theme.text} />
         </TouchableOpacity>
       </View>
 
+      {/* Error Banner */}
+      {error && !loading && (
+        <View style={[styles.errorBanner, { 
+          backgroundColor: `${theme.danger}15`, 
+          borderColor: theme.danger 
+        }]}>
+          <Ionicons name="alert-circle" size={20} color={theme.danger} />
+          <Text style={[styles.errorBannerText, { color: theme.danger }]}>
+            {error}
+          </Text>
+          <TouchableOpacity
+            style={[styles.errorBannerButton, { backgroundColor: theme.danger }]}
+            onPress={() => setError(null)}
+          >
+            <Text style={[styles.errorBannerButtonText, { color: theme.buttonText }]}>
+              Dismiss
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Retry Banner */}
+      {retryCount > 0 && !loading && (
+        <View style={[styles.retryBanner, { 
+          backgroundColor: `${theme.warning}15`, 
+          borderColor: theme.warning 
+        }]}>
+          <Ionicons name="time" size={16} color={theme.warning} />
+          <Text style={[styles.retryBannerText, { color: theme.warning }]}>
+            Retry attempt {retryCount}/3
+          </Text>
+        </View>
+      )}
+
       <ScrollView 
-        style={styles.scrollContainer} 
-        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContainer}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -524,126 +551,132 @@ const CompetitionMealDetails = () => {
             tintColor={theme.primary}
           />
         }
+        showsVerticalScrollIndicator={false}
       >
-        {/* Competition Context Card */}
-        {competitionInfo && (
-          <View style={[styles.competitionCard, { backgroundColor: theme.card }]}>
-            <View style={styles.competitionHeader}>
-              <Ionicons name="trophy" size={20} color={theme.primary} />
-              <Text style={[styles.competitionTheme, { color: theme.primary }]}>
-                {competitionInfo.theme}
+        {/* Meal Image Card */}
+        <View style={[styles.imageCard, { backgroundColor: theme.card, shadowColor: theme.shadow }]}>
+          {meal.picture && typeof meal.picture === "string" ? (
+            <Image 
+              source={{ 
+                uri: meal.picture.startsWith('\\x') 
+                  ? meal.picture.slice(2).match(/.{2}/g)?.map((hex: string) => String.fromCharCode(parseInt(hex, 16))).join('') || ''
+                  : meal.picture
+              }} 
+              style={styles.mealImage} 
+            />
+          ) : (
+            <View style={[styles.imagePlaceholder, { backgroundColor: theme.cardSecondary }]}>
+              <Ionicons name="image-outline" size={48} color={theme.subtext} />
+              <Text style={[styles.imagePlaceholderText, { color: theme.subtext }]}>
+                No Image Available
               </Text>
             </View>
-            <View style={styles.competitionMeta}>
-              <View style={styles.creatorInfo}>
-                <Ionicons name="person-circle-outline" size={16} color={theme.textSecondary} />
-                <Text style={[styles.creatorText, { color: theme.textSecondary }]}>
-                  by {competitionInfo.username}
-                </Text>
-              </View>
-              <View style={styles.voteInfo}>
-                <Ionicons name="heart" size={16} color={theme.primary} />
-                <Text style={[styles.voteText, { color: theme.text }]}>
-                  {competitionInfo.votes} votes
-                </Text>
-              </View>
-            </View>
-          </View>
-        )}
-
-        {/* Meal Image */}
-        {meal.picture && (
-          <View style={styles.imageContainer}>
-            <Image source={{ uri: meal.picture }} style={styles.mealImage} />
-          </View>
-        )}
-
-        {/* Meal Info Card */}
-        <View style={[styles.mealCard, { backgroundColor: theme.card }]}>
-          <Text style={[styles.mealName, { color: theme.text }]}>{meal.name}</Text>
+          )}
           
-          {meal.description && (
-            <Text style={[styles.mealDescription, { color: theme.textSecondary }]}>
-              {meal.description}
-            </Text>
+          {meal.created_by_ai && (
+            <View style={styles.aiTag}>
+              <Ionicons name="sparkles" size={12} color="#fff" />
+              <Text style={styles.aiTagText}>AI</Text>
+            </View>
           )}
 
-          {/* Meal Metadata */}
-          <View style={styles.metadataContainer}>
+          {/* Competition Vote Badge */}
+          {competitionInfo && (
+            <View style={[styles.voteBadge, { backgroundColor: theme.primary }]}>
+              <Ionicons name="heart" size={12} color="#fff" />
+              <Text style={styles.voteBadgeText}>{competitionInfo.votes}</Text>
+            </View>
+          )}
+        </View>
+
+        {/* Meal Info Card */}
+        <View style={[styles.infoCard, { backgroundColor: theme.card, shadowColor: theme.shadow }]}>
+          <Text style={[styles.mealTitle, { color: theme.text }]}>{meal.name}</Text>
+          <Text style={[styles.mealDescription, { color: theme.subtext }]}>
+            {meal.description || "No description available"}
+          </Text>
+          
+          {/* Creator Info */}
+          {meal.created_by && (
+            <View style={styles.tagsContainer}>
+              <View style={[styles.tag, { backgroundColor: theme.info + '20', borderColor: theme.info }]}>
+                <Ionicons name="person" size={12} color={theme.info} />
+                <Text style={[styles.tagText, { color: theme.info }]}>Created by: {meal.created_by}</Text>
+              </View>
+            </View>
+          )}
+          
+          {/* Competition Info */}
+          {competitionInfo && (
+            <View style={styles.competitionInfo}>
+              <View style={[styles.tag, { backgroundColor: `${theme.primary}20`, borderColor: theme.primary }]}>
+                <Ionicons name="trophy" size={12} color={theme.primary} />
+                <Text style={[styles.tagText, { color: theme.primary }]}>Competition Entry</Text>
+              </View>
+              <View style={[styles.tag, { backgroundColor: `${theme.success}20`, borderColor: theme.success }]}>
+                <Ionicons name="person" size={12} color={theme.success} />
+                <Text style={[styles.tagText, { color: theme.success }]}>by {competitionInfo.username}</Text>
+              </View>
+            </View>
+          )}
+
+          {/* Status Tags */}
+          <View style={styles.tagsContainer}>
+            {meal.favorite && (
+              <View style={[styles.tag, { backgroundColor: theme.warning + '20', borderColor: theme.warning }]}>
+                <Ionicons name="heart" size={12} color={theme.warning} />
+                <Text style={[styles.tagText, { color: theme.warning }]}>Favorite</Text>
+              </View>
+            )}
+            {meal.visibility === false && (
+              <View style={[styles.tag, { backgroundColor: theme.danger + '20', borderColor: theme.danger }]}>
+                <Ionicons name="eye-off" size={12} color={theme.danger} />
+                <Text style={[styles.tagText, { color: theme.danger }]}>Private</Text>
+              </View>
+            )}
+            {meal.AI_Macros && (
+              <View style={[styles.tag, { backgroundColor: theme.info + '20', borderColor: theme.info }]}>
+                <Ionicons name="calculator" size={12} color={theme.info} />
+                <Text style={[styles.tagText, { color: theme.info }]}>AI Macros</Text>
+              </View>
+            )}
+          </View>
+
+          {/* Tags Container */}
+          <View style={styles.tagsContainer}>
             {meal.cuisine && (
-              <View style={[styles.metadataBadge, { backgroundColor: `${theme.primary}20` }]}>
-                <Text style={[styles.metadataText, { color: theme.primary }]}>
-                  {meal.cuisine}
-                </Text>
+              <View style={[styles.tag, { backgroundColor: `${theme.primary}20`, borderColor: theme.primary }]}>
+                <Ionicons name="restaurant" size={12} color={theme.primary} />
+                <Text style={[styles.tagText, { color: theme.primary }]}>{meal.cuisine}</Text>
               </View>
             )}
             {meal.dietary_restrictions && (
-              <View style={[styles.metadataBadge, { backgroundColor: `${theme.success}20` }]}>
-                <Text style={[styles.metadataText, { color: theme.success }]}>
-                  {meal.dietary_restrictions}
-                </Text>
+              <View style={[styles.tag, { backgroundColor: `${theme.success}20`, borderColor: theme.success }]}>
+                <Ionicons name="leaf" size={12} color={theme.success} />
+                <Text style={[styles.tagText, { color: theme.success }]}>{meal.dietary_restrictions}</Text>
               </View>
             )}
             {meal.created_by_ai && (
-              <View style={[styles.metadataBadge, { backgroundColor: `${theme.warning}20` }]}>
-                <Text style={[styles.metadataText, { color: theme.warning }]}>
-                  AI Generated
-                </Text>
-              </View>
-            )}
-          </View>
-
-          {/* Time and Servings */}
-          <View style={styles.timeServingsContainer}>
-            <View style={styles.timeServingsItem}>
-              <Ionicons name="people-outline" size={20} color={theme.primary} />
-              <Text style={[styles.timeServingsLabel, { color: theme.textSecondary }]}>
-                Serves
-              </Text>
-              <Text style={[styles.timeServingsValue, { color: theme.text }]}>
-                {meal.servings || "N/A"}
-              </Text>
-            </View>
-            {meal.created_by_ai && (
-              <View style={styles.timeServingsItem}>
-                <Ionicons name="sparkles-outline" size={20} color={theme.primary} />
-                <Text style={[styles.timeServingsLabel, { color: theme.textSecondary }]}>
-                  AI Made
-                </Text>
-                <Text style={[styles.timeServingsValue, { color: theme.text }]}>
-                  Yes
-                </Text>
-              </View>
-            )}
-            {meal.created_at && (
-              <View style={styles.timeServingsItem}>
-                <Ionicons name="calendar-outline" size={20} color={theme.primary} />
-                <Text style={[styles.timeServingsLabel, { color: theme.textSecondary }]}>
-                  Created
-                </Text>
-                <Text style={[styles.timeServingsValue, { color: theme.text }]}>
-                  {new Date(meal.created_at).toLocaleDateString()}
-                </Text>
+              <View style={[styles.tag, { backgroundColor: `${theme.warning}20`, borderColor: theme.warning }]}>
+                <Ionicons name="sparkles" size={12} color={theme.warning} />
+                <Text style={[styles.tagText, { color: theme.warning }]}>AI Generated</Text>
               </View>
             )}
           </View>
         </View>
 
         {/* Nutrition Card */}
-        <View style={[styles.nutritionCard, { backgroundColor: theme.card }]}>
+        <View style={[styles.nutritionCard, { backgroundColor: theme.card, shadowColor: theme.shadow }]}>
           <View style={styles.cardHeader}>
-            <Ionicons name="nutrition-outline" size={24} color={theme.primary} />
-            <Text style={[styles.cardTitle, { color: theme.text }]}>
-              Nutrition Information
-            </Text>
+            <Ionicons name="nutrition" size={20} color={theme.primary} />
+            <Text style={[styles.cardTitle, { color: theme.text }]}>Nutrition Information</Text>
           </View>
-          
           <View style={styles.nutritionGrid}>
             <View style={styles.nutritionItem}>
               <Text style={[styles.nutritionValue, { color: theme.text }]}>
                 {formatCalories(meal.calories)}
               </Text>
-              <Text style={[styles.nutritionLabel, { color: theme.textSecondary }]}>
+              <Text style={[styles.nutritionLabel, { color: theme.subtext }]}>
                 Calories
               </Text>
             </View>
@@ -651,7 +684,7 @@ const CompetitionMealDetails = () => {
               <Text style={[styles.nutritionValue, { color: theme.text }]}>
                 {formatNutrition(meal.protein)}
               </Text>
-              <Text style={[styles.nutritionLabel, { color: theme.textSecondary }]}>
+              <Text style={[styles.nutritionLabel, { color: theme.subtext }]}>
                 Protein
               </Text>
             </View>
@@ -659,7 +692,7 @@ const CompetitionMealDetails = () => {
               <Text style={[styles.nutritionValue, { color: theme.text }]}>
                 {formatNutrition(meal.carbohydrates)}
               </Text>
-              <Text style={[styles.nutritionLabel, { color: theme.textSecondary }]}>
+              <Text style={[styles.nutritionLabel, { color: theme.subtext }]}>
                 Carbs
               </Text>
             </View>
@@ -667,26 +700,31 @@ const CompetitionMealDetails = () => {
               <Text style={[styles.nutritionValue, { color: theme.text }]}>
                 {formatNutrition(meal.fat)}
               </Text>
-              <Text style={[styles.nutritionLabel, { color: theme.textSecondary }]}>
+              <Text style={[styles.nutritionLabel, { color: theme.subtext }]}>
                 Fat
+              </Text>
+            </View>
+            <View style={styles.nutritionItem}>
+              <Text style={[styles.nutritionValue, { color: theme.text }]}>
+                {meal.servings || 1}
+              </Text>
+              <Text style={[styles.nutritionLabel, { color: theme.subtext }]}>
+                Servings
               </Text>
             </View>
           </View>
         </View>
 
         {/* Ingredients Card */}
-        {meal.ingredients && meal.ingredients.length > 0 && (
-          <View style={[styles.ingredientsCard, { backgroundColor: theme.card }]}>
-            <View style={styles.cardHeader}>
-              <Ionicons name="list-outline" size={24} color={theme.primary} />
-              <Text style={[styles.cardTitle, { color: theme.text }]}>
-                Ingredients
-              </Text>
-            </View>
-            
-            {meal.ingredients.map((ingredient: any, index: number) => (
+        <View style={[styles.ingredientsCard, { backgroundColor: theme.card, shadowColor: theme.shadow }]}>
+          <View style={styles.cardHeader}>
+            <Ionicons name="list" size={20} color={theme.success} />
+            <Text style={[styles.cardTitle, { color: theme.text }]}>Ingredients</Text>
+          </View>
+          {meal.ingredients && Array.isArray(meal.ingredients) && meal.ingredients.length > 0 ? (
+            meal.ingredients.map((ingredient: any, index: number) => (
               <View key={index} style={styles.ingredientItem}>
-                <View style={[styles.ingredientBullet, { backgroundColor: theme.primary }]} />
+                <View style={[styles.ingredientBullet, { backgroundColor: theme.success }]} />
                 <Text style={[styles.ingredientText, { color: theme.text }]}>
                   {ingredient.quantity && ingredient.unit 
                     ? `${ingredient.quantity} ${ingredient.unit} ${ingredient.raw_name}`
@@ -694,30 +732,48 @@ const CompetitionMealDetails = () => {
                   }
                 </Text>
               </View>
-            ))}
-          </View>
-        )}
+            ))
+          ) : (
+            <Text style={[styles.emptyText, { color: theme.subtext }]}>
+              No ingredients listed
+            </Text>
+          )}
+        </View>
 
         {/* Instructions Card */}
-        {meal.instructions && (
-          <View style={[styles.instructionsCard, { backgroundColor: theme.card }]}>
-            <View style={styles.cardHeader}>
-              <Ionicons name="document-text-outline" size={24} color={theme.primary} />
-              <Text style={[styles.cardTitle, { color: theme.text }]}>
-                Instructions
+        <View style={[styles.instructionsCard, { backgroundColor: theme.card, shadowColor: theme.shadow }]}>
+          <View style={styles.cardHeader}>
+            <Ionicons name="receipt" size={20} color={theme.warning} />
+            <Text style={[styles.cardTitle, { color: theme.text }]}>Instructions</Text>
+          </View>
+          <Text style={[styles.instructionsText, { color: theme.text }]}>
+            {meal.instructions || "No instructions provided"}
+          </Text>
+        </View>
+
+        {/* Recipe Link Card */}
+        {meal.recipeLink && meal.recipeLink.trim() !== '' ? (
+          <TouchableOpacity 
+            style={[styles.linkCard, { backgroundColor: theme.primaryLight, borderColor: theme.primary }]}
+            onPress={() => meal.recipeLink && Linking.openURL(meal.recipeLink)}
+          >
+            <Ionicons name="link-outline" size={24} color={theme.primary} />
+            <View style={styles.linkContent}>
+              <Text style={[styles.linkTitle, { color: theme.primary }]}>
+                View Full Recipe
+              </Text>
+              <Text style={[styles.linkSubtext, { color: theme.primary }]} numberOfLines={1}>
+                {meal.recipeLink}
               </Text>
             </View>
-            
-            <Text style={[styles.instructionsText, { color: theme.text }]}>
-              {meal.instructions}
-            </Text>
-          </View>
-        )}
+            <Ionicons name="arrow-forward-outline" size={20} color={theme.primary} />
+          </TouchableOpacity>
+        ) : null}
 
         {/* Action Buttons */}
-        <View style={styles.actionButtonsContainer}>
+        <View style={styles.actionButtons}>
           <TouchableOpacity
-            style={[styles.copyButton, { backgroundColor: theme.primary }]}
+            style={[styles.actionButton, styles.primaryButton, { backgroundColor: theme.primary }]}
             onPress={handleCopy}
             disabled={copyLoading}
           >
@@ -726,14 +782,31 @@ const CompetitionMealDetails = () => {
             ) : (
               <Ionicons name="copy-outline" size={20} color={theme.buttonText} />
             )}
-            <Text style={[styles.copyButtonText, { color: theme.buttonText }]}>
+            <Text style={[styles.actionButtonText, { color: theme.buttonText }]}>
               {copyLoading ? "Copying..." : "Copy to My Meals"}
             </Text>
           </TouchableOpacity>
+
+          <View style={styles.secondaryActions}>
+            <TouchableOpacity
+              style={[styles.actionButton, styles.secondaryButton, { borderColor: theme.danger, backgroundColor: theme.background }]}
+              onPress={() => setIsReportModalVisible(true)}
+              disabled={reportLoading}
+            >
+              <Ionicons name="flag-outline" size={20} color={theme.danger} />
+              <Text style={[styles.secondaryButtonText, { color: theme.danger }]}>Report Meal</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
-        {/* Bottom Spacing */}
-        <View style={{ height: 40 }} />
+        {/* Bottom Back Button */}
+        <TouchableOpacity
+          style={[styles.actionButton, styles.backToMealsButton, { backgroundColor: theme.background, borderColor: theme.border }]}
+          onPress={() => router.back()}
+        >
+          <Ionicons name="arrow-back-outline" size={20} color={theme.text} />
+          <Text style={[styles.secondaryButtonText, { color: theme.text }]}>Back to Competition</Text>
+        </TouchableOpacity>
       </ScrollView>
 
       {/* Report Modal */}
@@ -846,7 +919,7 @@ const styles = StyleSheet.create({
 
   // Scroll Container
   scrollContainer: {
-    flex: 1,
+    paddingBottom: 20,
   },
 
   // Error/Retry Banners
@@ -1150,6 +1223,35 @@ const styles = StyleSheet.create({
     lineHeight: 24,
   },
 
+  // Link Card
+  linkCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    margin: 16,
+    marginTop: 8,
+    padding: 20,
+    borderRadius: 16,
+    borderWidth: 2,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 5,
+    gap: 16,
+  },
+  linkContent: {
+    flex: 1,
+  },
+  linkTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  linkSubtext: {
+    fontSize: 14,
+    fontWeight: '500',
+    opacity: 0.8,
+  },
+
   // Action Buttons
   actionButtonsContainer: {
     margin: 16,
@@ -1237,6 +1339,157 @@ const styles = StyleSheet.create({
   modalSubmitText: {
     fontSize: 16,
     fontWeight: '600',
+  },
+
+  // Additional styles from info.tsx to match design
+  topNavContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    paddingTop: Platform.OS === 'ios' ? 50 : 12,
+    zIndex: 1000,
+  },
+  topBackButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  imageCard: {
+    margin: 16,
+    borderRadius: 16,
+    overflow: 'hidden',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 6,
+    position: 'relative',
+  },
+  imagePlaceholder: {
+    width: '100%',
+    height: 240,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  imagePlaceholderText: {
+    fontSize: 14,
+    marginTop: 8,
+  },
+  aiTag: {
+    position: 'absolute',
+    top: 12,
+    left: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#8B5CF6',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    gap: 4,
+  },
+  aiTagText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#fff',
+  },
+  voteBadge: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    gap: 4,
+  },
+  voteBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#fff',
+  },
+  infoCard: {
+    margin: 16,
+    marginTop: 8,
+    padding: 20,
+    borderRadius: 16,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  mealTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  competitionInfo: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 8,
+    marginBottom: 16,
+  },
+  tagsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  tag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: 4,
+  },
+  tagText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  emptyText: {
+    fontSize: 15,
+    fontStyle: 'italic',
+    textAlign: 'center',
+  },
+  actionButtons: {
+    margin: 16,
+    marginTop: 8,
+    gap: 12,
+  },
+  primaryButton: {
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  secondaryButton: {
+    borderWidth: 1,
+  },
+  secondaryButtonText: {
+    fontSize: 15,
+    fontWeight: '500',
+  },
+  secondaryActions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  backToMealsButton: {
+    borderWidth: 1,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
   },
 });
 

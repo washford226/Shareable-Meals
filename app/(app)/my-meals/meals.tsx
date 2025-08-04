@@ -297,7 +297,9 @@ useEffect(() => {
       let query = supabase
         .from("meals")
         .select("*")
-        .eq("user_id", userId);
+        .eq("user_id", userId)
+        .order("favorite", { ascending: false })
+        .order("id", { ascending: false });
 
       if (dietaryRestrictionFilter) query = query.eq("dietary_restrictions", dietaryRestrictionFilter);
       if (aiFilter === "ai") query = query.eq("created_by_ai", true);
@@ -356,7 +358,9 @@ useEffect(() => {
     let query = supabase
       .from("meals")
       .select("*")
-      .eq("user_id", userId);
+      .eq("user_id", userId)
+      .order("favorite", { ascending: false })
+      .order("id", { ascending: false });
 
     if (dietaryRestrictionFilter) query = query.eq("dietary_restrictions", dietaryRestrictionFilter);
     if (aiFilter === "ai") query = query.eq("created_by_ai", true);
@@ -613,47 +617,14 @@ const applyFilters = useCallback(async () => {
 
       <TouchableOpacity
         style={[styles.createMealButton, { backgroundColor: theme.primary }]}
-        onPress={() => setIsCreateMealModalVisible(true)}
+        onPress={() => {
+          fetchMacroUsageInfo(); // Refresh usage info when opening modal
+          setIsCreateMealModalVisible(true);
+        }}
       >
         <Ionicons name="add-circle-outline" size={24} color={theme.buttonText} style={{ marginRight: 8 }} />
         <Text style={[styles.createMealButtonText, { color: theme.buttonText }]}>Create New Meal</Text>
       </TouchableOpacity>
-
-      {/* Macro Usage Info */}
-      {macroUsageInfo && (
-        <View style={[styles.usageInfoContainer, { backgroundColor: theme.card, borderColor: theme.border }]}>
-          <View style={styles.usageInfoHeader}>
-            <Ionicons name="calculator-outline" size={20} color={theme.primary} />
-            <Text style={[styles.usageInfoTitle, { color: theme.text }]}>
-              AI Macro Calculations
-            </Text>
-          </View>
-          <View style={styles.usageInfoContent}>
-            <Text style={[styles.usageInfoText, { color: theme.subtext }]}>
-              Today: {macroUsageInfo.daily_usage}/{macroUsageInfo.daily_limit} used
-            </Text>
-            <View style={[styles.usageProgressBar, { backgroundColor: theme.cardSecondary }]}>
-              <View 
-                style={[
-                  styles.usageProgressFill, 
-                  { 
-                    backgroundColor: macroUsageInfo.remaining <= 5 ? theme.danger : theme.primary,
-                    width: `${(macroUsageInfo.daily_usage / macroUsageInfo.daily_limit) * 100}%`
-                  }
-                ]} 
-              />
-            </View>
-            <Text style={[
-              styles.usageRemainingText, 
-              { 
-                color: macroUsageInfo.remaining <= 5 ? theme.danger : theme.success 
-              }
-            ]}>
-              {macroUsageInfo.remaining} calculations remaining
-            </Text>
-          </View>
-        </View>
-      )}
 
       {filteredMeals.length === 0 ? (
         <View style={styles.emptyStateContainer}>
@@ -799,35 +770,93 @@ const applyFilters = useCallback(async () => {
               Choose how you'd like to create your meal
             </Text>
 
+            {/* Macro Usage Info in Modal */}
+            {macroUsageInfo && (
+              <View style={[styles.usageInfoContainer, { backgroundColor: theme.cardSecondary, borderColor: theme.border, marginBottom: 20 }]}>
+                <View style={styles.usageInfoHeader}>
+                  <Ionicons name="calculator-outline" size={18} color={theme.primary} />
+                  <Text style={[styles.usageInfoTitle, { color: theme.text, fontSize: 14 }]}>
+                    AI Macro Calculations Today
+                  </Text>
+                </View>
+                <View style={styles.usageInfoContent}>
+                  <Text style={[styles.usageInfoText, { color: theme.subtext, fontSize: 12 }]}>
+                    {macroUsageInfo.daily_usage}/{macroUsageInfo.daily_limit} used
+                  </Text>
+                  <View style={[styles.usageProgressBar, { backgroundColor: theme.background, height: 4 }]}>
+                    <View 
+                      style={[
+                        styles.usageProgressFill, 
+                        { 
+                          backgroundColor: macroUsageInfo.remaining <= 5 ? theme.danger : theme.primary,
+                          width: `${(macroUsageInfo.daily_usage / macroUsageInfo.daily_limit) * 100}%`
+                        }
+                      ]} 
+                    />
+                  </View>
+                  <Text style={[
+                    styles.usageRemainingText, 
+                    { 
+                      color: macroUsageInfo.remaining <= 5 ? theme.danger : theme.success,
+                      fontSize: 11,
+                      textAlign: 'center'
+                    }
+                  ]}>
+                    {macroUsageInfo.remaining} calculations remaining
+                  </Text>
+                </View>
+              </View>
+            )}
+
             <TouchableOpacity
-              style={[styles.modalButton, { backgroundColor: theme.primary }]}
+              style={[
+                styles.modalButton, 
+                { 
+                  backgroundColor: theme.primary,
+                  opacity: macroUsageInfo?.remaining === 0 ? 0.5 : 1
+                }
+              ]}
               onPress={() => {
                 setIsCreateMealModalVisible(false);
                 router.push("/my-meals/create");
               }}
+              disabled={macroUsageInfo?.remaining === 0}
             >
               <Ionicons name="create-outline" size={24} color={theme.buttonText} />
               <View style={styles.modalButtonContent}>
-                <Text style={[styles.modalButtonText, { color: theme.buttonText }]}>Manual Entry</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Text style={[styles.modalButtonText, { color: theme.buttonText }]}>Manual Entry</Text>
+                  <Ionicons name="calculator-outline" size={14} color={theme.buttonText} style={{ marginLeft: 8, opacity: 0.7 }} />
+                </View>
                 <Text style={[styles.modalButtonSubtext, { color: theme.buttonText, opacity: 0.8 }]}>
-                  Enter meal details yourself
+                  Enter meal details yourself (uses AI macros)
                 </Text>
               </View>
               <Ionicons name="chevron-forward" size={20} color={theme.buttonText} />
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[styles.modalButton, { backgroundColor: theme.aiAccent }]}
+              style={[
+                styles.modalButton, 
+                { 
+                  backgroundColor: theme.aiAccent,
+                  opacity: macroUsageInfo?.remaining === 0 ? 0.5 : 1
+                }
+              ]}
               onPress={() => {
                 setIsCreateMealModalVisible(false);
                 router.push("../AI/AICreateMeal");
               }}
+              disabled={macroUsageInfo?.remaining === 0}
             >
               <Ionicons name="sparkles" size={24} color={theme.buttonText} />
               <View style={styles.modalButtonContent}>
-                <Text style={[styles.modalButtonText, { color: theme.buttonText }]}>AI Generated</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Text style={[styles.modalButtonText, { color: theme.buttonText }]}>AI Generated</Text>
+                  <Ionicons name="calculator-outline" size={14} color={theme.buttonText} style={{ marginLeft: 8, opacity: 0.7 }} />
+                </View>
                 <Text style={[styles.modalButtonSubtext, { color: theme.buttonText, opacity: 0.8 }]}>
-                  Let AI create a meal for you
+                  Let AI create a meal for you (uses AI macros)
                 </Text>
               </View>
               <Ionicons name="chevron-forward" size={20} color={theme.buttonText} />
@@ -862,12 +891,16 @@ const applyFilters = useCallback(async () => {
 
       <Modal visible={isFilterModalVisible} transparent animationType="slide">
         <View style={styles.modalContainer}>
-          <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }}>
-            <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
-              <View style={styles.modalHeader}>
-                <Text style={[styles.modalTitle, { color: theme.text }]}>Filter Meals</Text>
+          <View style={[styles.filterModalContent, { backgroundColor: theme.card, shadowColor: theme.shadow }]}>
+            <ScrollView style={styles.filterModalScrollView} showsVerticalScrollIndicator={false}>
+              {/* Modal Header */}
+              <View style={styles.filterModalHeader}>
+                <View style={styles.filterModalHeaderContent}>
+                  <Ionicons name="filter" size={28} color={theme.primary} />
+                  <Text style={[styles.filterModalTitle, { color: theme.text }]}>Filter Meals</Text>
+                </View>
                 <TouchableOpacity
-                  style={styles.modalCloseButton}
+                  style={[styles.filterModalCloseButton, { backgroundColor: theme.background }]}
                   onPress={() => {
                     setTempFilters(filters);
                     setTempDietaryRestrictionFilter(dietaryRestrictionFilter);
@@ -876,191 +909,212 @@ const applyFilters = useCallback(async () => {
                     setIsFilterModalVisible(false);
                   }}
                 >
-                  <Ionicons name="close" size={24} color={theme.subtext} />
+                  <Ionicons name="close" size={20} color={theme.subtext} />
                 </TouchableOpacity>
               </View>
 
-              <Text style={[styles.modalSubtitle, { color: theme.subtext }]}>
+              <Text style={[styles.filterModalSubtitle, { color: theme.subtext }]}>
                 Refine your meal search with these filters
               </Text>
 
-              {/* Nutrition Filters */}
-              <Text style={[styles.label, { color: theme.text }]}>Nutrition Ranges</Text>
-              {tempFilters.map((filter, index) => (
-                <View key={index} style={styles.filterRow}>
-                  <Text style={[styles.filterLabel, { color: theme.text }]}>
-                    {filter.type.charAt(0).toUpperCase() + filter.type.slice(1)}
-                  </Text>
-                  <View style={{ flexDirection: 'row', gap: 8 }}>
-                    <TextInput
-                      style={[styles.input, { borderColor: theme.border, color: theme.text, backgroundColor: theme.background, flex: 1 }]}
-                      placeholder="Min"
-                      placeholderTextColor={theme.placeholder}
-                      value={filter.greaterThan}
-                      onChangeText={(text) => {
-                        const updatedFilters = [...tempFilters];
-                        updatedFilters[index].greaterThan = text;
-                        setTempFilters(updatedFilters);
-                      }}
-                      keyboardType="numeric"
+              {/* Quick Filter Chips */}
+              <View style={styles.quickFiltersSection}>
+                <Text style={[styles.sectionTitle, { color: theme.text }]}>
+                  <Ionicons name="flash" size={18} color={theme.primary} /> Quick Filters
+                </Text>
+                <View style={styles.quickFiltersContainer}>
+                  <TouchableOpacity
+                    style={[
+                      styles.quickFilterChip,
+                      { 
+                        backgroundColor: tempAiFilter === "ai" ? theme.aiAccent : theme.background,
+                        borderColor: tempAiFilter === "ai" ? theme.aiAccent : theme.border
+                      }
+                    ]}
+                    onPress={() => setTempAiFilter(tempAiFilter === "ai" ? "" : "ai")}
+                  >
+                    <Ionicons 
+                      name="sparkles" 
+                      size={16} 
+                      color={tempAiFilter === "ai" ? theme.buttonText : theme.text} 
                     />
-                    <TextInput
-                      style={[styles.input, { borderColor: theme.border, color: theme.text, backgroundColor: theme.background, flex: 1 }]}
-                      placeholder="Max"
-                      placeholderTextColor={theme.placeholder}
-                      value={filter.lessThan}
-                      onChangeText={(text) => {
-                        const updatedFilters = [...tempFilters];
-                        updatedFilters[index].lessThan = text;
-                        setTempFilters(updatedFilters);
-                      }}
-                      keyboardType="numeric"
+                    <Text style={[
+                      styles.quickFilterChipText, 
+                      { color: tempAiFilter === "ai" ? theme.buttonText : theme.text }
+                    ]}>
+                      AI Generated
+                    </Text>
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity
+                    style={[
+                      styles.quickFilterChip,
+                      { 
+                        backgroundColor: tempAiFilter === "not_ai" ? theme.success : theme.background,
+                        borderColor: tempAiFilter === "not_ai" ? theme.success : theme.border
+                      }
+                    ]}
+                    onPress={() => setTempAiFilter(tempAiFilter === "not_ai" ? "" : "not_ai")}
+                  >
+                    <Ionicons 
+                      name="person" 
+                      size={16} 
+                      color={tempAiFilter === "not_ai" ? theme.buttonText : theme.text} 
                     />
-                  </View>
+                    <Text style={[
+                      styles.quickFilterChipText, 
+                      { color: tempAiFilter === "not_ai" ? theme.buttonText : theme.text }
+                    ]}>
+                      Manual
+                    </Text>
+                  </TouchableOpacity>
                 </View>
-              ))}
+              </View>
+
+              {/* Nutrition Filters */}
+              <View style={[styles.filterSection, { borderBottomColor: theme.border }]}>
+                <Text style={[styles.sectionTitle, { color: theme.text }]}>
+                  <Ionicons name="nutrition" size={18} color={theme.primary} /> Nutrition Ranges
+                </Text>
+                {tempFilters.map((filter, index) => (
+                  <View key={index} style={styles.nutritionRow}>
+                    <Text style={[styles.nutritionLabel, { color: theme.text }]}>
+                      {filter.type.charAt(0).toUpperCase() + filter.type.slice(1)}
+                    </Text>
+                    <View style={styles.rangeInputs}>
+                      <View style={[styles.inputContainer, { borderColor: theme.border }]}>
+                        <Text style={[styles.inputLabel, { color: theme.subtext }]}>Min</Text>
+                        <TextInput
+                          style={[styles.rangeInput, { color: theme.text }]}
+                          placeholder="0"
+                          placeholderTextColor={theme.placeholder}
+                          value={filter.greaterThan}
+                          onChangeText={(text) => {
+                            const updatedFilters = [...tempFilters];
+                            updatedFilters[index].greaterThan = text;
+                            setTempFilters(updatedFilters);
+                          }}
+                          keyboardType="numeric"
+                        />
+                      </View>
+                      <View style={[styles.inputContainer, { borderColor: theme.border }]}>
+                        <Text style={[styles.inputLabel, { color: theme.subtext }]}>Max</Text>
+                        <TextInput
+                          style={[styles.rangeInput, { color: theme.text }]}
+                          placeholder="999"
+                          placeholderTextColor={theme.placeholder}
+                          value={filter.lessThan}
+                          onChangeText={(text) => {
+                            const updatedFilters = [...tempFilters];
+                            updatedFilters[index].lessThan = text;
+                            setTempFilters(updatedFilters);
+                          }}
+                          keyboardType="numeric"
+                        />
+                      </View>
+                    </View>
+                  </View>
+                ))}
+              </View>
 
               {/* Dietary Restrictions */}
-              <Text style={[styles.label, { color: theme.text }]}>Dietary Restrictions</Text>
-              <View style={{ marginBottom: 16 }}>
-                <RNPickerSelect
-                  onValueChange={setTempDietaryRestrictionFilter}
-                  items={dietaryOptions}
-                  value={tempDietaryRestrictionFilter}
-                  style={{
-                    inputIOS: {
-                      color: tempDietaryRestrictionFilter ? theme.text : theme.placeholder,
-                      paddingVertical: 16,
-                      paddingHorizontal: 16,
-                      borderWidth: 1,
-                      borderColor: theme.border,
-                      borderRadius: 12,
-                      backgroundColor: theme.background,
-                      fontSize: 16,
-                      fontWeight: '500',
-                    },
-                    inputAndroid: {
-                      color: tempDietaryRestrictionFilter ? theme.text : theme.placeholder,
-                      paddingVertical: 16,
-                      paddingHorizontal: 16,
-                      borderWidth: 1,
-                      borderColor: theme.border,
-                      borderRadius: 12,
-                      backgroundColor: theme.background,
-                      fontSize: 16,
-                      fontWeight: '500',
-                    },
-                  }}
-                  useNativeAndroidPickerStyle={false}
-                  placeholder={{ label: "Select dietary restriction", value: "" }}
-                />
-              </View>
-
-              {/* Cuisine Filter */}
-              <Text style={[styles.label, { color: theme.text }]}>Cuisine Type</Text>
-              <View style={{ marginBottom: 16 }}>
-                <RNPickerSelect
-                  onValueChange={setTempCuisineFilter}
-                  items={cuisineOptions}
-                  value={tempCuisineFilter}
-                  style={{
-                    inputIOS: {
-                      color: tempCuisineFilter ? theme.text : theme.placeholder,
-                      paddingVertical: 16,
-                      paddingHorizontal: 16,
-                      borderWidth: 1,
-                      borderColor: theme.border,
-                      borderRadius: 12,
-                      backgroundColor: theme.background,
-                      fontSize: 16,
-                      fontWeight: '500',
-                    },
-                    inputAndroid: {
-                      color: tempCuisineFilter ? theme.text : theme.placeholder,
-                      paddingVertical: 16,
-                      paddingHorizontal: 16,
-                      borderWidth: 1,
-                      borderColor: theme.border,
-                      borderRadius: 12,
-                      backgroundColor: theme.background,
-                      fontSize: 16,
-                      fontWeight: '500',
-                    },
-                  }}
-                  useNativeAndroidPickerStyle={false}
-                  placeholder={{ label: "Select cuisine type", value: "" }}
-                />
-              </View>
-
-              {/* AI Generation Filter */}
-              <Text style={[styles.label, { color: theme.text }]}>AI Generation</Text>
-              <View style={{ marginBottom: 24 }}>
-                <RNPickerSelect
-                  onValueChange={setTempAiFilter}
-                  items={aiOptions}
-                  value={tempAiFilter}
-                  style={{
-                    inputIOS: {
-                      color: theme.text,
-                      paddingVertical: 16,
-                      paddingHorizontal: 16,
-                      borderWidth: 1,
-                      borderColor: theme.border,
-                      borderRadius: 12,
-                      backgroundColor: theme.background,
-                      fontSize: 16,
-                      fontWeight: '500',
-                    },
-                    inputAndroid: {
-                      color: theme.text,
-                      paddingVertical: 16,
-                      paddingHorizontal: 16,
-                      borderWidth: 1,
-                      borderColor: theme.border,
-                      borderRadius: 12,
-                      backgroundColor: theme.background,
-                      fontSize: 16,
-                      fontWeight: '500',
-                    },
-                  }}
-                  useNativeAndroidPickerStyle={false}
-                  placeholder={{ label: "All meals", value: "" }}
-                />
-              </View>
-
-              {/* Action Buttons */}
-              <TouchableOpacity 
-                style={[styles.applyButton, { backgroundColor: theme.primary }]} 
-                onPress={applyFilters}
-              >
-                <Text style={[styles.applyButtonText, { color: theme.buttonText }]}>
-                  Apply Filters
+              <View style={[styles.filterSection, { borderBottomColor: theme.border }]}>
+                <Text style={[styles.sectionTitle, { color: theme.text }]}>
+                  <Ionicons name="leaf" size={18} color={theme.success} /> Dietary Restrictions
                 </Text>
-              </TouchableOpacity>
+                <View style={[styles.pickerContainer, { borderColor: theme.border, backgroundColor: theme.background }]}>
+                  <RNPickerSelect
+                    onValueChange={setTempDietaryRestrictionFilter}
+                    items={dietaryOptions}
+                    value={tempDietaryRestrictionFilter}
+                    style={{
+                      inputIOS: [styles.pickerInput, { color: tempDietaryRestrictionFilter ? theme.text : theme.placeholder }],
+                      inputAndroid: [styles.pickerInput, { color: tempDietaryRestrictionFilter ? theme.text : theme.placeholder }],
+                      placeholder: { color: theme.placeholder },
+                      iconContainer: styles.pickerIcon,
+                      viewContainer: { 
+                        backgroundColor: 'transparent',
+                        borderWidth: 0,
+                        borderRadius: 0,
+                      }
+                    }}
+                    useNativeAndroidPickerStyle={false}
+                    touchableWrapperProps={{
+                      style: { 
+                        height: 56, 
+                        justifyContent: 'center',
+                        width: '100%',
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        zIndex: 2
+                      }
+                    }}
+                    Icon={() => <Ionicons name="chevron-down" size={20} color={theme.text} />}
+                    placeholder={{ label: "All Dietary Restrictions", value: "" }}
+                  />
+                </View>
+              </View>
 
-              <TouchableOpacity
-                style={[styles.clearButton, { backgroundColor: theme.background, borderColor: theme.border }]}
+              {/* Cuisine */}
+              <View style={[styles.filterSection, { borderBottomWidth: 0 }]}>
+                <Text style={[styles.sectionTitle, { color: theme.text }]}>
+                  <Ionicons name="globe" size={18} color={theme.warning} /> Cuisine Type
+                </Text>
+                <View style={[styles.pickerContainer, { borderColor: theme.border, backgroundColor: theme.background }]}>
+                  <RNPickerSelect
+                    onValueChange={setTempCuisineFilter}
+                    items={cuisineOptions}
+                    value={tempCuisineFilter}
+                    style={{
+                      inputIOS: [styles.pickerInput, { color: tempCuisineFilter ? theme.text : theme.placeholder }],
+                      inputAndroid: [styles.pickerInput, { color: tempCuisineFilter ? theme.text : theme.placeholder }],
+                      placeholder: { color: theme.placeholder },
+                      iconContainer: styles.pickerIcon,
+                      viewContainer: { 
+                        backgroundColor: 'transparent',
+                        borderWidth: 0,
+                        borderRadius: 0,
+                      }
+                    }}
+                    useNativeAndroidPickerStyle={false}
+                    touchableWrapperProps={{
+                      style: { 
+                        height: 56, 
+                        justifyContent: 'center',
+                        width: '100%',
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        zIndex: 2
+                      }
+                    }}
+                    Icon={() => <Ionicons name="chevron-down" size={20} color={theme.text} />}
+                    placeholder={{ label: "All Cuisines", value: "" }}
+                  />
+                </View>
+              </View>
+            </ScrollView>
+
+            {/* Modal Actions */}
+            <View style={styles.filterModalActions}>
+              <TouchableOpacity 
+                style={[styles.filterModalButton, styles.clearFilterButton, { backgroundColor: theme.button, borderColor: theme.border }]} 
                 onPress={clearFilters}
               >
-                <Text style={[styles.clearButtonText, { color: theme.text }]}>
-                  Clear All Filters
-                </Text>
+                <Ionicons name="refresh" size={18} color={theme.text} />
+                <Text style={[styles.filterModalButtonText, { color: theme.text }]}>Clear All</Text>
               </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.cancelButton, { backgroundColor: theme.background, borderColor: theme.border }]}
-                onPress={() => {
-                  setTempFilters(filters);
-                  setTempDietaryRestrictionFilter(dietaryRestrictionFilter);
-                  setTempAiFilter(aiFilter);
-                  setTempCuisineFilter(cuisineFilter);
-                  setIsFilterModalVisible(false);
-                }}
+              
+              <TouchableOpacity 
+                style={[styles.filterModalButton, styles.applyFilterButton, { backgroundColor: theme.primary }]} 
+                onPress={applyFilters}
               >
-                <Text style={[styles.cancelButtonText, { color: theme.text }]}>Cancel</Text>
+                <Ionicons name="checkmark" size={18} color={theme.buttonText} />
+                <Text style={[styles.filterModalButtonText, { color: theme.buttonText }]}>Apply Filters</Text>
               </TouchableOpacity>
             </View>
-          </ScrollView>
+          </View>
         </View>
       </Modal>
       
@@ -1461,6 +1515,166 @@ const styles = StyleSheet.create({
   cancelButtonText: {
     fontSize: 16,
     fontWeight: "600",
+  },
+
+  // Enhanced Filter Modal Styles
+  filterModalContent: {
+    width: "100%",
+    maxHeight: "85%",
+    borderRadius: 16,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  filterModalScrollView: {
+    maxHeight: "80%",
+  },
+  filterModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    paddingBottom: 16,
+  },
+  filterModalHeaderContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  filterModalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginLeft: 12,
+  },
+  filterModalCloseButton: {
+    padding: 8,
+    borderRadius: 20,
+  },
+  filterModalSubtitle: {
+    fontSize: 14,
+    paddingHorizontal: 20,
+    marginBottom: 20,
+  },
+
+  // Quick Filters Section
+  quickFiltersSection: {
+    paddingHorizontal: 20,
+    marginBottom: 16,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  quickFiltersContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  quickFilterChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    gap: 6,
+  },
+  quickFilterChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+
+  // Filter Section Styles
+  filterSection: {
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+  },
+
+  // Nutrition Filter Styles
+  nutritionRow: {
+    marginBottom: 12,
+  },
+  nutritionLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    marginBottom: 8,
+  },
+  rangeInputs: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  inputContainer: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
+  inputLabel: {
+    fontSize: 12,
+    fontWeight: '500',
+    paddingHorizontal: 12,
+    paddingTop: 8,
+    paddingBottom: 4,
+  },
+  rangeInput: {
+    paddingHorizontal: 12,
+    paddingBottom: 12,
+    fontSize: 16,
+    minHeight: 20,
+  },
+
+  // Picker Styles
+  pickerContainer: {
+    borderWidth: 1,
+    borderRadius: 8,
+    overflow: 'hidden',
+    minHeight: 56,
+    position: 'relative',
+  },
+  pickerInput: {
+    paddingVertical: 16,
+    paddingHorizontal: 12,
+    fontSize: 16,
+    paddingRight: 40,
+    minHeight: 56,
+    width: '100%',
+  },
+  pickerIcon: {
+    top: 18,
+    right: 12,
+    position: 'absolute',
+    zIndex: 1,
+  },
+
+  // Filter Modal Actions
+  filterModalActions: {
+    flexDirection: 'row',
+    padding: 20,
+    gap: 12,
+  },
+  filterModalButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    borderRadius: 10,
+    gap: 6,
+  },
+  filterModalButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  clearFilterButton: {
+    borderWidth: 1,
+  },
+  applyFilterButton: {
+    // Primary button styling applied via backgroundColor
   },
 
   // Filter Modal Styles

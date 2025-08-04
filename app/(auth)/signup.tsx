@@ -19,6 +19,9 @@ const SignUpScreen: React.FC = () => {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const [caloriesGoal, setCaloriesGoal] = useState("");
+  const [proteinGoal, setProteinGoal] = useState("");
+  const [carbohydratesGoal, setCarbohydratesGoal] = useState("");
+  const [fatGoal, setFatGoal] = useState("");
   const [dietaryRestrictions, setDietaryRestrictions] = useState("");
   const [allergies, setAllergies] = useState("");
   const [profilePicture, setProfilePicture] = useState<string | null>(null);
@@ -117,7 +120,7 @@ const SignUpScreen: React.FC = () => {
   const pickImage = async () => {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: ['images'],
         allowsEditing: true,
         aspect: [3, 3],
         quality: 0.8,
@@ -199,16 +202,7 @@ const SignUpScreen: React.FC = () => {
       });
 
       if (signUpError) {
-        // Handle specific Supabase errors
-        if (signUpError.message.includes('User already registered')) {
-          Alert.alert("Account Exists", "An account with this email already exists. Please try logging in instead.");
-        } else if (signUpError.message.includes('Password should be at least 6 characters')) {
-          Alert.alert("Weak Password", "Password must be at least 6 characters long.");
-        } else if (signUpError.message.includes('Invalid email')) {
-          Alert.alert("Invalid Email", "Please enter a valid email address.");
-        } else {
-          Alert.alert("Signup Error", signUpError.message || "Failed to create account. Please try again.");
-        }
+        Alert.alert("Signup Error", signUpError.message || "Failed to create account. Please try again.");
         return;
       }
 
@@ -216,24 +210,38 @@ const SignUpScreen: React.FC = () => {
         Alert.alert("Error", "Failed to create account. Please try again.");
         return;
       }
+
       const userId = signUpData.user.id;
 
-      // 2. Insert user profile in 'user_profiles' table
-      const { error: profileError } = await supabase.from("user_profiles").upsert([
-        {
-          id: userId,
-          username: username.trim(),
-          email: email.trim().toLowerCase(),
-          calories_goal: caloriesGoal ? parseInt(caloriesGoal) : null,
-          dietary_restrictions: dietaryRestrictions || null,
-          allergies: allergies || null,
-          profile_picture: profilePicture || null,
-        },
-      ]);
+      // Convert base64 image to bytea format if present
+      let profilePictureData = null;
+      if (profilePicture) {
+        const base64Data = profilePicture.replace(/^data:image\/[a-z]+;base64,/, '');
+        profilePictureData = base64Data;
+      }
+
+      // 2. Create user profile
+      const profileData = {
+        id: userId,
+        username: username.trim(),
+        calories_goal: caloriesGoal ? parseInt(caloriesGoal) : 2000,
+        protein_goal: proteinGoal ? parseInt(proteinGoal) : 80,
+        carbohydrates_goal: carbohydratesGoal ? parseInt(carbohydratesGoal) : 300,
+        fat_goal: fatGoal ? parseInt(fatGoal) : 60,
+        dietary_restrictions: dietaryRestrictions || null,
+        allergies: allergies || null,
+        profile_picture: profilePictureData,
+        scanner_usage_count: 0,
+      };
+
+      const { error: profileError } = await supabase
+        .from("user_profiles")
+        .insert([profileData]);
 
       if (profileError) {
         console.error("Profile creation error:", profileError);
-        Alert.alert("Warning", "Account created but profile setup failed. You can complete your profile later in account settings.");
+        Alert.alert("Error", "Failed to create user profile. Please try again.");
+        return;
       }
 
       Alert.alert(
@@ -249,8 +257,7 @@ const SignUpScreen: React.FC = () => {
 
     } catch (error) {
       console.error("Signup error:", error);
-      const errorMessage = error instanceof Error ? error.message : "An unexpected error occurred";
-      Alert.alert("Signup Failed", `Failed to create account: ${errorMessage}. Please try again.`);
+      Alert.alert("Signup Failed", "Failed to create account. Please try again.");
     } finally {
       setIsSigningUp(false);
     }
@@ -500,10 +507,79 @@ const SignUpScreen: React.FC = () => {
                   color: theme.text,
                   backgroundColor: theme.background 
                 }]}
-                placeholder="e.g., 2000"
+                placeholder="e.g., 2000 (default)"
                 placeholderTextColor={theme.placeholder}
                 value={caloriesGoal}
                 onChangeText={setCaloriesGoal}
+                keyboardType="numeric"
+                editable={!isSigningUp}
+              />
+            </View>
+          </View>
+
+          {/* Protein Goal Input */}
+          <View style={styles.inputGroup}>
+            <Text style={[styles.inputLabel, { color: theme.text }]}>
+              Daily Protein Goal (g)
+            </Text>
+            <View style={styles.inputContainer}>
+              <Ionicons name="fitness" size={16} color={theme.subtext} style={styles.inputIcon} />
+              <TextInput
+                style={[styles.textInput, { 
+                  borderColor: theme.border, 
+                  color: theme.text,
+                  backgroundColor: theme.background 
+                }]}
+                placeholder="e.g., 80 (default)"
+                placeholderTextColor={theme.placeholder}
+                value={proteinGoal}
+                onChangeText={setProteinGoal}
+                keyboardType="numeric"
+                editable={!isSigningUp}
+              />
+            </View>
+          </View>
+
+          {/* Carbohydrates Goal Input */}
+          <View style={styles.inputGroup}>
+            <Text style={[styles.inputLabel, { color: theme.text }]}>
+              Daily Carbohydrates Goal (g)
+            </Text>
+            <View style={styles.inputContainer}>
+              <Ionicons name="leaf" size={16} color={theme.subtext} style={styles.inputIcon} />
+              <TextInput
+                style={[styles.textInput, { 
+                  borderColor: theme.border, 
+                  color: theme.text,
+                  backgroundColor: theme.background 
+                }]}
+                placeholder="e.g., 300 (default)"
+                placeholderTextColor={theme.placeholder}
+                value={carbohydratesGoal}
+                onChangeText={setCarbohydratesGoal}
+                keyboardType="numeric"
+                editable={!isSigningUp}
+              />
+            </View>
+          </View>
+
+          {/* Fat Goal Input */}
+          <View style={styles.inputGroup}>
+            <Text style={[styles.inputLabel, { color: theme.text }]}>
+              Daily Fat Goal (g)
+            </Text>
+            <View style={styles.inputContainer}>
+              <Ionicons name="water" size={16} color={theme.subtext} style={styles.inputIcon} />
+              <TextInput
+                style={[styles.textInput, { 
+                  borderColor: theme.border, 
+                  color: theme.text,
+                  backgroundColor: theme.background 
+                }]}
+                placeholder="e.g., 60 (default)"
+                placeholderTextColor={theme.placeholder}
+                value={fatGoal}
+                onChangeText={setFatGoal}
                 keyboardType="numeric"
                 editable={!isSigningUp}
               />
@@ -532,9 +608,24 @@ const SignUpScreen: React.FC = () => {
                   inputIOS: [styles.pickerInput, { color: theme.text }],
                   inputAndroid: [styles.pickerInput, { color: theme.text }],
                   placeholder: { color: theme.placeholder },
+                  iconContainer: {
+                    top: 16,
+                    right: 16,
+                  },
+                  viewContainer: {
+                    flex: 1,
+                    justifyContent: 'center',
+                  },
                 }}
                 value={dietaryRestrictions}
                 disabled={isSigningUp}
+                useNativeAndroidPickerStyle={false}
+                touchableDoneProps={{
+                  style: { backgroundColor: 'transparent' }
+                }}
+                Icon={() => {
+                  return <Ionicons name="chevron-down" size={16} color={theme.subtext} />;
+                }}
               />
             </View>
           </View>
@@ -788,12 +879,17 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderRadius: 12,
     paddingLeft: 40,
-    paddingRight: 12,
+    paddingRight: 40, // Add space for dropdown arrow
+    position: 'relative',
   },
   pickerInput: {
     flex: 1,
     fontSize: 16,
-    paddingVertical: 0,
+    paddingVertical: 22, // Lower the text even more
+    height: 48,
+    justifyContent: 'center',
+    alignItems: 'flex-start',
+    textAlignVertical: 'center', // For Android
   },
   // Button Styles
   buttonContainer: {

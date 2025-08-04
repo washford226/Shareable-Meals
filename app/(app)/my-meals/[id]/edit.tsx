@@ -52,6 +52,20 @@ export default function EditMealScreen() {
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [retryCount, setRetryCount] = useState<number>(0);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState<boolean>(false);
+  const [useAIMacros, setUseAIMacros] = useState<boolean>(true);
+  const [manualMacros, setManualMacros] = useState({
+    calories: "",
+    protein: "",
+    fat: "",
+    carbohydrates: ""
+  });
+  const [currentMacros, setCurrentMacros] = useState({
+    calories: 0,
+    protein: 0,
+    fat: 0,
+    carbohydrates: 0
+  });
+  const [updatingMacros, setUpdatingMacros] = useState<boolean>(false);
 
   const dietaryOptions = [
     { label: "None", value: "" },
@@ -145,6 +159,28 @@ export default function EditMealScreen() {
         setDietaryRestriction(mealData.dietary_restrictions || "");
         setCuisine(mealData.cuisine || "");
         
+        // Set macro data
+        const aiMacros = mealData.AI_Macros ?? true;
+        setUseAIMacros(aiMacros);
+        
+        const macroData = {
+          calories: mealData.calories || 0,
+          protein: mealData.protein || 0,
+          fat: mealData.fat || 0,
+          carbohydrates: mealData.carbohydrates || 0
+        };
+        setCurrentMacros(macroData);
+        
+        if (!aiMacros) {
+          // If manual macros, populate the manual input fields
+          setManualMacros({
+            calories: macroData.calories.toString(),
+            protein: macroData.protein.toString(),
+            fat: macroData.fat.toString(),
+            carbohydrates: macroData.carbohydrates.toString()
+          });
+        }
+        
         setRetryCount(0);
         setHasUnsavedChanges(false);
         success = true;
@@ -193,8 +229,67 @@ export default function EditMealScreen() {
     });
     if (invalidQuantities) errors.push("All ingredient quantities must be positive numbers");
     
+    // Validate manual macros if manual entry is selected
+    if (!useAIMacros) {
+      const macroValues = {
+        calories: parseFloat(manualMacros.calories) || 0,
+        protein: parseFloat(manualMacros.protein) || 0,
+        fat: parseFloat(manualMacros.fat) || 0,
+        carbohydrates: parseFloat(manualMacros.carbohydrates) || 0
+      };
+      
+      if (macroValues.calories < 0) errors.push("Calories must be a positive number");
+      if (macroValues.protein < 0) errors.push("Protein must be a positive number");
+      if (macroValues.fat < 0) errors.push("Fat must be a positive number");
+      if (macroValues.carbohydrates < 0) errors.push("Carbohydrates must be a positive number");
+    }
+    
     return errors;
-  }, [name, description, ingredients]);
+  }, [name, description, ingredients, useAIMacros, manualMacros]);
+
+  // Function to update AI macros
+  const updateAIMacros = async () => {
+    if (!name.trim() || !description.trim() || ingredients.length === 0) {
+      Alert.alert("Missing Information", "Please ensure meal name, description, and ingredients are filled before updating nutrition.");
+      return;
+    }
+
+    setUpdatingMacros(true);
+    try {
+      const ingredientsText = ingredients
+        .filter(ingredient => ingredient.name.trim())
+        .map(ingredient => `${ingredient.quantity} ${ingredient.unit} ${ingredient.name}`)
+        .join(", ");
+
+      const { data, error } = await supabase.functions.invoke('generate-AImeal', {
+        body: {
+          mealName: name.trim(),
+          description: description.trim(),
+          ingredients: ingredientsText,
+          servings: 1, // Default to 1 serving for macro calculation
+          calculateMacrosOnly: true
+        }
+      });
+
+      if (error) {
+        console.error('Error updating AI macros:', error);
+        Alert.alert("Error", "Failed to update nutrition information. Please try again.");
+        return;
+      }
+
+      if (data?.macros) {
+        setCurrentMacros(data.macros);
+        Alert.alert("Success", "Nutrition information updated successfully!");
+      } else {
+        Alert.alert("Error", "Unable to calculate nutrition information. Please try again or enter manually.");
+      }
+    } catch (error) {
+      console.error('Error updating AI macros:', error);
+      Alert.alert("Error", "Failed to update nutrition information. Please try again.");
+    } finally {
+      setUpdatingMacros(false);
+    }
+  };
 
   // Add refresh functionality
   const handleRefresh = useCallback(async () => {
@@ -257,6 +352,14 @@ export default function EditMealScreen() {
           throw new Error("Meal not found or you don't have permission to edit it.");
         }
 
+        // Prepare macro data
+        const macroData = useAIMacros ? currentMacros : {
+          calories: parseFloat(manualMacros.calories) || 0,
+          protein: parseFloat(manualMacros.protein) || 0,
+          fat: parseFloat(manualMacros.fat) || 0,
+          carbohydrates: parseFloat(manualMacros.carbohydrates) || 0
+        };
+
         // Update meal data
         const { error: mealError } = await supabase
           .from("meals")
@@ -269,6 +372,11 @@ export default function EditMealScreen() {
             dietary_restrictions: dietaryRestriction || null,
             cuisine: cuisine || null,
             picture: picture || null,
+            AI_Macros: useAIMacros,
+            calories: macroData.calories,
+            protein: macroData.protein,
+            fat: macroData.fat,
+            carbohydrates: macroData.carbohydrates,
           })
           .eq("id", mealId)
           .eq("user_id", userId);
@@ -755,6 +863,135 @@ export default function EditMealScreen() {
               Icon={() => <Ionicons name="chevron-down" size={16} color={theme.text} style={styles.pickerArrow} />}
             />
           </View>
+        </View>
+
+        {/* Macro Section */}
+        <View style={styles.inputGroup}>
+          <Text style={[styles.label, { color: theme.text }]}>Nutrition Information</Text>
+          
+          <View style={styles.toggleContainer}>
+            <Text style={[styles.toggleLabel, { color: theme.text }, useAIMacros && styles.activeToggleLabel]}>
+              AI Calculated
+            </Text>
+            <Switch
+              value={!useAIMacros}
+              onValueChange={(value) => {
+                const newUseAIMacros = !value;
+                setUseAIMacros(newUseAIMacros);
+                
+                // If switching to manual mode, populate manual fields with current values
+                if (!newUseAIMacros) {
+                  setManualMacros({
+                    calories: currentMacros.calories.toString(),
+                    protein: currentMacros.protein.toString(),
+                    fat: currentMacros.fat.toString(),
+                    carbohydrates: currentMacros.carbohydrates.toString()
+                  });
+                }
+                
+                setHasUnsavedChanges(true);
+              }}
+              trackColor={{ false: '#E3E3E3', true: theme.primary }}
+              thumbColor={useAIMacros ? '#f4f3f4' : theme.primary}
+            />
+            <Text style={[styles.toggleLabel, { color: theme.text }, !useAIMacros && styles.activeToggleLabel]}>
+              Manual Entry
+            </Text>
+          </View>
+
+          {useAIMacros ? (
+            <View style={styles.aiMacroContainer}>
+              <View style={styles.macroDisplayGrid}>
+                <View style={[styles.macroDisplayItem, { backgroundColor: theme.background, borderColor: theme.border }]}>
+                  <Text style={[styles.macroDisplayValue, { color: theme.text }]}>{currentMacros.calories}</Text>
+                  <Text style={[styles.macroDisplayLabel, { color: theme.textSecondary }]}>Calories</Text>
+                </View>
+                <View style={[styles.macroDisplayItem, { backgroundColor: theme.background, borderColor: theme.border }]}>
+                  <Text style={[styles.macroDisplayValue, { color: theme.text }]}>{currentMacros.protein}g</Text>
+                  <Text style={[styles.macroDisplayLabel, { color: theme.textSecondary }]}>Protein</Text>
+                </View>
+                <View style={[styles.macroDisplayItem, { backgroundColor: theme.background, borderColor: theme.border }]}>
+                  <Text style={[styles.macroDisplayValue, { color: theme.text }]}>{currentMacros.fat}g</Text>
+                  <Text style={[styles.macroDisplayLabel, { color: theme.textSecondary }]}>Fat</Text>
+                </View>
+                <View style={[styles.macroDisplayItem, { backgroundColor: theme.background, borderColor: theme.border }]}>
+                  <Text style={[styles.macroDisplayValue, { color: theme.text }]}>{currentMacros.carbohydrates}g</Text>
+                  <Text style={[styles.macroDisplayLabel, { color: theme.textSecondary }]}>Carbs</Text>
+                </View>
+              </View>
+              
+              <TouchableOpacity 
+                style={[styles.aiUpdateButton, { backgroundColor: theme.primary }, updatingMacros && styles.disabledButton]}
+                onPress={updateAIMacros}
+                disabled={updatingMacros}
+              >
+                {updatingMacros ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <Text style={styles.aiUpdateButtonText}>Update AI Nutrition</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={styles.manualMacroGrid}>
+              <View style={styles.macroInputItem}>
+                <Text style={[styles.macroInputLabel, { color: theme.text }]}>Calories</Text>
+                <TextInput
+                  style={[styles.macroInput, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
+                  value={manualMacros.calories}
+                  onChangeText={(text) => {
+                    setManualMacros(prev => ({ ...prev, calories: text }));
+                    setHasUnsavedChanges(true);
+                  }}
+                  placeholder="0"
+                  placeholderTextColor={theme.placeholder}
+                  keyboardType="numeric"
+                />
+              </View>
+              <View style={styles.macroInputItem}>
+                <Text style={[styles.macroInputLabel, { color: theme.text }]}>Protein (g)</Text>
+                <TextInput
+                  style={[styles.macroInput, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
+                  value={manualMacros.protein}
+                  onChangeText={(text) => {
+                    setManualMacros(prev => ({ ...prev, protein: text }));
+                    setHasUnsavedChanges(true);
+                  }}
+                  placeholder="0"
+                  placeholderTextColor={theme.placeholder}
+                  keyboardType="numeric"
+                />
+              </View>
+              <View style={styles.macroInputItem}>
+                <Text style={[styles.macroInputLabel, { color: theme.text }]}>Fat (g)</Text>
+                <TextInput
+                  style={[styles.macroInput, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
+                  value={manualMacros.fat}
+                  onChangeText={(text) => {
+                    setManualMacros(prev => ({ ...prev, fat: text }));
+                    setHasUnsavedChanges(true);
+                  }}
+                  placeholder="0"
+                  placeholderTextColor={theme.placeholder}
+                  keyboardType="numeric"
+                />
+              </View>
+              <View style={styles.macroInputItem}>
+                <Text style={[styles.macroInputLabel, { color: theme.text }]}>Carbs (g)</Text>
+                <TextInput
+                  style={[styles.macroInput, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
+                  value={manualMacros.carbohydrates}
+                  onChangeText={(text) => {
+                    setManualMacros(prev => ({ ...prev, carbohydrates: text }));
+                    setHasUnsavedChanges(true);
+                  }}
+                  placeholder="0"
+                  placeholderTextColor={theme.placeholder}
+                  keyboardType="numeric"
+                />
+              </View>
+            </View>
+          )}
         </View>
 
         <View style={styles.inputGroup}>
@@ -1258,5 +1495,84 @@ const styles = StyleSheet.create({
   },
   cancelButtonText: {
     fontSize: 16,
+  },
+  // Macro styles
+  toggleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginVertical: 15,
+    paddingHorizontal: 20,
+  },
+  toggleLabel: {
+    fontSize: 16,
+    fontWeight: '500',
+    marginHorizontal: 15,
+  },
+  activeToggleLabel: {
+    fontWeight: 'bold',
+    color: '#007AFF',
+  },
+  aiMacroContainer: {
+    marginTop: 15,
+  },
+  macroDisplayGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    marginVertical: 10,
+  },
+  macroDisplayItem: {
+    width: '48%',
+    padding: 15,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  macroDisplayValue: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 5,
+  },
+  macroDisplayLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  aiUpdateButton: {
+    padding: 15,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 15,
+  },
+  aiUpdateButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  disabledButton: {
+    opacity: 0.6,
+  },
+  manualMacroGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    marginTop: 15,
+  },
+  macroInputItem: {
+    width: '48%',
+    marginBottom: 15,
+  },
+  macroInputLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    marginBottom: 5,
+  },
+  macroInput: {
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    textAlign: 'center',
   },
 });
