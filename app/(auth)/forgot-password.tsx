@@ -44,7 +44,7 @@ const ForgotPasswordScreen = () => {
     setLoading(true);
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), {
-        redirectTo: "https://your-app-url.com/reset-password", // Change to your app's reset password URL
+        redirectTo: "https://shareablemeals.com/reset-password",
       });
 
       if (error) {
@@ -105,7 +105,7 @@ const ForgotPasswordScreen = () => {
           </View>
           <Text style={[styles.title, { color: theme.text }]}>Forgot Password?</Text>
           <Text style={[styles.subtitle, { color: theme.subtext }]}>
-            Don't worry! Enter your email address and we'll send you a link to reset your password.
+            Don&apos;t worry! Enter your email address and we&apos;ll send you a link to reset your password.
           </Text>
         </View>
 
@@ -155,7 +155,7 @@ const ForgotPasswordScreen = () => {
           <View style={[styles.infoContainer, { backgroundColor: `${theme.primary}10` }]}>
             <Ionicons name="information-circle" size={16} color={theme.primary} />
             <Text style={[styles.infoText, { color: theme.primary }]}>
-              We'll send a secure link to reset your password. The link will expire in 24 hours for your security.
+              We&apos;ll send a secure link to reset your password. The link will expire in 24 hours for your security.
             </Text>
           </View>
 
@@ -210,7 +210,7 @@ const ForgotPasswordScreen = () => {
             Need Help?
           </Text>
           <Text style={[styles.helpText, { color: theme.subtext }]}>
-            If you're having trouble receiving the reset email, check your spam folder or contact support for assistance.
+            If you&apos;re having trouble receiving the reset email, check your spam folder or contact support for assistance.
           </Text>
         </View>
       </ScrollView>

@@ -7,8 +7,7 @@ import {
   StyleSheet, 
   Alert, 
   RefreshControl,
-  ActivityIndicator,
-  ScrollView 
+  ActivityIndicator
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../../context/ThemeContext';
@@ -34,10 +33,6 @@ const AdminReportsScreen: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
   const [actionLoading, setActionLoading] = useState<number | null>(null);
-
-  useEffect(() => {
-    fetchReports();
-  }, []);
 
   const fetchReports = useCallback(async (isRefresh = false) => {
     try {
@@ -89,6 +84,10 @@ const AdminReportsScreen: React.FC = () => {
       setRefreshing(false);
     }
   }, [retryCount]);
+
+  useEffect(() => {
+    fetchReports();
+  }, [fetchReports]);
 
   const handleRetry = useCallback(() => {
     setRetryCount(0);

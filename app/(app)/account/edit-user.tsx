@@ -10,23 +10,15 @@ import {
   ActivityIndicator, 
   ScrollView,
   RefreshControl,
-  Platform
+  Platform,
+  Modal
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
-import RNPickerSelect from 'react-native-picker-select';
 import { useTheme } from '../../../context/ThemeContext';
 import { supabase } from 'utils/supabase';
 import { Ionicons } from '@expo/vector-icons';
-
-const dietaryOptions = [
-  { label: 'None', value: 'None' },
-  { label: 'Vegetarian', value: 'Vegetarian' },
-  { label: 'Vegan', value: 'Vegan' },
-  { label: 'Gluten-Free', value: 'Gluten-Free' },
-  { label: 'Keto', value: 'Keto' },
-  { label: 'Paleo', value: 'Paleo' },
-];
+import { dietaryOptionsEnhanced } from '../../../constants/dietaryOptions';
 
 const EditUserScreen: React.FC = () => {
   const [username, setUsername] = useState<string>('');
@@ -43,6 +35,9 @@ const EditUserScreen: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
   const [validationErrors, setValidationErrors] = useState<{[key: string]: string}>({});
+
+  // Modal state for enhanced picker
+  const [showDietaryModal, setShowDietaryModal] = useState(false);
 
   const { theme } = useTheme();
   const router = useRouter();
@@ -82,7 +77,7 @@ const EditUserScreen: React.FC = () => {
         setUsername(data.username || '');
         setCaloriesGoal(data.calories_goal?.toString() || '');
         setProteinGoal(data.protein_goal?.toString() || '');
-        setCarbsGoal(data.carbs_goal?.toString() || '');
+        setCarbsGoal(data.carbohydrates_goal?.toString() || '');
         setFatGoal(data.fat_goal?.toString() || '');
         setDietaryRestrictions(data.dietary_restrictions || '');
         setAllergies(data.allergies || '');
@@ -265,7 +260,7 @@ const EditUserScreen: React.FC = () => {
         <View style={[styles.header, { backgroundColor: theme.background }]}>
           <TouchableOpacity
             style={[styles.backButton, { backgroundColor: theme.card }]}
-            onPress={() => router.back()}
+            onPress={() => router.replace('/account/account')}
           >
             <Ionicons name="arrow-back" size={20} color={theme.text} />
           </TouchableOpacity>
@@ -292,7 +287,7 @@ const EditUserScreen: React.FC = () => {
         <View style={[styles.header, { backgroundColor: theme.background }]}>
           <TouchableOpacity
             style={[styles.backButton, { backgroundColor: theme.card }]}
-            onPress={() => router.back()}
+            onPress={() => router.replace('/account/account')}
           >
             <Ionicons name="arrow-back" size={20} color={theme.text} />
           </TouchableOpacity>
@@ -329,12 +324,13 @@ const EditUserScreen: React.FC = () => {
   }
 
   return (
+    <>
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       {/* Modern Header */}
       <View style={[styles.header, { backgroundColor: theme.background }]}>
         <TouchableOpacity
           style={[styles.headerBackButton, { backgroundColor: theme.card }]}
-          onPress={() => router.back()}
+          onPress={() => router.replace('/account/account')}
         >
           <Ionicons name="arrow-back" size={20} color={theme.text} />
         </TouchableOpacity>
@@ -578,20 +574,21 @@ const EditUserScreen: React.FC = () => {
             <Text style={[styles.inputLabel, { color: theme.text }]}>
               Dietary Restrictions
             </Text>
-            <View style={styles.pickerContainer}>
-              <RNPickerSelect
-                onValueChange={(value) => setDietaryRestrictions(value)}
-                items={dietaryOptions}
-                placeholder={{
-                  label: 'Select Dietary Restrictions',
-                  value: null,
-                }}
-                style={{
-                  inputIOS: [styles.pickerInput, { color: theme.text }],
-                  inputAndroid: [styles.pickerInput, { color: theme.text }],
-                }}
-                value={dietaryRestrictions}
-              />
+            <View style={styles.inputRow}>
+              <TouchableOpacity
+                style={[styles.pickerContainer, { backgroundColor: theme.background, borderColor: theme.border }]}
+                onPress={() => setShowDietaryModal(true)}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="leaf" size={20} color={theme.primary} style={{ marginRight: 8 }} />
+                <Text style={[styles.pickerText, { 
+                  color: dietaryRestrictions ? theme.text : theme.placeholder,
+                  flex: 1
+                }]}>
+                  {dietaryRestrictions || "Select dietary restriction"}
+                </Text>
+                <Ionicons name="chevron-down" size={16} color={theme.text} />
+              </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.saveButton, { backgroundColor: theme.primary }]}
                 onPress={handleUpdateDietaryRestrictions}
@@ -658,8 +655,75 @@ const EditUserScreen: React.FC = () => {
             <Ionicons name="chevron-forward" size={20} color={theme.subtext} />
           </TouchableOpacity>
         </View>
+
+        {/* Bottom Back Button */}
+        <View style={styles.bottomButtonContainer}>
+          <TouchableOpacity
+            style={[styles.bottomBackButton, { backgroundColor: theme.card, borderColor: theme.border }]}
+            onPress={() => router.replace('/account/account')}
+          >
+            <Ionicons name="arrow-back" size={20} color={theme.text} />
+            <Text style={[styles.bottomBackButtonText, { color: theme.text }]}>
+              Back to Account
+            </Text>
+          </TouchableOpacity>
+        </View>
       </ScrollView>
     </View>
+
+    {/* Dietary Restrictions Modal */}
+    <Modal
+        visible={showDietaryModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowDietaryModal(false)}
+      >
+        <View style={styles.modalContainer}>
+          <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
+            <View style={[styles.modalHeader, { borderBottomColor: theme.border }]}>
+              <Text style={[styles.modalTitle, { color: theme.text }]}>
+                <Ionicons name="leaf" size={20} color={theme.success || theme.primary} /> Select Dietary Restrictions
+              </Text>
+              <TouchableOpacity
+                style={styles.modalCloseButton}
+                onPress={() => setShowDietaryModal(false)}
+              >
+                <Ionicons name="close" size={24} color={theme.text} />
+              </TouchableOpacity>
+            </View>
+            
+            <ScrollView style={styles.optionsList} showsVerticalScrollIndicator={false}>
+              {dietaryOptionsEnhanced.map((option) => (
+                <TouchableOpacity
+                  key={option.value}
+                  style={[
+                    styles.optionItem,
+                    { borderBottomColor: theme.border },
+                    dietaryRestrictions === option.value && { backgroundColor: theme.primary + '15' }
+                  ]}
+                  onPress={() => {
+                    setDietaryRestrictions(option.value);
+                    setShowDietaryModal(false);
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.optionIconContainer}>
+                    <Ionicons name={option.icon as any} size={24} color={theme.primary} />
+                  </View>
+                  <View style={styles.optionTextContainer}>
+                    <Text style={[styles.optionLabel, { color: theme.text }]}>{option.label}</Text>
+                    <Text style={[styles.optionDescription, { color: theme.subtext || theme.textSecondary }]}>{option.description}</Text>
+                  </View>
+                  {dietaryRestrictions === option.value && (
+                    <Ionicons name="checkmark" size={20} color={theme.primary} />
+                  )}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+    </>
   );
 };
 
@@ -775,7 +839,7 @@ const styles = StyleSheet.create({
   },
   contentContainer: {
     padding: 16,
-    paddingBottom: 40,
+    paddingBottom: 80,
   },
 
   // Card Styles
@@ -919,9 +983,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   pickerContainer: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
   },
   pickerInput: {
     flex: 1,
@@ -1051,6 +1120,105 @@ const styles = StyleSheet.create({
   },
   profilePicturePlaceholderText: {
     fontSize: 16,
+  },
+  pickerText: {
+    flex: 1,
+    fontSize: 16,
+    paddingVertical: 4,
+  },
+  // Enhanced modal styles for picker modals
+  modalContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    padding: 20,
+  },
+  modalContent: {
+    width: '100%',
+    maxWidth: 400,
+    padding: 24,
+    borderRadius: 20,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.2,
+    shadowRadius: 16,
+    elevation: 10,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    flex: 1,
+  },
+  modalCloseButton: {
+    padding: 4,
+  },
+  optionsList: {
+    maxHeight: 300,
+  },
+  optionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+  },
+  optionIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0, 0, 0, 0.05)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  optionTextContainer: {
+    flex: 1,
+  },
+  optionLabel: {
+    fontSize: 16,
+    fontWeight: '500',
+    marginBottom: 2,
+  },
+  optionDescription: {
+    fontSize: 13,
+    opacity: 0.7,
+  },
+
+  // Bottom Button Styles
+  bottomButtonContainer: {
+    marginTop: 24,
+    marginBottom: 16,
+  },
+  bottomBackButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 8,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 2,
+      },
+    }),
+  },
+  bottomBackButtonText: {
+    fontSize: 16,
+    fontWeight: '500',
   },
 });
 

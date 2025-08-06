@@ -61,11 +61,21 @@
     "@types/react-native-vector-icons": "^6.4.18",
     "@types/react-test-renderer": "^19.1.0",
     "babel-plugin-module-resolver": "^5.0.2",
+    "eslint-config-expo": "~9.2.0",
     "expo-module-scripts": "^4.1.7",
     "jest": "^29.7.0",
     "jest-expo": "~53.0.5",
     "react-test-renderer": "19.0.0",
+    "sharp": "^0.34.3",
     "typescript": "^5.8.3"
+  },
+  "expo": {
+    "doctor": {
+      "reactNativeDirectoryCheck": {
+        "exclude": ["react-native-star-rating-widget", "lodash.clonedeep", "react-native-vector-icons"],
+        "listUnknownPackages": false
+      }
+    }
   },
   "private": true
 }

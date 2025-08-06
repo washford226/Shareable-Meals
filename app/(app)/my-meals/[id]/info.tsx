@@ -536,6 +536,12 @@ const MyMealInfo = () => {
           <View style={styles.cardHeader}>
             <Ionicons name="nutrition" size={20} color={theme.primary} />
             <Text style={[styles.cardTitle, { color: theme.text }]}>Nutrition Facts</Text>
+            {meal?.AI_Macros && (
+              <View style={[styles.aiMacroTag, { backgroundColor: theme.aiAccent }]}>
+                <Ionicons name="sparkles" size={12} color={theme.buttonText} />
+                <Text style={[styles.aiMacroTagText, { color: theme.buttonText }]}>AI</Text>
+              </View>
+            )}
           </View>
           <View style={styles.nutritionGrid}>
             <View style={styles.nutritionItem}>
@@ -628,7 +634,7 @@ const MyMealInfo = () => {
 
           <View style={styles.secondaryActions}>
             <TouchableOpacity
-              style={[styles.actionButton, styles.secondaryButton, { backgroundColor: theme.button, borderColor: theme.border }]}
+              style={[styles.actionButton, styles.secondaryButton, { backgroundColor: theme.button, borderColor: theme.border, flex: 1 }]}
               onPress={() => router.push(`/my-meals/${id}/edit`)}
               disabled={deleting}
             >
@@ -637,7 +643,7 @@ const MyMealInfo = () => {
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[styles.actionButton, styles.dangerButton, { backgroundColor: theme.danger }]}
+              style={[styles.actionButton, styles.dangerButton, { backgroundColor: theme.danger, flex: 1 }]}
               onPress={handleDeleteMeal}
               disabled={deleting}
             >
@@ -678,7 +684,7 @@ const MyMealInfo = () => {
             </View>
 
             <Text style={[styles.modalSubtitle, { color: theme.subtext }]}>
-              Choose when you'd like to have this meal
+              Choose when you&apos;d like to have this meal
             </Text>
 
             {/* Date Selection */}
@@ -920,6 +926,18 @@ const styles = StyleSheet.create({
   },
   cardTitle: {
     fontSize: 18,
+    fontWeight: '600',
+  },
+  aiMacroTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 4,
+    gap: 3,
+  },
+  aiMacroTagText: {
+    fontSize: 10,
     fontWeight: '600',
   },
 

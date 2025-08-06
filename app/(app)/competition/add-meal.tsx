@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   RefreshControl,
   ScrollView,
+  Image,
 } from "react-native";
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from "expo-router";
@@ -19,6 +20,11 @@ const AddMeal = () => {
   interface Meal {
     id: number;
     name: string;
+    description?: string;
+    picture?: string;
+    cuisine?: string;
+    calories?: number;
+    protein?: number;
     favorite: boolean;
   }
 
@@ -47,7 +53,7 @@ const AddMeal = () => {
 
       const { data, error } = await supabase
         .from("meals")
-        .select("id, name, favorite")
+        .select("id, name, description, picture, cuisine, calories, protein, favorite")
         .eq("user_id", userId);
 
       if (error) {
@@ -304,14 +310,64 @@ const AddMeal = () => {
           }
           return (
             <View style={[styles.mealCard, { backgroundColor: theme.card }]}>
-              <View style={styles.mealInfo}>
-                <View style={styles.mealHeader}>
-                  <Text style={[styles.mealName, { color: theme.text }]}>{item.name}</Text>
-                  {item.favorite && (
-                    <Ionicons name="heart" size={16} color={theme.danger} />
-                  )}
+              <View style={styles.mealContent}>
+                {/* Meal Image */}
+                {item.picture && typeof item.picture === "string" ? (
+                  <Image 
+                    source={{ 
+                      uri: item.picture.startsWith('\\x') 
+                        ? item.picture.slice(2).match(/.{2}/g)?.map((hex: string) => String.fromCharCode(parseInt(hex, 16))).join('') || ''
+                        : item.picture
+                    }} 
+                    style={styles.mealImage} 
+                  />
+                ) : (
+                  <View style={[styles.mealImagePlaceholder, { backgroundColor: theme.border }]}>
+                    <Ionicons name="image" size={24} color={theme.subtext} />
+                  </View>
+                )}
+
+                {/* Meal Info */}
+                <View style={styles.mealInfo}>
+                  <View style={styles.mealHeader}>
+                    <Text style={[styles.mealName, { color: theme.text }]}>{item.name}</Text>
+                    {item.favorite && (
+                      <Ionicons name="heart" size={16} color={theme.danger} />
+                    )}
+                  </View>
+                  
+                  <Text style={[styles.mealDescription, { color: theme.subtext }]} numberOfLines={2}>
+                    {item.description || "No description available"}
+                  </Text>
+                  
+                  <View style={styles.mealMeta}>
+                    {item.cuisine && (
+                      <View style={[styles.cuisineTag, { backgroundColor: theme.primary + '20', borderColor: theme.primary }]}>
+                        <Ionicons name="globe" size={12} color={theme.primary} />
+                        <Text style={[styles.cuisineText, { color: theme.primary }]}>
+                          {item.cuisine}
+                        </Text>
+                      </View>
+                    )}
+                    
+                    <View style={styles.nutritionInfo}>
+                      <View style={styles.nutritionItem}>
+                        <Ionicons name="flash" size={14} color={theme.subtext} />
+                        <Text style={[styles.nutritionText, { color: theme.subtext }]}>
+                          {item.calories || 0} cal
+                        </Text>
+                      </View>
+                      <View style={styles.nutritionItem}>
+                        <Ionicons name="fitness" size={14} color={theme.subtext} />
+                        <Text style={[styles.nutritionText, { color: theme.subtext }]}>
+                          {item.protein || 0}g protein
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
                 </View>
               </View>
+              
               <TouchableOpacity
                 style={[
                   styles.addButton, 
@@ -354,7 +410,7 @@ const AddMeal = () => {
                 No Meals Found
               </Text>
               <Text style={[styles.emptySubtext, { color: theme.subtext }]}>
-                You don't have any meals to add to the competition yet. Create some meals first!
+                You don&apos;t have any meals to add to the competition yet. Create some meals first!
               </Text>
               <TouchableOpacity
                 style={[styles.actionButton, { backgroundColor: theme.primary }]}
@@ -479,9 +535,26 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.08,
     shadowRadius: 3,
     elevation: 2,
+  },
+  mealContent: {
     flexDirection: 'row',
+    flex: 1,
+    alignItems: 'flex-start',
+    marginBottom: 12,
+  },
+  mealImage: {
+    width: 60,
+    height: 60,
+    borderRadius: 8,
+    marginRight: 12,
+  },
+  mealImagePlaceholder: {
+    width: 60,
+    height: 60,
+    borderRadius: 8,
+    marginRight: 12,
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
   },
   emptyStateCard: {
     margin: 16,
@@ -516,21 +589,62 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    marginBottom: 4,
   },
   mealName: {
     fontSize: 16,
     fontWeight: '600',
     flex: 1,
   },
+  mealDescription: {
+    fontSize: 14,
+    lineHeight: 18,
+    marginBottom: 8,
+  },
+  mealMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  cuisineTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 2,
+  },
+  cuisineText: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  nutritionInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  nutritionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+  },
+  nutritionText: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
   addButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
     borderRadius: 8,
     gap: 4,
-    minWidth: 60,
+    minWidth: 80,
     justifyContent: 'center',
+    alignSelf: 'flex-end',
   },
   addButtonText: {
     fontSize: 14,

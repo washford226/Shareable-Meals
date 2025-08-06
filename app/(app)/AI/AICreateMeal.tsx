@@ -8,7 +8,6 @@ import {
   ScrollView,
   ActivityIndicator,
   Alert,
-  Platform,
   RefreshControl,
 } from "react-native";
 import { useRouter } from "expo-router";
@@ -56,7 +55,7 @@ const AICreateMeal = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [validationErrors, setValidationErrors] = useState<{[key: string]: string}>({});
   const [aiUsageCount, setAiUsageCount] = useState<number>(0);
-  const [aiUsageLimit] = useState<number>(10);
+  const [aiUsageLimit] = useState<number>(5);
   const [lastUsageDate, setLastUsageDate] = useState<string>("");
 
   // Helper function to get today's date in YYYY-MM-DD format
@@ -65,25 +64,6 @@ const AICreateMeal = () => {
   };
 
   // Helper function to parse AI ingredients into array of objects
-  function parseAIIngredients(ingredientText: string) {
-    return ingredientText
-      .split(/\r?\n|,/)
-      .map(line => line.replace(/^\*\s*/, '').trim())
-      .filter(line => line.length > 0)
-      .map(line => {
-        // Try to match "quantity unit name"
-        const match = line.match(/^([\d\/\.]+)?\s*([a-zA-Z]+)?\s*(.+)$/);
-        if (match) {
-          return {
-            quantity: match[1] || "",
-            unit: match[2] || "",
-            name: match[3] || line,
-          };
-        }
-        return { quantity: "", unit: "", name: line };
-      });
-  }
-
   // Enhanced fetch function with retry logic
   const fetchDietaryRestrictions = useCallback(async (isRefresh = false) => {
     try {
@@ -292,8 +272,12 @@ const AICreateMeal = () => {
       const { data: profileData, error: profileError } = await supabase
         .from("user_profiles")
         .select("username")
-        .eq("user_id", userId)
+        .eq("id", userId)
         .single();
+
+      if (profileError) {
+        console.warn("Failed to fetch username:", profileError);
+      }
 
       const username = profileData?.username || "Unknown User";
 

@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from "react";
-import { View, Text, TextInput, StyleSheet, Alert, TouchableOpacity, Image, ActivityIndicator, ScrollView, Platform } from "react-native";
+import { View, Text, TextInput, StyleSheet, Alert, TouchableOpacity, Image, ActivityIndicator, ScrollView, Platform, Modal } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
-import RNPickerSelect from "react-native-picker-select";
 import { supabase } from "utils/supabase";
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "context/ThemeContext";
+import { dietaryOptions } from "../../constants/dietaryOptions";
 
 const SignUpScreen: React.FC = () => {
   const router = useRouter();
@@ -26,21 +26,13 @@ const SignUpScreen: React.FC = () => {
   const [allergies, setAllergies] = useState("");
   const [profilePicture, setProfilePicture] = useState<string | null>(null);
   const [isSigningUp, setIsSigningUp] = useState(false);
+  const [showDietaryModal, setShowDietaryModal] = useState(false);
   const [errors, setErrors] = useState({
     username: "",
     email: "",
     password: "",
     confirmPassword: "",
   });
-
-  const dietaryOptions = [
-    { label: "None", value: "None" },
-    { label: "Vegetarian", value: "Vegetarian" },
-    { label: "Vegan", value: "Vegan" },
-    { label: "Gluten-Free", value: "Gluten-Free" },
-    { label: "Keto", value: "Keto" },
-    { label: "Paleo", value: "Paleo" },
-  ];
 
   // Request permission for image picker
   useEffect(() => {
@@ -114,6 +106,12 @@ const SignUpScreen: React.FC = () => {
     if (errors.confirmPassword) {
       setErrors(prev => ({ ...prev, confirmPassword: "" }));
     }
+  };
+
+  // Handle dietary restrictions picker
+  const showDietaryPicker = () => {
+    // Use custom modal for both iOS and Android for consistent experience
+    setShowDietaryModal(true);
   };
 
   // Pick image and convert to base64
@@ -199,6 +197,9 @@ const SignUpScreen: React.FC = () => {
       const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
         email: email.trim().toLowerCase(),
         password,
+        options: {
+          emailRedirectTo: 'https://shareablemeals.com/verify',
+        },
       });
 
       if (signUpError) {
@@ -213,11 +214,11 @@ const SignUpScreen: React.FC = () => {
 
       const userId = signUpData.user.id;
 
-      // Convert base64 image to bytea format if present
+      // Store profile picture data if present
       let profilePictureData = null;
       if (profilePicture) {
-        const base64Data = profilePicture.replace(/^data:image\/[a-z]+;base64,/, '');
-        profilePictureData = base64Data;
+        // Store the full data URI (consistent with edit-user screen)
+        profilePictureData = profilePicture;
       }
 
       // 2. Create user profile
@@ -293,7 +294,7 @@ const SignUpScreen: React.FC = () => {
               Username
             </Text>
             <View style={styles.inputContainer}>
-              <Ionicons name="at" size={16} color={theme.subtext} style={styles.inputIcon} />
+              <Ionicons name="person" size={16} color={theme.subtext} style={styles.inputIcon} />
               <TextInput
                 style={[styles.textInput, { 
                   borderColor: errors.username ? theme.danger : theme.border, 
@@ -591,43 +592,23 @@ const SignUpScreen: React.FC = () => {
             <Text style={[styles.inputLabel, { color: theme.text }]}>
               Dietary Restrictions
             </Text>
-            <View style={[styles.pickerContainer, { 
-              borderColor: theme.border,
-              backgroundColor: theme.background 
-            }]}>
+            <TouchableOpacity
+              style={[styles.pickerContainer, { 
+                borderColor: theme.border,
+                backgroundColor: theme.background 
+              }]}
+              onPress={showDietaryPicker}
+              disabled={isSigningUp}
+              activeOpacity={0.7}
+            >
               <Ionicons name="restaurant" size={16} color={theme.subtext} style={styles.inputIcon} />
-              <RNPickerSelect
-                onValueChange={(value) => setDietaryRestrictions(value)}
-                items={dietaryOptions}
-                placeholder={{
-                  label: "Select dietary restrictions",
-                  value: null,
-                  color: theme.placeholder,
-                }}
-                style={{
-                  inputIOS: [styles.pickerInput, { color: theme.text }],
-                  inputAndroid: [styles.pickerInput, { color: theme.text }],
-                  placeholder: { color: theme.placeholder },
-                  iconContainer: {
-                    top: 16,
-                    right: 16,
-                  },
-                  viewContainer: {
-                    flex: 1,
-                    justifyContent: 'center',
-                  },
-                }}
-                value={dietaryRestrictions}
-                disabled={isSigningUp}
-                useNativeAndroidPickerStyle={false}
-                touchableDoneProps={{
-                  style: { backgroundColor: 'transparent' }
-                }}
-                Icon={() => {
-                  return <Ionicons name="chevron-down" size={16} color={theme.subtext} />;
-                }}
-              />
-            </View>
+              <Text style={[styles.pickerText, { 
+                color: dietaryRestrictions ? theme.text : theme.placeholder 
+              }]}>
+                {dietaryRestrictions || "Select dietary restrictions"}
+              </Text>
+              <Ionicons name="chevron-down" size={16} color={theme.subtext} style={styles.dropdownIcon} />
+            </TouchableOpacity>
           </View>
 
           {/* Allergies Input */}
@@ -695,6 +676,77 @@ const SignUpScreen: React.FC = () => {
           </TouchableOpacity>
         </View>
       </ScrollView>
+
+      {/* Dietary Restrictions Modal */}
+      <Modal
+        visible={showDietaryModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowDietaryModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContainer, { backgroundColor: theme.card }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: theme.text }]}>
+                Select Dietary Restrictions
+              </Text>
+              <TouchableOpacity
+                onPress={() => setShowDietaryModal(false)}
+                style={styles.modalCloseButton}
+              >
+                <Ionicons name="close" size={24} color={theme.subtext} />
+              </TouchableOpacity>
+            </View>
+            
+            <ScrollView style={styles.modalScrollView} showsVerticalScrollIndicator={false}>
+              {dietaryOptions.map((option, index) => (
+                <TouchableOpacity
+                  key={index}
+                  style={[
+                    styles.modalOption,
+                    { 
+                      backgroundColor: dietaryRestrictions === option.value 
+                        ? `${theme.primary}15` 
+                        : 'transparent',
+                      borderColor: dietaryRestrictions === option.value 
+                        ? theme.primary 
+                        : theme.border
+                    }
+                  ]}
+                  onPress={() => {
+                    setDietaryRestrictions(option.value);
+                    setShowDietaryModal(false);
+                  }}
+                >
+                  <View style={styles.modalOptionIcon}>
+                    <Ionicons 
+                      name={option.icon as any} 
+                      size={24} 
+                      color={dietaryRestrictions === option.value ? theme.primary : theme.subtext} 
+                    />
+                  </View>
+                  <View style={styles.modalOptionText}>
+                    <Text style={[
+                      styles.modalOptionTitle, 
+                      { 
+                        color: dietaryRestrictions === option.value ? theme.primary : theme.text 
+                      }
+                    ]}>
+                      {option.label}
+                    </Text>
+                    <Text style={[styles.modalOptionDescription, { color: theme.subtext }]}>
+                      {option.description}
+                    </Text>
+                  </View>
+                  {dietaryRestrictions === option.value && (
+                    <Ionicons name="checkmark-circle" size={20} color={theme.primary} />
+                  )}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -707,7 +759,7 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     padding: 16,
     paddingTop: Platform.OS === 'ios' ? 60 : 40,
-    paddingBottom: 32,
+    paddingBottom: 160,
   },
   // Header Section
   headerSection: {
@@ -879,17 +931,88 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderRadius: 12,
     paddingLeft: 40,
-    paddingRight: 40, // Add space for dropdown arrow
+    paddingRight: 40,
     position: 'relative',
   },
-  pickerInput: {
+  pickerText: {
     flex: 1,
     fontSize: 16,
-    paddingVertical: 22, // Lower the text even more
-    height: 48,
+    paddingVertical: 0,
+    textAlignVertical: 'center',
+  },
+  dropdownIcon: {
+    position: 'absolute',
+    right: 16,
+  },
+  // Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContainer: {
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '80%',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: -2 },
+        shadowOpacity: 0.25,
+        shadowRadius: 10,
+      },
+      android: {
+        elevation: 10,
+      },
+    }),
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0, 0, 0, 0.1)',
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+  },
+  modalCloseButton: {
+    padding: 4,
+  },
+  modalScrollView: {
+    maxHeight: 400,
+  },
+  modalOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    marginHorizontal: 16,
+    marginVertical: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  modalOptionIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0, 0, 0, 0.05)',
     justifyContent: 'center',
-    alignItems: 'flex-start',
-    textAlignVertical: 'center', // For Android
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  modalOptionText: {
+    flex: 1,
+  },
+  modalOptionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  modalOptionDescription: {
+    fontSize: 14,
+    lineHeight: 18,
   },
   // Button Styles
   buttonContainer: {

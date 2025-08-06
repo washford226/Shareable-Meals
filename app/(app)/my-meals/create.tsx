@@ -7,48 +7,22 @@ import {
   Alert,
   Image,
   TouchableOpacity,
-  Platform,
   ScrollView,
   Switch,
   ActivityIndicator,
   RefreshControl,
+  Modal,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { useTheme } from "../../../context/ThemeContext";
-import { useLocalSearchParams, useRouter } from "expo-router";
-import RNPickerSelect from "react-native-picker-select";
+import { useRouter } from "expo-router";
 import { supabase } from "utils/supabase";
-
-const dietaryOptions = [
-  { label: "None", value: "" },
-  { label: "Vegetarian", value: "Vegetarian" },
-  { label: "Vegan", value: "Vegan" },
-  { label: "Gluten-Free", value: "Gluten-Free" },
-  { label: "Keto", value: "Keto" },
-  { label: "Paleo", value: "Paleo" },
-];
-
-
-const cuisineOptions = [
-  { label: "None", value: "" },
-  { label: "Italian", value: "Italian" },
-  { label: "Mexican", value: "Mexican" },
-  { label: "Chinese", value: "Chinese" },
-  { label: "Indian", value: "Indian" },
-  { label: "American", value: "American" },
-  { label: "Japanese", value: "Japanese" },
-  { label: "Mediterranean", value: "Mediterranean" },
-  { label: "Thai", value: "Thai" },
-  { label: "French", value: "French" },
-];
-
-
+import { dietaryCreateOptionsEnhanced, cuisineOptionsEnhanced } from "../../../constants/dietaryOptions";
 
 const CreateMealScreen = () => {
   const { theme } = useTheme();
   const router = useRouter();
-  const { selectedDay } = useLocalSearchParams<{ selectedDay?: string }>();
 
   const [mealName, setMealName] = useState("");
   const [mealDescription, setMealDescription] = useState("");
@@ -72,6 +46,10 @@ const CreateMealScreen = () => {
     fat: "",
     carbohydrates: ""
   });
+
+  // Modal state for enhanced pickers
+  const [showDietaryModal, setShowDietaryModal] = useState(false);
+  const [showCuisineModal, setShowCuisineModal] = useState(false);
 
   const pickMealImage = useCallback(async () => {
     setError(null);
@@ -229,8 +207,12 @@ const CreateMealScreen = () => {
         const { data: profileData, error: profileError } = await supabase
           .from("user_profiles")
           .select("username")
-          .eq("user_id", userId)
+          .eq("id", userId)
           .single();
+
+        if (profileError) {
+          console.warn("Error fetching user profile:", profileError);
+        }
 
         const username = profileData?.username || "Unknown User";
 
@@ -352,18 +334,19 @@ const CreateMealScreen = () => {
   ]);
 
   return (
-    <ScrollView 
-      style={{ backgroundColor: theme.background }}
-      contentContainerStyle={styles.scrollContainer}
-      refreshControl={
-        <RefreshControl
-          refreshing={refreshing}
-          onRefresh={handleRefresh}
-          colors={[theme.primary]}
-          tintColor={theme.primary}
-        />
-      }
-    >
+    <>
+      <ScrollView 
+        style={{ backgroundColor: theme.background }}
+        contentContainerStyle={styles.scrollContainer}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            colors={[theme.primary]}
+            tintColor={theme.primary}
+          />
+        }
+      >
       {error && (
         <View style={[styles.errorBanner, { backgroundColor: theme.card, borderColor: theme.danger }]}>
           <Ionicons name="warning" size={20} color={theme.danger} />
@@ -650,42 +633,36 @@ const CreateMealScreen = () => {
 
         <View style={styles.inputGroup}>
           <Text style={[styles.label, { color: theme.text }]}>Dietary Restrictions</Text>
-          <View style={[styles.pickerContainer, { backgroundColor: theme.background, borderColor: theme.border }]}>
+          <TouchableOpacity
+            style={[styles.pickerContainer, { backgroundColor: theme.background, borderColor: theme.border }]}
+            onPress={() => setShowDietaryModal(true)}
+            activeOpacity={0.7}
+          >
             <Ionicons name="leaf" size={20} color={theme.primary} style={styles.pickerIcon} />
-            <RNPickerSelect
-              onValueChange={setMealDietaryRestriction}
-              items={dietaryOptions}
-              placeholder={{ label: "Select dietary restriction (optional)", value: "" }}
-              style={{
-                inputIOS: [styles.picker, { color: mealDietaryRestriction ? theme.text : theme.placeholder }],
-                inputAndroid: [styles.picker, { color: mealDietaryRestriction ? theme.text : theme.placeholder }],
-                placeholder: { color: theme.placeholder },
-              }}
-              value={mealDietaryRestriction}
-              useNativeAndroidPickerStyle={false}
-              Icon={() => <Ionicons name="chevron-down" size={16} color={theme.text} style={styles.pickerArrow} />}
-            />
-          </View>
+            <Text style={[styles.pickerText, { 
+              color: mealDietaryRestriction ? theme.text : theme.placeholder 
+            }]}>
+              {mealDietaryRestriction || "Select dietary restriction (optional)"}
+            </Text>
+            <Ionicons name="chevron-down" size={16} color={theme.text} style={styles.pickerArrow} />
+          </TouchableOpacity>
         </View>
 
         <View style={styles.inputGroup}>
           <Text style={[styles.label, { color: theme.text }]}>Cuisine Type</Text>
-          <View style={[styles.pickerContainer, { backgroundColor: theme.background, borderColor: theme.border }]}>
+          <TouchableOpacity
+            style={[styles.pickerContainer, { backgroundColor: theme.background, borderColor: theme.border }]}
+            onPress={() => setShowCuisineModal(true)}
+            activeOpacity={0.7}
+          >
             <Ionicons name="globe" size={20} color={theme.primary} style={styles.pickerIcon} />
-            <RNPickerSelect
-              onValueChange={setMealCuisine}
-              items={cuisineOptions}
-              placeholder={{ label: "Select cuisine type (optional)", value: "" }}
-              style={{
-                inputIOS: [styles.picker, { color: mealCuisine ? theme.text : theme.placeholder }],
-                inputAndroid: [styles.picker, { color: mealCuisine ? theme.text : theme.placeholder }],
-                placeholder: { color: theme.placeholder },
-              }}
-              value={mealCuisine}
-              useNativeAndroidPickerStyle={false}
-              Icon={() => <Ionicons name="chevron-down" size={16} color={theme.text} style={styles.pickerArrow} />}
-            />
-          </View>
+            <Text style={[styles.pickerText, { 
+              color: mealCuisine ? theme.text : theme.placeholder 
+            }]}>
+              {mealCuisine || "Select cuisine type (optional)"}
+            </Text>
+            <Ionicons name="chevron-down" size={16} color={theme.text} style={styles.pickerArrow} />
+          </TouchableOpacity>
         </View>
 
         <View style={styles.twoColumnRow}>
@@ -765,6 +742,113 @@ const CreateMealScreen = () => {
         </TouchableOpacity>
       </View>
     </ScrollView>
+
+    {/* Dietary Restrictions Modal */}
+    <Modal
+      visible={showDietaryModal}
+      transparent={true}
+      animationType="slide"
+      onRequestClose={() => setShowDietaryModal(false)}
+    >
+      <View style={styles.modalContainer}>
+        <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
+          <View style={[styles.modalHeader, { borderBottomColor: theme.border }]}>
+            <Text style={[styles.modalTitle, { color: theme.text }]}>
+              <Ionicons name="leaf" size={20} color={theme.success || theme.primary} /> Select Dietary Restrictions
+            </Text>
+            <TouchableOpacity
+              style={styles.modalCloseButton}
+              onPress={() => setShowDietaryModal(false)}
+            >
+              <Ionicons name="close" size={24} color={theme.text} />
+            </TouchableOpacity>
+          </View>
+          
+          <ScrollView style={styles.optionsList} showsVerticalScrollIndicator={false}>
+            {dietaryCreateOptionsEnhanced.map((option) => (
+              <TouchableOpacity
+                key={option.value}
+                style={[
+                  styles.optionItem,
+                  { borderBottomColor: theme.border },
+                  mealDietaryRestriction === option.value && { backgroundColor: theme.primary + '15' }
+                ]}
+                onPress={() => {
+                  setMealDietaryRestriction(option.value);
+                  setShowDietaryModal(false);
+                }}
+                activeOpacity={0.7}
+              >
+                <View style={styles.optionIconContainer}>
+                  <Ionicons name={option.icon as any} size={24} color={theme.primary} />
+                </View>
+                <View style={styles.optionTextContainer}>
+                  <Text style={[styles.optionLabel, { color: theme.text }]}>{option.label}</Text>
+                  <Text style={[styles.optionDescription, { color: theme.subtext || theme.textSecondary }]}>{option.description}</Text>
+                </View>
+                {mealDietaryRestriction === option.value && (
+                  <Ionicons name="checkmark" size={20} color={theme.primary} />
+                )}
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
+
+    {/* Cuisine Modal */}
+    <Modal
+      visible={showCuisineModal}
+      transparent={true}
+      animationType="slide"
+      onRequestClose={() => setShowCuisineModal(false)}
+    >
+      <View style={styles.modalContainer}>
+        <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
+          <View style={[styles.modalHeader, { borderBottomColor: theme.border }]}>
+            <Text style={[styles.modalTitle, { color: theme.text }]}>
+              <Ionicons name="globe" size={20} color={theme.warning || theme.primary} /> Select Cuisine Type
+            </Text>
+            <TouchableOpacity
+              style={styles.modalCloseButton}
+              onPress={() => setShowCuisineModal(false)}
+            >
+              <Ionicons name="close" size={24} color={theme.text} />
+            </TouchableOpacity>
+          </View>
+          
+          <ScrollView style={styles.optionsList} showsVerticalScrollIndicator={false}>
+            {cuisineOptionsEnhanced.map((option) => (
+              <TouchableOpacity
+                key={option.value}
+                style={[
+                  styles.optionItem,
+                  { borderBottomColor: theme.border },
+                  mealCuisine === option.value && { backgroundColor: theme.primary + '15' }
+                ]}
+                onPress={() => {
+                  setMealCuisine(option.value);
+                  setShowCuisineModal(false);
+                }}
+                activeOpacity={0.7}
+              >
+                <View style={styles.optionIconContainer}>
+                  <Ionicons name={option.icon as any} size={24} color={theme.primary} />
+                </View>
+                <View style={styles.optionTextContainer}>
+                  <Text style={[styles.optionLabel, { color: theme.text }]}>{option.label}</Text>
+                  <Text style={[styles.optionDescription, { color: theme.subtext || theme.textSecondary }]}>{option.description}</Text>
+                </View>
+                {mealCuisine === option.value && (
+                  <Ionicons name="checkmark" size={20} color={theme.primary} />
+                )}
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
+    </>
   );
 };
 
@@ -876,6 +960,11 @@ const styles = StyleSheet.create({
   },
   pickerIcon: {
     marginRight: 8,
+  },
+  pickerText: {
+    flex: 1,
+    fontSize: 16,
+    paddingVertical: 4,
   },
   picker: {
     flex: 1,
@@ -1257,6 +1346,69 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     marginBottom: 8,
+  },
+
+  // Enhanced modal styles for picker modals
+  modalContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    padding: 20,
+  },
+  modalContent: {
+    width: '100%',
+    maxWidth: 400,
+    padding: 24,
+    borderRadius: 20,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.2,
+    shadowRadius: 16,
+    elevation: 10,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    flex: 1,
+  },
+  modalCloseButton: {
+    padding: 4,
+  },
+  optionsList: {
+    maxHeight: 300,
+  },
+  optionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+  },
+  optionIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0, 0, 0, 0.05)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  optionTextContainer: {
+    flex: 1,
+  },
+  optionLabel: {
+    fontSize: 16,
+    fontWeight: '500',
+    marginBottom: 2,
+  },
+  optionDescription: {
+    fontSize: 13,
+    opacity: 0.7,
   },
 });
 

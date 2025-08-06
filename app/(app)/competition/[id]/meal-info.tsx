@@ -28,19 +28,19 @@ interface CompetitionMeal {
   servings?: number;
   calories?: number;
   protein?: number;
-  carbohydrates?: number; // Updated to match database schema
+  carbohydrates?: number; 
   fat?: number;
   recipeLink?: string;
   created_by_ai?: boolean;
   created_by?: string;
   favorite?: boolean;
-  dietary_restrictions?: string; // Updated to match database schema
-  cuisine?: string; // Updated to match database schema
-  picture?: string; // For base64 image data or URL
+  dietary_restrictions?: string; 
+  cuisine?: string; 
+  picture?: string; 
   visibility?: boolean;
   created_at?: string;
   forever_invis?: boolean;
-  AI_Macros?: boolean; // Indicates if AI was used to calculate macros
+  AI_Macros?: boolean; 
   ingredients?: MealIngredient[];
 }
 
@@ -69,7 +69,6 @@ const CompetitionMealDetails = () => {
   } | null>(null);
   const { theme } = useTheme();
 
-  // Fetch meal by id from Supabase with competition context
   const fetchMealById = useCallback(async (mealId: string, showLoading = true) => {
     if (showLoading) {
       setLoading(true);
@@ -77,7 +76,6 @@ const CompetitionMealDetails = () => {
     setError(null);
     
     try {
-      // Fetch meal data and ingredients separately
       const [{ data: mealData, error: mealError }, { data: ingredientsData, error: ingredientsError }] = await Promise.all([
         supabase
           .from("meals")
@@ -94,15 +92,13 @@ const CompetitionMealDetails = () => {
         throw new Error("Failed to fetch meal details");
       }
 
-      // Fetch competition-specific information
       const { data: competitionData, error: competitionError } = await supabase
         .from("competition_submissions")
         .select(`
           competition_id,
+          user_id,
           weekly_competitions!competition_submissions_competition_id_fkey (
-            competition_themes!fk_theme_id (
-              theme_name
-            )
+            theme_id
           ),
           user_profiles!competition_submissions_user_id_fkey (
             username
@@ -111,13 +107,11 @@ const CompetitionMealDetails = () => {
         .eq("meal_id", mealId)
         .single();
 
-      // Fetch vote count for this meal
       const { data: voteData } = await supabase
         .from("meal_votes")
         .select("vote_id")
         .eq("meal_id", mealId);
 
-      // Combine meal data with ingredients and competition info
       const mealWithIngredients: CompetitionMeal = {
         ...mealData,
         ingredients: ingredientsData || []
@@ -125,8 +119,19 @@ const CompetitionMealDetails = () => {
       setMeal(mealWithIngredients);
 
       if (competitionData) {
+        let themeName = "Competition Theme";
+        if (competitionData.weekly_competitions?.[0]?.theme_id) {
+          const { data: themeData } = await supabase
+            .from("competition_themes")
+            .select("theme_name")
+            .eq("theme_id", competitionData.weekly_competitions[0].theme_id)
+            .single();
+          
+          themeName = themeData?.theme_name || "Competition Theme";
+        }
+
         setCompetitionInfo({
-          theme: competitionData.weekly_competitions?.[0]?.competition_themes?.[0]?.theme_name || "Competition Theme",
+          theme: themeName,
           votes: voteData?.length || 0,
           username: competitionData.user_profiles?.[0]?.username || "Unknown User"
         });
@@ -156,7 +161,6 @@ const CompetitionMealDetails = () => {
     const newRetryCount = retryCount + 1;
     setRetryCount(newRetryCount);
     
-    // Exponential backoff: wait 1s, 2s, 4s, etc.
     const delay = Math.min(1000 * Math.pow(2, newRetryCount - 1), 10000);
     
     setTimeout(() => {
@@ -179,7 +183,6 @@ const CompetitionMealDetails = () => {
 
     setCopyLoading(true);
     try {
-      // Get current user
       const { data: userData, error: userError } = await supabase.auth.getUser();
       if (userError || !userData?.user) {
         Alert.alert("Error", "User not authenticated. Please log in.");
@@ -188,7 +191,6 @@ const CompetitionMealDetails = () => {
       }
       const userId = userData.user.id;
 
-      // Create a new meal with the same data
       const newMeal = {
         name: `Copy of ${meal.name}`,
         description: meal.description,
@@ -218,7 +220,6 @@ const CompetitionMealDetails = () => {
         throw new Error("Failed to copy meal");
       }
 
-      // Copy ingredients if they exist
       if (meal.ingredients && meal.ingredients.length > 0) {
         const ingredientPromises = meal.ingredients.map((ingredient: any) => {
           return supabase.from("meal_ingredients").insert([
@@ -238,7 +239,6 @@ const CompetitionMealDetails = () => {
         {
           text: "OK",
           onPress: () => {
-            // Navigate back to competition page
             router.back();
           },
         },
@@ -259,7 +259,6 @@ const CompetitionMealDetails = () => {
 
     setReportLoading(true);
     try {
-      // Get current user
       const { data: userData, error: userError } = await supabase.auth.getUser();
       if (userError || !userData?.user) {
         Alert.alert("Error", "User not authenticated. Please log in.");
@@ -268,7 +267,6 @@ const CompetitionMealDetails = () => {
       }
       const userId = userData.user.id;
 
-      // Check if user has already reported this meal
       const { data: existingReport, error: checkError } = await supabase
         .from("meal_reports")
         .select("*")
@@ -288,7 +286,7 @@ const CompetitionMealDetails = () => {
         return;
       }
 
-      // Submit report
+
       const { error: reportError } = await supabase.from("meal_reports").insert([
         {
           meal_id: id,
@@ -338,82 +336,39 @@ const CompetitionMealDetails = () => {
   if (loading) {
     return (
       <View style={[styles.container, { backgroundColor: theme.background }]}>
-        {/* Header */}
-        <View style={[styles.header, { backgroundColor: theme.background }]}>
-          <TouchableOpacity 
-            style={[styles.backButton, { backgroundColor: `${theme.text}15` }]}
-            onPress={() => router.back()}
-          >
-            <Ionicons name="arrow-back" size={20} color={theme.text} />
-          </TouchableOpacity>
-          <Text style={[styles.headerTitle, { color: theme.text }]}>
-            Competition Meal
-          </Text>
-          <View style={styles.headerActions} />
-        </View>
-
-        <ScrollView 
-          style={styles.scrollContainer} 
-          showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={handleRefresh}
-              colors={[theme.primary]}
-              tintColor={theme.primary}
-            />
-          }
-        >
-          {/* Error Banner */}
+        <View style={styles.centerContent}>
+          <View style={[styles.loadingCard, { backgroundColor: theme.card }]}>
+            <ActivityIndicator size="large" color={theme.primary} />
+            <Text style={[styles.loadingText, { color: theme.text }]}>
+              Loading meal information...
+            </Text>
+            {retryCount > 0 && (
+              <Text style={[styles.retryText, { color: theme.warning }]}>
+                Retry attempt {retryCount}/3...
+              </Text>
+            )}
+          </View>
           {error && (
-            <View style={[styles.errorBanner, { 
-              backgroundColor: `${theme.danger}15`, 
-              borderColor: theme.danger 
-            }]}>
-              <Ionicons name="warning-outline" size={20} color={theme.danger} />
-              <Text style={[styles.errorBannerText, { color: theme.danger }]}>
+            <View style={[styles.errorContainer, { backgroundColor: theme.card, borderColor: theme.danger }]}>
+              <Ionicons name="warning-outline" size={32} color={theme.danger} />
+              <Text style={[styles.errorTitle, { color: theme.danger }]}>
+                Error Loading Meal
+              </Text>
+              <Text style={[styles.errorText, { color: theme.text }]}>
                 {error}
               </Text>
               <TouchableOpacity
-                style={[styles.errorBannerButton, { backgroundColor: theme.danger }]}
+                style={[styles.retryButton, { backgroundColor: theme.primary }]}
                 onPress={handleRetry}
               >
-                <Text style={[styles.errorBannerButtonText, { color: theme.buttonText }]}>
-                  Retry
-                </Text>
-              </TouchableOpacity>
-            </View>
-          )}
-
-          {/* Retry Banner */}
-          {retryCount > 0 && (
-            <View style={[styles.retryBanner, { 
-              backgroundColor: `${theme.warning}15`, 
-              borderColor: theme.warning 
-            }]}>
-              <Ionicons name="refresh-outline" size={16} color={theme.warning} />
-              <Text style={[styles.retryBannerText, { color: theme.warning }]}>
-                Retry attempt {retryCount}/3
-              </Text>
-            </View>
-          )}
-
-          <View style={styles.centerContent}>
-            <ActivityIndicator size="large" color={theme.primary} />
-            <Text style={[styles.loadingText, { color: theme.text }]}>Loading meal details...</Text>
-            
-            {error && (
-              <TouchableOpacity
-                style={[styles.retryButton, { backgroundColor: theme.primary, marginTop: 16 }]}
-                onPress={handleRetry}
-              >
+                <Ionicons name="refresh-outline" size={20} color={theme.buttonText} style={{ marginRight: 8 }} />
                 <Text style={[styles.retryButtonText, { color: theme.buttonText }]}>
-                  Retry
+                  Try Again
                 </Text>
               </TouchableOpacity>
-            )}
-          </View>
-        </ScrollView>
+            </View>
+          )}
+        </View>
       </View>
     );
   }
@@ -421,76 +376,35 @@ const CompetitionMealDetails = () => {
   if (!meal) {
     return (
       <View style={[styles.container, { backgroundColor: theme.background }]}>
-        {/* Header */}
-        <View style={[styles.header, { backgroundColor: theme.background }]}>
-          <TouchableOpacity 
-            style={[styles.backButton, { backgroundColor: `${theme.text}15` }]}
-            onPress={() => router.back()}
-          >
-            <Ionicons name="arrow-back" size={20} color={theme.text} />
-          </TouchableOpacity>
-          <Text style={[styles.headerTitle, { color: theme.text }]}>
-            Competition Meal
-          </Text>
-          <View style={styles.headerActions} />
-        </View>
-
-        <ScrollView 
-          style={styles.scrollContainer} 
-          showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={handleRefresh}
-              colors={[theme.primary]}
-              tintColor={theme.primary}
-            />
-          }
-        >
-          {/* Error Banner */}
-          {error && (
-            <View style={[styles.errorBanner, { 
-              backgroundColor: `${theme.danger}15`, 
-              borderColor: theme.danger 
-            }]}>
-              <Ionicons name="warning-outline" size={20} color={theme.danger} />
-              <Text style={[styles.errorBannerText, { color: theme.danger }]}>
-                {error}
+        <View style={styles.centerContent}>
+          <View style={[styles.errorContainer, { backgroundColor: theme.card, borderColor: theme.danger }]}>
+            <Ionicons name="warning-outline" size={48} color={theme.danger} />
+            <Text style={[styles.errorTitle, { color: theme.danger }]}>
+              Meal Not Found
+            </Text>
+            <Text style={[styles.errorText, { color: theme.text }]}>
+              {error || "The meal you're looking for couldn't be found."}
+            </Text>
+            <TouchableOpacity
+              style={[styles.retryButton, { backgroundColor: theme.primary }]}
+              onPress={handleRetry}
+            >
+              <Ionicons name="refresh-outline" size={20} color={theme.buttonText} style={{ marginRight: 8 }} />
+              <Text style={[styles.retryButtonText, { color: theme.buttonText }]}>
+                Try Again
               </Text>
-              <TouchableOpacity
-                style={[styles.errorBannerButton, { backgroundColor: theme.danger }]}
-                onPress={handleRetry}
-              >
-                <Text style={[styles.errorBannerButtonText, { color: theme.buttonText }]}>
-                  Retry
-                </Text>
-              </TouchableOpacity>
-            </View>
-          )}
-
-          {/* Empty State */}
-          <View style={[styles.emptyStateCard, { backgroundColor: theme.card }]}>
-            <View style={styles.emptyStateContent}>
-              <Ionicons name="restaurant-outline" size={48} color={theme.textSecondary} />
-              <Text style={[styles.emptyTitle, { color: theme.text }]}>
-                Meal Not Found
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.backButton, { backgroundColor: theme.button, borderColor: theme.border }]}
+              onPress={() => router.back()}
+            >
+              <Ionicons name="arrow-back-outline" size={20} color={theme.buttonText} style={{ marginRight: 8 }} />
+              <Text style={[styles.retryButtonText, { color: theme.buttonText }]}>
+                Go Back
               </Text>
-              <Text style={[styles.emptySubtext, { color: theme.textSecondary }]}>
-                {error || "The meal you're looking for could not be found."}
-              </Text>
-              
-              <TouchableOpacity
-                style={[styles.actionButton, { backgroundColor: theme.primary }]}
-                onPress={() => router.back()}
-              >
-                <Ionicons name="arrow-back" size={16} color={theme.buttonText} />
-                <Text style={[styles.actionButtonText, { color: theme.buttonText }]}>
-                  Go Back
-                </Text>
-              </TouchableOpacity>
-            </View>
+            </TouchableOpacity>
           </View>
-        </ScrollView>
+        </View>
       </View>
     );
   }
@@ -553,6 +467,32 @@ const CompetitionMealDetails = () => {
         }
         showsVerticalScrollIndicator={false}
       >
+        {/* Competition Info Card */}
+        {competitionInfo && (
+          <View style={[styles.competitionCard, { backgroundColor: theme.card, shadowColor: theme.shadow }]}>
+            <View style={styles.competitionHeader}>
+              <Ionicons name="trophy" size={20} color={theme.primary} />
+              <Text style={[styles.competitionTheme, { color: theme.text }]}>
+                {competitionInfo.theme}
+              </Text>
+            </View>
+            <View style={styles.competitionMeta}>
+              <View style={styles.creatorInfo}>
+                <Ionicons name="person-circle" size={16} color={theme.textSecondary} />
+                <Text style={[styles.creatorText, { color: theme.textSecondary }]}>
+                  by {competitionInfo.username}
+                </Text>
+              </View>
+              <View style={styles.voteInfo}>
+                <Ionicons name="heart" size={16} color={theme.primary} />
+                <Text style={[styles.voteText, { color: theme.text }]}>
+                  {competitionInfo.votes} votes
+                </Text>
+              </View>
+            </View>
+          </View>
+        )}
+
         {/* Meal Image Card */}
         <View style={[styles.imageCard, { backgroundColor: theme.card, shadowColor: theme.shadow }]}>
           {meal.picture && typeof meal.picture === "string" ? (
@@ -596,53 +536,16 @@ const CompetitionMealDetails = () => {
             {meal.description || "No description available"}
           </Text>
           
-          {/* Creator Info */}
-          {meal.created_by && (
-            <View style={styles.tagsContainer}>
-              <View style={[styles.tag, { backgroundColor: theme.info + '20', borderColor: theme.info }]}>
-                <Ionicons name="person" size={12} color={theme.info} />
-                <Text style={[styles.tagText, { color: theme.info }]}>Created by: {meal.created_by}</Text>
-              </View>
-            </View>
-          )}
-          
-          {/* Competition Info */}
           {competitionInfo && (
             <View style={styles.competitionInfo}>
               <View style={[styles.tag, { backgroundColor: `${theme.primary}20`, borderColor: theme.primary }]}>
                 <Ionicons name="trophy" size={12} color={theme.primary} />
                 <Text style={[styles.tagText, { color: theme.primary }]}>Competition Entry</Text>
               </View>
-              <View style={[styles.tag, { backgroundColor: `${theme.success}20`, borderColor: theme.success }]}>
-                <Ionicons name="person" size={12} color={theme.success} />
-                <Text style={[styles.tagText, { color: theme.success }]}>by {competitionInfo.username}</Text>
-              </View>
             </View>
           )}
 
           {/* Status Tags */}
-          <View style={styles.tagsContainer}>
-            {meal.favorite && (
-              <View style={[styles.tag, { backgroundColor: theme.warning + '20', borderColor: theme.warning }]}>
-                <Ionicons name="heart" size={12} color={theme.warning} />
-                <Text style={[styles.tagText, { color: theme.warning }]}>Favorite</Text>
-              </View>
-            )}
-            {meal.visibility === false && (
-              <View style={[styles.tag, { backgroundColor: theme.danger + '20', borderColor: theme.danger }]}>
-                <Ionicons name="eye-off" size={12} color={theme.danger} />
-                <Text style={[styles.tagText, { color: theme.danger }]}>Private</Text>
-              </View>
-            )}
-            {meal.AI_Macros && (
-              <View style={[styles.tag, { backgroundColor: theme.info + '20', borderColor: theme.info }]}>
-                <Ionicons name="calculator" size={12} color={theme.info} />
-                <Text style={[styles.tagText, { color: theme.info }]}>AI Macros</Text>
-              </View>
-            )}
-          </View>
-
-          {/* Tags Container */}
           <View style={styles.tagsContainer}>
             {meal.cuisine && (
               <View style={[styles.tag, { backgroundColor: `${theme.primary}20`, borderColor: theme.primary }]}>
@@ -665,57 +568,41 @@ const CompetitionMealDetails = () => {
           </View>
         </View>
 
-        {/* Nutrition Card */}
         <View style={[styles.nutritionCard, { backgroundColor: theme.card, shadowColor: theme.shadow }]}>
           <View style={styles.cardHeader}>
             <Ionicons name="nutrition" size={20} color={theme.primary} />
-            <Text style={[styles.cardTitle, { color: theme.text }]}>Nutrition Information</Text>
+            <Text style={[styles.cardTitle, { color: theme.text }]}>Nutrition Facts</Text>
+            {meal.AI_Macros && (
+              <View style={[styles.aiMacroTag, { backgroundColor: theme.aiAccent }]}>
+                <Ionicons name="sparkles" size={12} color={theme.buttonText} />
+                <Text style={[styles.aiMacroTagText, { color: theme.buttonText }]}>AI</Text>
+              </View>
+            )}
           </View>
           <View style={styles.nutritionGrid}>
             <View style={styles.nutritionItem}>
-              <Text style={[styles.nutritionValue, { color: theme.text }]}>
-                {formatCalories(meal.calories)}
-              </Text>
-              <Text style={[styles.nutritionLabel, { color: theme.subtext }]}>
-                Calories
-              </Text>
+              <Text style={[styles.nutritionValue, { color: '#FF8C00' }]}>{meal?.calories || 0}</Text>
+              <Text style={[styles.nutritionLabel, { color: theme.subtext }]}>Calories</Text>
             </View>
             <View style={styles.nutritionItem}>
-              <Text style={[styles.nutritionValue, { color: theme.text }]}>
-                {formatNutrition(meal.protein)}
-              </Text>
-              <Text style={[styles.nutritionLabel, { color: theme.subtext }]}>
-                Protein
-              </Text>
+              <Text style={[styles.nutritionValue, { color: '#FF0000' }]}>{meal?.protein || 0}g</Text>
+              <Text style={[styles.nutritionLabel, { color: theme.subtext }]}>Protein</Text>
             </View>
             <View style={styles.nutritionItem}>
-              <Text style={[styles.nutritionValue, { color: theme.text }]}>
-                {formatNutrition(meal.carbohydrates)}
-              </Text>
-              <Text style={[styles.nutritionLabel, { color: theme.subtext }]}>
-                Carbs
-              </Text>
+              <Text style={[styles.nutritionValue, { color: '#0066FF' }]}>{meal?.carbohydrates || 0}g</Text>
+              <Text style={[styles.nutritionLabel, { color: theme.subtext }]}>Carbs</Text>
             </View>
             <View style={styles.nutritionItem}>
-              <Text style={[styles.nutritionValue, { color: theme.text }]}>
-                {formatNutrition(meal.fat)}
-              </Text>
-              <Text style={[styles.nutritionLabel, { color: theme.subtext }]}>
-                Fat
-              </Text>
+              <Text style={[styles.nutritionValue, { color: theme.fat }]}>{meal?.fat || 0}g</Text>
+              <Text style={[styles.nutritionLabel, { color: theme.subtext }]}>Fat</Text>
             </View>
             <View style={styles.nutritionItem}>
-              <Text style={[styles.nutritionValue, { color: theme.text }]}>
-                {meal.servings || 1}
-              </Text>
-              <Text style={[styles.nutritionLabel, { color: theme.subtext }]}>
-                Servings
-              </Text>
+              <Text style={[styles.nutritionValue, { color: theme.text }]}>{meal?.servings || 1}</Text>
+              <Text style={[styles.nutritionLabel, { color: theme.subtext }]}>Servings</Text>
             </View>
           </View>
         </View>
 
-        {/* Ingredients Card */}
         <View style={[styles.ingredientsCard, { backgroundColor: theme.card, shadowColor: theme.shadow }]}>
           <View style={styles.cardHeader}>
             <Ionicons name="list" size={20} color={theme.success} />
@@ -740,7 +627,6 @@ const CompetitionMealDetails = () => {
           )}
         </View>
 
-        {/* Instructions Card */}
         <View style={[styles.instructionsCard, { backgroundColor: theme.card, shadowColor: theme.shadow }]}>
           <View style={styles.cardHeader}>
             <Ionicons name="receipt" size={20} color={theme.warning} />
@@ -751,7 +637,6 @@ const CompetitionMealDetails = () => {
           </Text>
         </View>
 
-        {/* Recipe Link Card */}
         {meal.recipeLink && meal.recipeLink.trim() !== '' ? (
           <TouchableOpacity 
             style={[styles.linkCard, { backgroundColor: theme.primaryLight, borderColor: theme.primary }]}
@@ -770,26 +655,25 @@ const CompetitionMealDetails = () => {
           </TouchableOpacity>
         ) : null}
 
-        {/* Action Buttons */}
         <View style={styles.actionButtons}>
-          <TouchableOpacity
-            style={[styles.actionButton, styles.primaryButton, { backgroundColor: theme.primary }]}
-            onPress={handleCopy}
-            disabled={copyLoading}
-          >
-            {copyLoading ? (
-              <ActivityIndicator size="small" color={theme.buttonText} />
-            ) : (
-              <Ionicons name="copy-outline" size={20} color={theme.buttonText} />
-            )}
-            <Text style={[styles.actionButtonText, { color: theme.buttonText }]}>
-              {copyLoading ? "Copying..." : "Copy to My Meals"}
-            </Text>
-          </TouchableOpacity>
-
-          <View style={styles.secondaryActions}>
+          <View style={styles.mainActions}>
             <TouchableOpacity
-              style={[styles.actionButton, styles.secondaryButton, { borderColor: theme.danger, backgroundColor: theme.background }]}
+              style={[styles.actionButton, styles.primaryButton, { backgroundColor: theme.primary, flex: 1 }]}
+              onPress={handleCopy}
+              disabled={copyLoading}
+            >
+              {copyLoading ? (
+                <ActivityIndicator size="small" color={theme.buttonText} />
+              ) : (
+                <Ionicons name="copy-outline" size={20} color={theme.buttonText} />
+              )}
+              <Text style={[styles.actionButtonText, { color: theme.buttonText }]}>
+                {copyLoading ? "Copying..." : "Copy to My Meals"}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.actionButton, styles.secondaryButton, { borderColor: theme.danger, backgroundColor: theme.background, flex: 1 }]}
               onPress={() => setIsReportModalVisible(true)}
               disabled={reportLoading}
             >
@@ -799,7 +683,6 @@ const CompetitionMealDetails = () => {
           </View>
         </View>
 
-        {/* Bottom Back Button */}
         <TouchableOpacity
           style={[styles.actionButton, styles.backToMealsButton, { backgroundColor: theme.background, borderColor: theme.border }]}
           onPress={() => router.back()}
@@ -807,9 +690,7 @@ const CompetitionMealDetails = () => {
           <Ionicons name="arrow-back-outline" size={20} color={theme.text} />
           <Text style={[styles.secondaryButtonText, { color: theme.text }]}>Back to Competition</Text>
         </TouchableOpacity>
-      </ScrollView>
-
-      {/* Report Modal */}
+      </ScrollView>   
       <Modal
         animationType="slide"
         transparent={true}
@@ -888,41 +769,32 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   
-  // Header Styles
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    paddingTop: 44, // Account for status bar
+    paddingTop: 44,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
-  },
-  backButton: {
-    padding: 8,
-    borderRadius: 8,
   },
   headerTitle: {
     fontSize: 18,
     fontWeight: '600',
   },
   headerActions: {
-    width: 44, // Match back button width for centering
+    width: 44,
   },
   headerActionButton: {
     padding: 8,
     borderRadius: 8,
   },
-
-  // Scroll Container
   scrollContainer: {
     paddingBottom: 20,
   },
-
-  // Error/Retry Banners
   errorBanner: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -961,24 +833,76 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
   },
-
-  // Loading and Empty States
   centerContent: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
   },
+  loadingCard: {
+    padding: 40,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 5,
+    maxWidth: '90%',
+  },
   loadingText: {
     fontSize: 16,
     marginTop: 16,
     textAlign: 'center',
+  },
+  errorContainer: {
+    padding: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    maxWidth: '90%',
+    borderWidth: 2,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 5,
+    marginTop: 20,
+  },
+  errorTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 12,
+    marginTop: 16,
+    textAlign: 'center',
+  },
+  errorText: {
+    fontSize: 16,
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  retryText: {
+    fontSize: 14,
+    marginTop: 10,
+    textAlign: 'center',
+  },
+  backButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+    marginTop: 12,
   },
   retryButton: {
     paddingHorizontal: 20,
     paddingVertical: 12,
     borderRadius: 8,
     alignItems: 'center',
+    flexDirection: 'row',
   },
   retryButtonText: {
     fontSize: 16,
@@ -1012,18 +936,17 @@ const styles = StyleSheet.create({
   actionButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    marginTop: 8,
-    gap: 6,
+    justifyContent: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    marginVertical: 8,
+    gap: 8,
   },
   actionButtonText: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '600',
   },
-
-  // Competition Card
   competitionCard: {
     margin: 16,
     marginTop: 8,
@@ -1066,8 +989,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
   },
-
-  // Image
   imageContainer: {
     marginHorizontal: 16,
     marginBottom: 16,
@@ -1079,8 +1000,6 @@ const styles = StyleSheet.create({
     height: 250,
     resizeMode: 'cover',
   },
-
-  // Meal Card
   mealCard: {
     margin: 16,
     marginTop: 0,
@@ -1136,8 +1055,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
-
-  // Card Components
   cardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1147,9 +1064,20 @@ const styles = StyleSheet.create({
   cardTitle: {
     fontSize: 18,
     fontWeight: '600',
+    flex: 1,
   },
-
-  // Nutrition Card
+  aiMacroTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 4,
+    gap: 3,
+  },
+  aiMacroTagText: {
+    fontSize: 10,
+    fontWeight: '600',
+  },
   nutritionCard: {
     margin: 16,
     marginTop: 0,
@@ -1162,13 +1090,11 @@ const styles = StyleSheet.create({
   },
   nutritionGrid: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
     justifyContent: 'space-between',
   },
   nutritionItem: {
-    width: '30%',
     alignItems: 'center',
-    marginBottom: 16,
+    flex: 1,
   },
   nutritionValue: {
     fontSize: 18,
@@ -1179,8 +1105,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     textAlign: 'center',
   },
-
-  // Ingredients Card
   ingredientsCard: {
     margin: 16,
     marginTop: 0,
@@ -1206,8 +1130,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     flex: 1,
   },
-
-  // Instructions Card
   instructionsCard: {
     margin: 16,
     marginTop: 0,
@@ -1222,8 +1144,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 24,
   },
-
-  // Link Card
   linkCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1251,8 +1171,6 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     opacity: 0.8,
   },
-
-  // Action Buttons
   actionButtonsContainer: {
     margin: 16,
     marginTop: 0,
@@ -1271,8 +1189,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
-
-  // Modal Styles
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
@@ -1340,8 +1256,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
-
-  // Additional styles from info.tsx to match design
   topNavContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1465,31 +1379,41 @@ const styles = StyleSheet.create({
   actionButtons: {
     margin: 16,
     marginTop: 8,
-    gap: 12,
+    gap: 16,
   },
-  primaryButton: {
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
-    elevation: 4,
-  },
-  secondaryButton: {
-    borderWidth: 1,
-  },
-  secondaryButtonText: {
-    fontSize: 15,
-    fontWeight: '500',
-  },
-  secondaryActions: {
+  mainActions: {
     flexDirection: 'row',
     gap: 12,
   },
-  backToMealsButton: {
-    borderWidth: 1,
+  primaryButton: {
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  secondaryButton: {
+    borderWidth: 2,
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
+    shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 2,
+  },
+  secondaryButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  secondaryActions: {
+    flexDirection: 'row',
+    gap: 16,
+  },
+  backToMealsButton: {
+    borderWidth: 2,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
+    marginTop: 8,
+    marginBottom: 16,
   },
 });
 

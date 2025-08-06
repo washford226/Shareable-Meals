@@ -19,9 +19,9 @@ import { Ionicons } from "@expo/vector-icons";
 import Icon from "react-native-vector-icons/FontAwesome";
 import { useRouter } from "expo-router";
 import BottomNav from "components/bottomNav";
-import RNPickerSelect from "react-native-picker-select";
 import { supabase } from "utils/supabase";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { dietaryFilterOptions, dietaryFilterOptionsEnhanced, cuisineFilterOptions, cuisineFilterOptionsEnhanced } from "../../../constants/dietaryOptions";
 
 const aiOptions = [
   { label: "All", value: "" },
@@ -29,26 +29,11 @@ const aiOptions = [
   { label: "Not AI Generated", value: "not_ai" },
 ];
 
-const dietaryOptions = [
-  { label: "All", value: "" },
-  { label: "Vegetarian", value: "Vegetarian" },
-  { label: "Vegan", value: "Vegan" },
-  { label: "Gluten-Free", value: "Gluten-Free" },
-  { label: "Keto", value: "Keto" },
-  { label: "Paleo", value: "Paleo" },
-];
-
-const cuisineOptions = [
-  { label: "All", value: "" },
-  { label: "Italian", value: "Italian" },
-  { label: "Mexican", value: "Mexican" },
-  { label: "Chinese", value: "Chinese" },
-  { label: "Indian", value: "Indian" },
-  { label: "American", value: "American" },
-  { label: "Japanese", value: "Japanese" },
-  { label: "Mediterranean", value: "Mediterranean" },
-  { label: "Thai", value: "Thai" },
-  { label: "French", value: "French" },
+// Enhanced AI options with icons and descriptions
+const aiOptionsEnhanced = [
+  { label: "All Sources", value: "", icon: "globe", description: "Show meals from all sources" },
+  { label: "AI Generated", value: "ai", icon: "sparkles", description: "Meals created by artificial intelligence" },
+  { label: "Manual", value: "not_ai", icon: "person", description: "User-created meals" },
 ];
 
 const defaultFilters = [
@@ -78,6 +63,10 @@ const OtherMeals: React.FC = () => {
   const [tempAiFilter, setTempAiFilter] = useState<string>(aiFilter);
   const [tempDietaryRestrictionFilter, setTempDietaryRestrictionFilter] = useState<string>(dietaryRestrictionFilter);
   const [tempCuisineFilter, setTempCuisineFilter] = useState<string>(cuisineFilter);
+
+  // Modal state for enhanced pickers
+  const [showDietaryModal, setShowDietaryModal] = useState(false);
+  const [showCuisineModal, setShowCuisineModal] = useState(false);
 
   const { theme } = useTheme();
   const router = useRouter();
@@ -675,68 +664,43 @@ const OtherMeals: React.FC = () => {
                 <Text style={[styles.sectionTitle, { color: theme.text }]}>
                   <Ionicons name="leaf" size={18} color={theme.success} /> Dietary Restrictions
                 </Text>
-                <View style={[styles.pickerContainer, { borderColor: theme.border, backgroundColor: theme.background }]}>
-                  <RNPickerSelect
-                    onValueChange={setTempDietaryRestrictionFilter}
-                    items={dietaryOptions}
-                    value={tempDietaryRestrictionFilter}
-                    style={{
-                      inputIOS: [styles.pickerInput, { color: tempDietaryRestrictionFilter ? theme.text : theme.placeholder }],
-                      inputAndroid: [styles.pickerInput, { color: tempDietaryRestrictionFilter ? theme.text : theme.placeholder }],
-                      placeholder: { color: theme.placeholder },
-                      iconContainer: styles.pickerIcon,
-                    }}
-                    useNativeAndroidPickerStyle={false}
-                    Icon={() => <Ionicons name="chevron-down" size={20} color={theme.text} />}
-                    placeholder={{ label: "All Dietary Restrictions", value: "" }}
-                  />
-                </View>
+                <TouchableOpacity
+                  style={[styles.pickerContainer, { borderColor: theme.border, backgroundColor: theme.background }]}
+                  onPress={() => {
+                    setIsFilterModalVisible(false);
+                    setTimeout(() => setShowDietaryModal(true), 10);
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.pickerText, { 
+                    color: tempDietaryRestrictionFilter ? theme.text : theme.placeholder 
+                  }]}>
+                    {tempDietaryRestrictionFilter || "All Dietary Restrictions"}
+                  </Text>
+                  <Ionicons name="chevron-down" size={20} color={theme.text} style={styles.pickerIcon} />
+                </TouchableOpacity>
               </View>
 
               {/* Cuisine */}
-              <View style={[styles.filterSection, { borderBottomColor: theme.border }]}>
+              <View style={[styles.filterSection, { borderBottomWidth: 0 }]}>
                 <Text style={[styles.sectionTitle, { color: theme.text }]}>
                   <Ionicons name="globe" size={18} color={theme.warning} /> Cuisine Type
                 </Text>
-                <View style={[styles.pickerContainer, { borderColor: theme.border, backgroundColor: theme.background }]}>
-                  <RNPickerSelect
-                    onValueChange={setTempCuisineFilter}
-                    items={cuisineOptions}
-                    value={tempCuisineFilter}
-                    style={{
-                      inputIOS: [styles.pickerInput, { color: tempCuisineFilter ? theme.text : theme.placeholder }],
-                      inputAndroid: [styles.pickerInput, { color: tempCuisineFilter ? theme.text : theme.placeholder }],
-                      placeholder: { color: theme.placeholder },
-                      iconContainer: styles.pickerIcon,
-                    }}
-                    useNativeAndroidPickerStyle={false}
-                    Icon={() => <Ionicons name="chevron-down" size={20} color={theme.text} />}
-                    placeholder={{ label: "All Cuisines", value: "" }}
-                  />
-                </View>
-              </View>
-
-              {/* AI Generation */}
-              <View style={[styles.filterSection, { borderBottomWidth: 0 }]}>
-                <Text style={[styles.sectionTitle, { color: theme.text }]}>
-                  <Ionicons name="sparkles" size={18} color={theme.primary} /> AI Generation
-                </Text>
-                <View style={[styles.pickerContainer, { borderColor: theme.border, backgroundColor: theme.background }]}>
-                  <RNPickerSelect
-                    onValueChange={setTempAiFilter}
-                    items={aiOptions}
-                    value={tempAiFilter}
-                    style={{
-                      inputIOS: [styles.pickerInput, { color: tempAiFilter ? theme.text : theme.placeholder }],
-                      inputAndroid: [styles.pickerInput, { color: tempAiFilter ? theme.text : theme.placeholder }],
-                      placeholder: { color: theme.placeholder },
-                      iconContainer: styles.pickerIcon,
-                    }}
-                    useNativeAndroidPickerStyle={false}
-                    Icon={() => <Ionicons name="chevron-down" size={20} color={theme.text} />}
-                    placeholder={{ label: "All Sources", value: "" }}
-                  />
-                </View>
+                <TouchableOpacity
+                  style={[styles.pickerContainer, { borderColor: theme.border, backgroundColor: theme.background }]}
+                  onPress={() => {
+                    setIsFilterModalVisible(false);
+                    setTimeout(() => setShowCuisineModal(true), 10);
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.pickerText, { 
+                    color: tempCuisineFilter ? theme.text : theme.placeholder 
+                  }]}>
+                    {tempCuisineFilter || "All Cuisines"}
+                  </Text>
+                  <Ionicons name="chevron-down" size={20} color={theme.text} style={styles.pickerIcon} />
+                </TouchableOpacity>
               </View>
             </ScrollView>
 
@@ -761,6 +725,127 @@ const OtherMeals: React.FC = () => {
           </View>
         </View>
       </Modal>
+
+      {/* Dietary Restrictions Modal */}
+      <Modal
+        visible={showDietaryModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => {
+          setShowDietaryModal(false);
+          setTimeout(() => setIsFilterModalVisible(true), 10);
+        }}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
+            <View style={[styles.modalHeader, { borderBottomColor: theme.border }]}>
+              <Text style={[styles.modalTitle, { color: theme.text }]}>
+                <Ionicons name="leaf" size={20} color={theme.success} /> Select Dietary Restrictions
+              </Text>
+              <TouchableOpacity
+                style={styles.modalCloseButton}
+                onPress={() => {
+                  setShowDietaryModal(false);
+                  setTimeout(() => setIsFilterModalVisible(true), 10);
+                }}
+              >
+                <Ionicons name="close" size={24} color={theme.text} />
+              </TouchableOpacity>
+            </View>
+            
+            <ScrollView style={styles.optionsList} showsVerticalScrollIndicator={false}>
+              {dietaryFilterOptionsEnhanced.map((option) => (
+                <TouchableOpacity
+                  key={option.value}
+                  style={[
+                    styles.optionItem,
+                    { borderBottomColor: theme.border },
+                    tempDietaryRestrictionFilter === option.value && { backgroundColor: theme.primary + '15' }
+                  ]}
+                  onPress={() => {
+                    setTempDietaryRestrictionFilter(option.value);
+                    setShowDietaryModal(false);
+                    setTimeout(() => setIsFilterModalVisible(true), 10);
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.optionIconContainer}>
+                    <Ionicons name={option.icon as any} size={24} color={theme.primary} />
+                  </View>
+                  <View style={styles.optionTextContainer}>
+                    <Text style={[styles.optionLabel, { color: theme.text }]}>{option.label}</Text>
+                    <Text style={[styles.optionDescription, { color: theme.subtext }]}>{option.description}</Text>
+                  </View>
+                  {tempDietaryRestrictionFilter === option.value && (
+                    <Ionicons name="checkmark" size={20} color={theme.primary} />
+                  )}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Cuisine Modal */}
+      <Modal
+        visible={showCuisineModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => {
+          setShowCuisineModal(false);
+          setTimeout(() => setIsFilterModalVisible(true), 10);
+        }}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
+            <View style={[styles.modalHeader, { borderBottomColor: theme.border }]}>
+              <Text style={[styles.modalTitle, { color: theme.text }]}>
+                <Ionicons name="globe" size={20} color={theme.warning} /> Select Cuisine Type
+              </Text>
+              <TouchableOpacity
+                style={styles.modalCloseButton}
+                onPress={() => {
+                  setShowCuisineModal(false);
+                  setTimeout(() => setIsFilterModalVisible(true), 10);
+                }}
+              >
+                <Ionicons name="close" size={24} color={theme.text} />
+              </TouchableOpacity>
+            </View>
+            
+            <ScrollView style={styles.optionsList} showsVerticalScrollIndicator={false}>
+              {cuisineFilterOptionsEnhanced.map((option) => (
+                <TouchableOpacity
+                  key={option.value}
+                  style={[
+                    styles.optionItem,
+                    { borderBottomColor: theme.border },
+                    tempCuisineFilter === option.value && { backgroundColor: theme.primary + '15' }
+                  ]}
+                  onPress={() => {
+                    setTempCuisineFilter(option.value);
+                    setShowCuisineModal(false);
+                    setTimeout(() => setIsFilterModalVisible(true), 10);
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.optionIconContainer}>
+                    <Ionicons name={option.icon as any} size={24} color={theme.primary} />
+                  </View>
+                  <View style={styles.optionTextContainer}>
+                    <Text style={[styles.optionLabel, { color: theme.text }]}>{option.label}</Text>
+                    <Text style={[styles.optionDescription, { color: theme.subtext }]}>{option.description}</Text>
+                  </View>
+                  {tempCuisineFilter === option.value && (
+                    <Ionicons name="checkmark" size={20} color={theme.primary} />
+                  )}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
       <BottomNav />
     </View>
   );
@@ -1209,6 +1294,15 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     overflow: 'hidden',
     minHeight: 56,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+  },
+  pickerText: {
+    flex: 1,
+    fontSize: 16,
+    paddingVertical: 16,
+    paddingRight: 12,
   },
   pickerInput: {
     paddingVertical: 16,
@@ -1218,8 +1312,7 @@ const styles = StyleSheet.create({
     minHeight: 56,
   },
   pickerIcon: {
-    top: 18,
-    right: 12,
+    marginLeft: 8,
   },
 
   // Modal Actions
@@ -1322,6 +1415,38 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "bold",
     marginBottom: 4,
+  },
+  
+  // Enhanced modal styles for picker modals
+  optionsList: {
+    flex: 1,
+  },
+  optionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+  },
+  optionIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0, 0, 0, 0.05)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  optionTextContainer: {
+    flex: 1,
+  },
+  optionLabel: {
+    fontSize: 16,
+    fontWeight: '500',
+    marginBottom: 2,
+  },
+  optionDescription: {
+    fontSize: 13,
+    opacity: 0.7,
   },
 });
 

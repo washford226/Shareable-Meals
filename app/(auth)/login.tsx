@@ -5,7 +5,8 @@ import { supabase } from "utils/supabase";
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "context/ThemeContext";
 
-const logo = require("../../assets/images/ShareableMeals logo.png");
+const logoLight = require("../../assets/images/Logo_Light-removebg-preview.png");
+const logoDark = require("../../assets/images/Logo_Dark-removebg-preview.png");
 
 const LoginScreen = () => {
   const router = useRouter();
@@ -123,7 +124,7 @@ const LoginScreen = () => {
       >
         {/* Logo Section */}
         <View style={styles.logoSection}>
-          <Image source={logo} style={styles.logo} />
+          <Image source={theme.background === '#0f172a' ? logoDark : logoLight} style={styles.logo} />
           <Text style={[styles.title, { color: theme.text }]}>Welcome to Shareable Meals</Text>
           <Text style={[styles.subtitle, { color: theme.subtext }]}>
             Sign in to start planning and sharing your meals
@@ -255,7 +256,7 @@ const LoginScreen = () => {
         <View style={[styles.signupCard, { backgroundColor: theme.card }]}>
           <View style={styles.signupContent}>
             <Text style={[styles.signupText, { color: theme.subtext }]}>
-              Don't have an account?
+              Don&apos;t have an account?
             </Text>
             <TouchableOpacity
               style={[styles.signupButton, { 
@@ -286,7 +287,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: 16,
     paddingTop: Platform.OS === 'ios' ? 60 : 40,
-    paddingBottom: 32,
+    paddingBottom: 80,
   },
   // Logo Section
   logoSection: {
@@ -294,9 +295,9 @@ const styles = StyleSheet.create({
     marginBottom: 32,
   },
   logo: { 
-    width: 140, 
-    height: 140, 
-    marginBottom: 16,
+    width: 300, 
+    height: 300, 
+    marginBottom: -50,
     resizeMode: 'contain'
   },
   title: { 

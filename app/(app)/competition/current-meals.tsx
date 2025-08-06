@@ -118,9 +118,7 @@ const CurrentMeals = () => {
           weekly_competitions!weekly_winners_competition_id_fkey (
             start_date,
             end_date,
-            competition_themes (
-              theme_name
-            )
+            theme_id
           )
         `)
         .order("declared_at", { ascending: false });
@@ -129,19 +127,36 @@ const CurrentMeals = () => {
         throw error;
       }
 
-      const formattedWinners: Winner[] = (data || []).map((winner: any) => ({
-        winner_id: winner.winner_id,
-        competition_id: winner.competition_id,
-        meal_id: winner.meal_id,
-        user_id: winner.user_id,
-        total_votes: winner.total_votes,
-        declared_at: winner.declared_at,
-        meal_name: winner.meals?.name || "Unknown Meal",
-        username: winner.user_profiles?.username || "Unknown User",
-        theme_name: winner.weekly_competitions?.competition_themes?.[0]?.theme_name || "Unknown Theme",
-        competition_start_date: winner.weekly_competitions?.start_date || "",
-        competition_end_date: winner.weekly_competitions?.end_date || "",
-      }));
+      // For each winner, fetch the theme name separately
+      const formattedWinners: Winner[] = await Promise.all(
+        (data || []).map(async (winner: any) => {
+          let themeName = "Unknown Theme";
+          
+          if (winner.weekly_competitions?.theme_id) {
+            const { data: themeData } = await supabase
+              .from("competition_themes")
+              .select("theme_name")
+              .eq("theme_id", winner.weekly_competitions.theme_id)
+              .single();
+            
+            themeName = themeData?.theme_name || "Unknown Theme";
+          }
+
+          return {
+            winner_id: winner.winner_id,
+            competition_id: winner.competition_id,
+            meal_id: winner.meal_id,
+            user_id: winner.user_id,
+            total_votes: winner.total_votes,
+            declared_at: winner.declared_at,
+            meal_name: winner.meals?.name || "Unknown Meal",
+            username: winner.user_profiles?.username || "Unknown User",
+            theme_name: themeName,
+            competition_start_date: winner.weekly_competitions?.start_date || "",
+            competition_end_date: winner.weekly_competitions?.end_date || "",
+          };
+        })
+      );
 
       setWinners(formattedWinners);
     } catch (error) {
@@ -168,16 +183,15 @@ const CurrentMeals = () => {
           start_date,
           end_date,
           status,
-          theme_id,
-          competition_themes (
-            theme_name
-          )
+          theme_id
         `)
         .eq("status", "active")
         .order("competition_id", { ascending: false })
         .limit(1)
         .single();
 
+      let competitionData = data;
+      
       if (error || !data) {
         // If no active competition, try to get the latest one
         const { data: latestData, error: latestError } = await supabase
@@ -187,10 +201,7 @@ const CurrentMeals = () => {
             start_date,
             end_date,
             status,
-            theme_id,
-            competition_themes (
-              theme_name
-            )
+            theme_id
           `)
           .order("competition_id", { ascending: false })
           .limit(1)
@@ -205,25 +216,33 @@ const CurrentMeals = () => {
           return;
         }
 
-        setCompetitionId(latestData.competition_id);
-        setCompetitionTheme(latestData.competition_themes?.[0]?.theme_name || "Unknown Theme");
-        setCompetitionStatus(latestData.status);
-        setCompetitionDates({
-          start: latestData.start_date,
-          end: latestData.end_date
-        });
-        await fetchMeals(latestData.competition_id, showLoading);
+        competitionData = latestData;
+      }
+
+      if (!competitionData) {
+        setError("No competitions available at this time.");
+        if (showLoading) {
+          setLoading(false);
+        }
+        setRefreshing(false);
         return;
       }
 
-      setCompetitionId(data.competition_id);
-      setCompetitionTheme(data.competition_themes?.[0]?.theme_name || "Unknown Theme");
-      setCompetitionStatus(data.status);
+      // Now fetch the theme information separately
+      const { data: themeData, error: themeError } = await supabase
+        .from("competition_themes")
+        .select("theme_name")
+        .eq("theme_id", competitionData.theme_id)
+        .single();
+
+      setCompetitionId(competitionData.competition_id);
+      setCompetitionTheme(themeData?.theme_name || "Unknown Theme");
+      setCompetitionStatus(competitionData.status);
       setCompetitionDates({
-        start: data.start_date,
-        end: data.end_date
+        start: competitionData.start_date,
+        end: competitionData.end_date
       });
-      await fetchMeals(data.competition_id, showLoading);
+      await fetchMeals(competitionData.competition_id, showLoading);
       setRetryCount(0);
     } catch (error) {
       console.error("Error fetching competitions:", error);

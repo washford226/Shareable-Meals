@@ -343,7 +343,14 @@ const AddMealToDate = () => {
                 <View style={styles.mealContent}>
                   {/* Meal Image */}
                   {item.picture && typeof item.picture === "string" ? (
-                    <Image source={{ uri: item.picture }} style={styles.mealImage} />
+                    <Image 
+                      source={{ 
+                        uri: item.picture.startsWith('\\x') 
+                          ? item.picture.slice(2).match(/.{2}/g)?.map((hex: string) => String.fromCharCode(parseInt(hex, 16))).join('') || ''
+                          : item.picture
+                      }} 
+                      style={styles.mealImage} 
+                    />
                   ) : (
                     <View style={[styles.mealImagePlaceholder, { backgroundColor: theme.border }]}>
                       <Ionicons name="image" size={24} color={theme.placeholder} />
@@ -399,7 +406,7 @@ const AddMealToDate = () => {
                       No results found
                     </Text>
                     <Text style={[styles.emptyText, { color: theme.textSecondary }]}>
-                      No meals found matching "{searchQuery}"
+                      No meals found matching &quot;{searchQuery}&quot;
                     </Text>
                     <TouchableOpacity
                       style={[styles.clearSearchButton, { backgroundColor: theme.primary }]}
@@ -493,7 +500,7 @@ const AddMealToDate = () => {
                 <TouchableOpacity
                   key={type}
                   style={[styles.mealTypeButton, { backgroundColor: theme.background, borderColor: theme.border }]}
-                  onPress={() => addMealToDate(selectedMeal!.id, type)}
+                  onPress={() => addMealToDate(Number(selectedMeal!.id), type)}
                   disabled={addingMeal}
                 >
                   <View style={styles.mealTypeContent}>

@@ -19,6 +19,9 @@ import { Ionicons } from '@expo/vector-icons';
 const EditProfile = () => {
   const [email, setEmail] = useState<string>("");
   const [username, setUsername] = useState<string>("");
+  const [originalUsername, setOriginalUsername] = useState<string>("");
+  const [isUsernameAvailable, setIsUsernameAvailable] = useState<null | boolean>(null);
+  const [checkingUsername, setCheckingUsername] = useState(false);
   const [currentPassword, setCurrentPassword] = useState<string>("");
   const [newPassword, setNewPassword] = useState<string>("");
   const [confirmPassword, setConfirmPassword] = useState<string>("");
@@ -61,6 +64,7 @@ const EditProfile = () => {
       }
 
       setUsername(data.username ?? "");
+      setOriginalUsername(data.username ?? "");
       setEmail(userData.user.email ?? "");
       setOriginalEmail(userData.user.email ?? "");
       setRetryCount(0);
@@ -98,6 +102,32 @@ const EditProfile = () => {
     fetchUser();
   }, [fetchUser]);
 
+  // Username availability check (similar to signup screen)
+  useEffect(() => {
+    // Don't check if username is empty or same as original
+    if (!username || username === originalUsername) {
+      setIsUsernameAvailable(null);
+      return;
+    }
+    
+    const delayDebounce = setTimeout(async () => {
+      setCheckingUsername(true);
+      try {
+        const { data, error } = await supabase
+          .from("user_profiles")
+          .select("username")
+          .eq("username", username)
+          .single();
+        setIsUsernameAvailable(!data);
+      } catch (e) {
+        setIsUsernameAvailable(null);
+      } finally {
+        setCheckingUsername(false);
+      }
+    }, 500);
+    return () => clearTimeout(delayDebounce);
+  }, [username, originalUsername]);
+
   // Validation functions
   const validateForm = useCallback(() => {
     const errors: {[key: string]: string} = {};
@@ -118,6 +148,10 @@ const EditProfile = () => {
       errors.username = "Username must be 30 characters or less";
     } else if (!/^[a-zA-Z0-9_]+$/.test(username.trim())) {
       errors.username = "Username can only contain letters, numbers, and underscores";
+    } else if (username !== originalUsername && isUsernameAvailable === false) {
+      errors.username = "This username is already taken";
+    } else if (username !== originalUsername && isUsernameAvailable === null && username.trim()) {
+      errors.username = "Please wait while we check username availability";
     }
 
     // Password validation (only if user is trying to change password)
@@ -137,7 +171,7 @@ const EditProfile = () => {
 
     setValidationErrors(errors);
     return Object.keys(errors).length === 0;
-  }, [email, username, currentPassword, newPassword, confirmPassword]);
+  }, [email, username, originalUsername, isUsernameAvailable, currentPassword, newPassword, confirmPassword]);
 
   // Form field handlers with validation
   const handleEmailChange = useCallback((value: string) => {
@@ -227,7 +261,11 @@ const EditProfile = () => {
 
       // Update email in Supabase Auth if it changed
       if (email !== originalEmail) {
-        const { error: emailError } = await supabase.auth.updateUser({ email: email.trim() });
+        const { error: emailError } = await supabase.auth.updateUser({ 
+          email: email.trim() 
+        }, {
+          emailRedirectTo: 'https://shareablemeals.com/change-email'
+        });
         if (emailError) {
           throw new Error(emailError.message || "Failed to update email. Please try again.");
         }
@@ -394,12 +432,13 @@ const EditProfile = () => {
             </Text>
             <View style={styles.inputWrapper}>
               <View style={styles.inputContainer}>
-                <Ionicons name="at" size={16} color={theme.subtext} style={styles.inputIcon} />
+                <Ionicons name="person" size={16} color={theme.subtext} style={styles.inputIcon} />
                 <TextInput
                   style={[styles.textInput, { 
                     borderColor: validationErrors.username ? theme.danger : theme.border, 
                     color: theme.text,
-                    backgroundColor: theme.background 
+                    backgroundColor: theme.background,
+                    paddingRight: 48
                   }]}
                   placeholder="Enter your username"
                   placeholderTextColor={theme.placeholder}
@@ -409,16 +448,49 @@ const EditProfile = () => {
                   maxLength={30}
                   editable={!loading}
                 />
+                
+                {/* Username availability indicator */}
+                {checkingUsername && (
+                  <ActivityIndicator 
+                    size="small" 
+                    color={theme.primary} 
+                    style={styles.checkingIndicator}
+                  />
+                )}
               </View>
               <Text style={[styles.characterCount, { color: theme.subtext }]}>
                 {username.length}/30
               </Text>
             </View>
             {validationErrors.username && (
-              <View style={styles.errorContainer}>
+              <View style={[styles.errorContainer, { backgroundColor: `${theme.danger}15` }]}>
                 <Ionicons name="alert-circle" size={14} color={theme.danger} />
                 <Text style={[styles.errorText, { color: theme.danger }]}>
                   {validationErrors.username}
+                </Text>
+              </View>
+            )}
+            {checkingUsername && !validationErrors.username && (
+              <View style={[styles.infoContainer, { backgroundColor: `${theme.primary}15` }]}>
+                <ActivityIndicator size="small" color={theme.primary} />
+                <Text style={[styles.infoText, { color: theme.primary }]}>
+                  Checking username availability...
+                </Text>
+              </View>
+            )}
+            {isUsernameAvailable === false && !validationErrors.username && username !== originalUsername && (
+              <View style={[styles.errorContainer, { backgroundColor: `${theme.danger}15` }]}>
+                <Ionicons name="close-circle" size={14} color={theme.danger} />
+                <Text style={[styles.errorText, { color: theme.danger }]}>
+                  This username is already taken
+                </Text>
+              </View>
+            )}
+            {isUsernameAvailable === true && !validationErrors.username && username !== originalUsername && (
+              <View style={[styles.successContainer, { backgroundColor: `${theme.success || theme.primary}15` }]}>
+                <Ionicons name="checkmark-circle" size={14} color={theme.success || theme.primary} />
+                <Text style={[styles.successText, { color: theme.success || theme.primary }]}>
+                  Username is available
                 </Text>
               </View>
             )}
@@ -474,7 +546,7 @@ const EditProfile = () => {
             </Text>
           </View>
           <Text style={[styles.cardDescription, { color: theme.subtext }]}>
-            Leave blank if you don't want to change your password
+            Leave blank if you don&apos;t want to change your password
           </Text>
 
           {/* Current Password */}
@@ -836,6 +908,23 @@ const styles = StyleSheet.create({
     fontSize: 12,
     flex: 1,
     lineHeight: 16,
+  },
+  // Username availability styles
+  checkingIndicator: {
+    position: 'absolute',
+    right: 12,
+  },
+  successContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+    padding: 8,
+    borderRadius: 6,
+    gap: 4,
+  },
+  successText: {
+    fontSize: 12,
+    flex: 1,
   },
   // Button Styles
   buttonContainer: {

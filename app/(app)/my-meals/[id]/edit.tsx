@@ -12,30 +12,19 @@ import {
   Switch,
   RefreshControl,
   Image,
+  Modal,
 } from "react-native";
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "../../../../context/ThemeContext";
-import RNPickerSelect from "react-native-picker-select";
 import { supabase } from "utils/supabase";
+import { dietaryCreateOptionsEnhanced, cuisineOptionsEnhanced } from "../../../../constants/dietaryOptions";
 
 export default function EditMealScreen() {
   const { id: mealId } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { theme } = useTheme();
 
-  const cuisineOptions = [
-    { label: "None", value: "" },
-    { label: "Italian", value: "Italian" },
-    { label: "Mexican", value: "Mexican" },
-    { label: "Chinese", value: "Chinese" },
-    { label: "Indian", value: "Indian" },
-    { label: "American", value: "American" },
-    { label: "Japanese", value: "Japanese" },
-    { label: "Mediterranean", value: "Mediterranean" },
-    { label: "Thai", value: "Thai" },
-    { label: "French", value: "French" },
-  ];
   const [cuisine, setCuisine] = useState<string>("");
 
   const [name, setName] = useState<string>("");
@@ -67,14 +56,9 @@ export default function EditMealScreen() {
   });
   const [updatingMacros, setUpdatingMacros] = useState<boolean>(false);
 
-  const dietaryOptions = [
-    { label: "None", value: "" },
-    { label: "Vegetarian", value: "Vegetarian" },
-    { label: "Vegan", value: "Vegan" },
-    { label: "Gluten-Free", value: "Gluten-Free" },
-    { label: "Keto", value: "Keto" },
-    { label: "Paleo", value: "Paleo" },
-  ];
+  // Modal state for enhanced pickers
+  const [showDietaryModal, setShowDietaryModal] = useState(false);
+  const [showCuisineModal, setShowCuisineModal] = useState(false);
 
   // Fetch meal details from Supabase with retry logic and enhanced error handling
   const fetchMealDetails = useCallback(async (isRetry = false) => {
@@ -218,16 +202,36 @@ export default function EditMealScreen() {
     
     if (!name.trim()) errors.push("Meal name is required");
     if (!description.trim()) errors.push("Meal description is required");
-    if (ingredients.length === 0) errors.push("At least one ingredient is required");
     
-    const invalidIngredients = ingredients.some(i => !i.name.trim() || !i.quantity.trim() || !i.unit.trim());
-    if (invalidIngredients) errors.push("All ingredient fields must be filled");
+    // Filter valid ingredients for validation
+    const validIngredients = ingredients.filter(ingredient => 
+      ingredient.name.trim() && 
+      ingredient.quantity.trim() && 
+      ingredient.unit.trim()
+    );
     
-    const invalidQuantities = ingredients.some(i => {
+    if (validIngredients.length === 0) errors.push("At least one complete ingredient is required");
+    
+    // Check for invalid quantities in valid ingredients
+    const invalidQuantities = validIngredients.some(i => {
       const qty = parseFloat(i.quantity);
       return isNaN(qty) || qty <= 0;
     });
     if (invalidQuantities) errors.push("All ingredient quantities must be positive numbers");
+    
+    // Check for incomplete ingredients (partially filled)
+    const incompleteIngredients = ingredients.some(i => {
+      const hasName = i.name.trim();
+      const hasQuantity = i.quantity.trim();
+      const hasUnit = i.unit.trim();
+      
+      // If any field is filled, all fields must be filled
+      if (hasName || hasQuantity || hasUnit) {
+        return !hasName || !hasQuantity || !hasUnit;
+      }
+      return false;
+    });
+    if (incompleteIngredients) errors.push("Please complete all ingredient fields or remove incomplete ingredients");
     
     // Validate manual macros if manual entry is selected
     if (!useAIMacros) {
@@ -249,15 +253,21 @@ export default function EditMealScreen() {
 
   // Function to update AI macros
   const updateAIMacros = async () => {
-    if (!name.trim() || !description.trim() || ingredients.length === 0) {
-      Alert.alert("Missing Information", "Please ensure meal name, description, and ingredients are filled before updating nutrition.");
+    // Filter valid ingredients before checking
+    const validIngredients = ingredients.filter(ingredient => 
+      ingredient.name.trim() && 
+      ingredient.quantity.trim() && 
+      ingredient.unit.trim()
+    );
+
+    if (!name.trim() || !description.trim() || validIngredients.length === 0) {
+      Alert.alert("Missing Information", "Please ensure meal name, description, and at least one complete ingredient are filled before updating nutrition.");
       return;
     }
 
     setUpdatingMacros(true);
     try {
-      const ingredientsText = ingredients
-        .filter(ingredient => ingredient.name.trim())
+      const ingredientsText = validIngredients
         .map(ingredient => `${ingredient.quantity} ${ingredient.unit} ${ingredient.name}`)
         .join(", ");
 
@@ -307,11 +317,34 @@ export default function EditMealScreen() {
     }
   }, [fetchMealDetails]);
 
+  // Helper function to clean up empty ingredients
+  const cleanupEmptyIngredients = useCallback(() => {
+    setIngredients(prev => {
+      // Only remove completely empty ingredients (all fields empty)
+      const cleaned = prev.filter(ingredient => 
+        ingredient.name.trim() || ingredient.quantity.trim() || ingredient.unit.trim()
+      );
+      
+      // Always ensure at least one empty ingredient row for adding new ones
+      if (cleaned.length === 0) {
+        cleaned.push({ name: "", quantity: "", unit: "" });
+      } else {
+        // Only add a new empty row if the last row is complete
+        const lastIngredient = cleaned[cleaned.length - 1];
+        if (lastIngredient.name.trim() && lastIngredient.quantity.trim() && lastIngredient.unit.trim()) {
+          cleaned.push({ name: "", quantity: "", unit: "" });
+        }
+      }
+      
+      return cleaned;
+    });
+  }, []);
+
   // Save meal changes to Supabase with enhanced error handling and retry logic
   const handleSave = useCallback(async () => {
     setError(null);
     
-    // Validate form
+    // Validate form first
     const validationErrors = validateForm();
     if (validationErrors.length > 0) {
       const errorMessage = validationErrors.join(", ");
@@ -382,35 +415,128 @@ export default function EditMealScreen() {
           .eq("user_id", userId);
 
         if (mealError) {
+          console.error("Error updating meal:", mealError);
           throw mealError;
         }
 
-        // Update ingredients separately
-        // First delete existing ingredients
-        const { error: deleteError } = await supabase
-          .from("meal_ingredients")
-          .delete()
-          .eq("meal_id", mealId);
+        console.log(`[EditMeal] Successfully updated meal data for meal ${mealId}`);
 
-        if (deleteError) {
-          console.warn("Error deleting old ingredients:", deleteError);
-          // Continue with insert anyway
+        // Update ingredients separately with enhanced error handling
+        console.log(`[EditMeal] Starting ingredient update for meal ${mealId}`);
+        
+        // First delete existing ingredients with retry logic
+        let deleteSuccess = false;
+        let deleteAttempts = 0;
+        const maxDeleteAttempts = 3;
+        
+        while (!deleteSuccess && deleteAttempts < maxDeleteAttempts) {
+          deleteAttempts++;
+          console.log(`[EditMeal] Delete attempt ${deleteAttempts}/${maxDeleteAttempts}`);
+          
+          // First check how many ingredients exist before deletion
+          const { data: beforeDelete, error: beforeError } = await supabase
+            .from("meal_ingredients")
+            .select("meal_ingredient_id, raw_name")
+            .eq("meal_id", mealId);
+          
+          if (!beforeError) {
+            console.log(`[EditMeal] Before deletion: ${beforeDelete?.length || 0} ingredients exist`);
+          }
+          
+          const { error: deleteError } = await supabase
+            .from("meal_ingredients")
+            .delete()
+            .eq("meal_id", mealId);
+
+          if (deleteError) {
+            console.error(`Delete attempt ${deleteAttempts} failed:`, deleteError);
+            if (deleteAttempts >= maxDeleteAttempts) {
+              throw new Error(`Failed to delete existing ingredients after ${maxDeleteAttempts} attempts: ${deleteError.message}`);
+            }
+            // Wait a bit before retrying
+            await new Promise(resolve => setTimeout(resolve, 500));
+          } else {
+            console.log(`[EditMeal] Delete operation completed (attempt ${deleteAttempts})`);
+            
+            // Wait a moment for the database to process the deletion
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            
+            // Now verify the deletion worked
+            const { data: remainingIngredients, error: verifyError } = await supabase
+              .from("meal_ingredients")
+              .select("meal_ingredient_id, raw_name")
+              .eq("meal_id", mealId);
+
+            if (verifyError) {
+              console.error("Error verifying deletion:", verifyError);
+              if (deleteAttempts >= maxDeleteAttempts) {
+                throw new Error(`Failed to verify deletion after ${maxDeleteAttempts} attempts: ${verifyError.message}`);
+              }
+              // Wait a bit before retrying
+              await new Promise(resolve => setTimeout(resolve, 500));
+            } else if (remainingIngredients && remainingIngredients.length > 0) {
+              console.error(`[EditMeal] CRITICAL: ${remainingIngredients.length} ingredients still exist after deletion!`);
+              console.error("Remaining ingredients:", remainingIngredients);
+              
+              if (deleteAttempts >= maxDeleteAttempts) {
+                throw new Error(`Ingredient deletion verification failed after ${maxDeleteAttempts} attempts. ${remainingIngredients.length} ingredients still exist.`);
+              }
+              // Wait before retrying
+              await new Promise(resolve => setTimeout(resolve, 1000));
+            } else {
+              console.log(`[EditMeal] Verified: All ingredients successfully deleted`);
+              deleteSuccess = true;
+            }
+          }
         }
 
-        // Insert new ingredients
-        const ingredientRows = ingredients.map(ingredient => ({
-          meal_id: mealId,
-          raw_name: ingredient.name.trim(),
-          quantity: parseFloat(ingredient.quantity),
-          unit: ingredient.unit.trim(),
-        }));
+        // Filter out empty ingredients and prepare valid ingredient rows
+        const validIngredients = ingredients.filter(ingredient => 
+          ingredient.name.trim() && 
+          ingredient.quantity.trim() && 
+          ingredient.unit.trim() &&
+          !isNaN(parseFloat(ingredient.quantity)) &&
+          parseFloat(ingredient.quantity) > 0
+        );
 
-        const { error: ingredientsError } = await supabase
-          .from("meal_ingredients")
-          .insert(ingredientRows);
+        console.log(`[EditMeal] Found ${validIngredients.length} valid ingredients to insert:`, validIngredients);
 
-        if (ingredientsError) {
-          throw ingredientsError;
+        // Insert new ingredients only if there are valid ones
+        if (validIngredients.length > 0) {
+          const ingredientRows = validIngredients.map(ingredient => ({
+            meal_id: mealId,
+            raw_name: ingredient.name.trim(),
+            quantity: parseFloat(ingredient.quantity),
+            unit: ingredient.unit.trim(),
+          }));
+
+          console.log(`[EditMeal] Inserting ${ingredientRows.length} ingredient rows:`, ingredientRows);
+
+          const { data: insertedData, error: ingredientsError } = await supabase
+            .from("meal_ingredients")
+            .insert(ingredientRows)
+            .select();
+
+          if (ingredientsError) {
+            console.error("Error inserting ingredients:", ingredientsError);
+            throw new Error(`Failed to insert new ingredients: ${ingredientsError.message}`);
+          }
+
+          console.log(`[EditMeal] Successfully inserted ${insertedData?.length || 0} ingredients:`, insertedData);
+
+          // Verify insertion
+          const { data: verifyInserted, error: verifyInsertError } = await supabase
+            .from("meal_ingredients")
+            .select("meal_ingredient_id, raw_name")
+            .eq("meal_id", mealId);
+
+          if (verifyInsertError) {
+            console.warn("Error verifying insertion:", verifyInsertError);
+          } else {
+            console.log(`[EditMeal] Verified: ${verifyInserted?.length || 0} ingredients now exist in database`);
+          }
+        } else {
+          console.log(`[EditMeal] No valid ingredients to insert - meal will have no ingredients`);
         }
 
         // Try to recalculate nutrition
@@ -468,12 +594,22 @@ export default function EditMealScreen() {
     visibility,
     dietaryRestriction,
     cuisine,
+    useAIMacros,
+    currentMacros,
+    manualMacros,
     router
   ]);
 
   // Enhanced ingredient management
   const addIngredient = useCallback(() => {
-    setIngredients(prev => [...prev, { name: "", quantity: "", unit: "" }]);
+    setIngredients(prev => {
+      // Clean up completely empty ingredients before adding new one
+      const cleaned = prev.filter(ingredient => 
+        ingredient.name.trim() || ingredient.quantity.trim() || ingredient.unit.trim()
+      );
+      // Add new empty ingredient
+      return [...cleaned, { name: "", quantity: "", unit: "" }];
+    });
     setHasUnsavedChanges(true);
   }, []);
 
@@ -630,6 +766,7 @@ export default function EditMealScreen() {
   }
 
   return (
+    <>
     <ScrollView 
       style={[styles.container, { backgroundColor: theme.background }]}
       contentContainerStyle={styles.scrollContainer}
@@ -803,6 +940,17 @@ export default function EditMealScreen() {
           <Ionicons name="add-circle" size={20} color={theme.primary} />
           <Text style={[styles.addButtonText, { color: theme.primary }]}>Add Ingredient</Text>
         </TouchableOpacity>
+
+        {/* Optional cleanup button if there are empty ingredients */}
+        {ingredients.some(ing => !ing.name.trim() && !ing.quantity.trim() && !ing.unit.trim() && ingredients.length > 1) && (
+          <TouchableOpacity
+            style={[styles.addButton, { borderColor: theme.textSecondary, borderStyle: 'solid' }]}
+            onPress={cleanupEmptyIngredients}
+          >
+            <Ionicons name="trash-outline" size={20} color={theme.textSecondary} />
+            <Text style={[styles.addButtonText, { color: theme.textSecondary }]}>Clean Up Empty Rows</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* Additional Details Card */}
@@ -827,42 +975,36 @@ export default function EditMealScreen() {
 
         <View style={styles.inputGroup}>
           <Text style={[styles.label, { color: theme.text }]}>Dietary Restriction</Text>
-          <View style={[styles.pickerContainer, { backgroundColor: theme.background, borderColor: theme.border }]}>
+          <TouchableOpacity
+            style={[styles.pickerContainer, { backgroundColor: theme.background, borderColor: theme.border }]}
+            onPress={() => setShowDietaryModal(true)}
+            activeOpacity={0.7}
+          >
             <Ionicons name="leaf" size={20} color={theme.primary} style={styles.pickerIcon} />
-            <RNPickerSelect
-              onValueChange={(value) => handleFieldChange(setDietaryRestriction, value)}
-              items={dietaryOptions}
-              placeholder={{ label: "Select dietary restriction (optional)", value: "" }}
-              style={{
-                inputIOS: [styles.picker, { color: dietaryRestriction ? theme.text : theme.placeholder }],
-                inputAndroid: [styles.picker, { color: dietaryRestriction ? theme.text : theme.placeholder }],
-                placeholder: { color: theme.placeholder },
-              }}
-              value={dietaryRestriction}
-              useNativeAndroidPickerStyle={false}
-              Icon={() => <Ionicons name="chevron-down" size={16} color={theme.text} style={styles.pickerArrow} />}
-            />
-          </View>
+            <Text style={[styles.pickerText, { 
+              color: dietaryRestriction ? theme.text : theme.placeholder 
+            }]}>
+              {dietaryRestriction || "Select dietary restriction (optional)"}
+            </Text>
+            <Ionicons name="chevron-down" size={16} color={theme.text} style={styles.pickerArrow} />
+          </TouchableOpacity>
         </View>
 
         <View style={styles.inputGroup}>
           <Text style={[styles.label, { color: theme.text }]}>Cuisine Type</Text>
-          <View style={[styles.pickerContainer, { backgroundColor: theme.background, borderColor: theme.border }]}>
+          <TouchableOpacity
+            style={[styles.pickerContainer, { backgroundColor: theme.background, borderColor: theme.border }]}
+            onPress={() => setShowCuisineModal(true)}
+            activeOpacity={0.7}
+          >
             <Ionicons name="globe" size={20} color={theme.primary} style={styles.pickerIcon} />
-            <RNPickerSelect
-              onValueChange={(value) => handleFieldChange(setCuisine, value)}
-              items={cuisineOptions}
-              placeholder={{ label: "Select cuisine type (optional)", value: "" }}
-              style={{
-                inputIOS: [styles.picker, { color: cuisine ? theme.text : theme.placeholder }],
-                inputAndroid: [styles.picker, { color: cuisine ? theme.text : theme.placeholder }],
-                placeholder: { color: theme.placeholder },
-              }}
-              value={cuisine}
-              useNativeAndroidPickerStyle={false}
-              Icon={() => <Ionicons name="chevron-down" size={16} color={theme.text} style={styles.pickerArrow} />}
-            />
-          </View>
+            <Text style={[styles.pickerText, { 
+              color: cuisine ? theme.text : theme.placeholder 
+            }]}>
+              {cuisine || "Select cuisine type (optional)"}
+            </Text>
+            <Ionicons name="chevron-down" size={16} color={theme.text} style={styles.pickerArrow} />
+          </TouchableOpacity>
         </View>
 
         {/* Macro Section */}
@@ -1055,6 +1197,113 @@ export default function EditMealScreen() {
         </TouchableOpacity>
       </View>
     </ScrollView>
+
+    {/* Dietary Restrictions Modal */}
+    <Modal
+      visible={showDietaryModal}
+      transparent={true}
+      animationType="slide"
+      onRequestClose={() => setShowDietaryModal(false)}
+    >
+      <View style={styles.modalContainer}>
+        <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
+          <View style={[styles.modalHeader, { borderBottomColor: theme.border }]}>
+            <Text style={[styles.modalTitle, { color: theme.text }]}>
+              <Ionicons name="leaf" size={20} color={theme.success || theme.primary} /> Select Dietary Restrictions
+            </Text>
+            <TouchableOpacity
+              style={styles.modalCloseButton}
+              onPress={() => setShowDietaryModal(false)}
+            >
+              <Ionicons name="close" size={24} color={theme.text} />
+            </TouchableOpacity>
+          </View>
+          
+          <ScrollView style={styles.optionsList} showsVerticalScrollIndicator={false}>
+            {dietaryCreateOptionsEnhanced.map((option) => (
+              <TouchableOpacity
+                key={option.value}
+                style={[
+                  styles.optionItem,
+                  { borderBottomColor: theme.border },
+                  dietaryRestriction === option.value && { backgroundColor: theme.primary + '15' }
+                ]}
+                onPress={() => {
+                  handleFieldChange(setDietaryRestriction, option.value);
+                  setShowDietaryModal(false);
+                }}
+                activeOpacity={0.7}
+              >
+                <View style={styles.optionIconContainer}>
+                  <Ionicons name={option.icon as any} size={24} color={theme.primary} />
+                </View>
+                <View style={styles.optionTextContainer}>
+                  <Text style={[styles.optionLabel, { color: theme.text }]}>{option.label}</Text>
+                  <Text style={[styles.optionDescription, { color: theme.subtext || theme.textSecondary }]}>{option.description}</Text>
+                </View>
+                {dietaryRestriction === option.value && (
+                  <Ionicons name="checkmark" size={20} color={theme.primary} />
+                )}
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
+
+    {/* Cuisine Modal */}
+    <Modal
+      visible={showCuisineModal}
+      transparent={true}
+      animationType="slide"
+      onRequestClose={() => setShowCuisineModal(false)}
+    >
+      <View style={styles.modalContainer}>
+        <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
+          <View style={[styles.modalHeader, { borderBottomColor: theme.border }]}>
+            <Text style={[styles.modalTitle, { color: theme.text }]}>
+              <Ionicons name="globe" size={20} color={theme.warning || theme.primary} /> Select Cuisine Type
+            </Text>
+            <TouchableOpacity
+              style={styles.modalCloseButton}
+              onPress={() => setShowCuisineModal(false)}
+            >
+              <Ionicons name="close" size={24} color={theme.text} />
+            </TouchableOpacity>
+          </View>
+          
+          <ScrollView style={styles.optionsList} showsVerticalScrollIndicator={false}>
+            {cuisineOptionsEnhanced.map((option) => (
+              <TouchableOpacity
+                key={option.value}
+                style={[
+                  styles.optionItem,
+                  { borderBottomColor: theme.border },
+                  cuisine === option.value && { backgroundColor: theme.primary + '15' }
+                ]}
+                onPress={() => {
+                  handleFieldChange(setCuisine, option.value);
+                  setShowCuisineModal(false);
+                }}
+                activeOpacity={0.7}
+              >
+                <View style={styles.optionIconContainer}>
+                  <Ionicons name={option.icon as any} size={24} color={theme.primary} />
+                </View>
+                <View style={styles.optionTextContainer}>
+                  <Text style={[styles.optionLabel, { color: theme.text }]}>{option.label}</Text>
+                  <Text style={[styles.optionDescription, { color: theme.subtext || theme.textSecondary }]}>{option.description}</Text>
+                </View>
+                {cuisine === option.value && (
+                  <Ionicons name="checkmark" size={20} color={theme.primary} />
+                )}
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
+    </>
   );
 }
 
@@ -1574,5 +1823,74 @@ const styles = StyleSheet.create({
     padding: 12,
     fontSize: 16,
     textAlign: 'center',
+  },
+  pickerText: {
+    flex: 1,
+    fontSize: 16,
+    paddingVertical: 4,
+  },
+  // Enhanced modal styles for picker modals
+  modalContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    padding: 20,
+  },
+  modalContent: {
+    width: '100%',
+    maxWidth: 400,
+    padding: 24,
+    borderRadius: 20,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.2,
+    shadowRadius: 16,
+    elevation: 10,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    flex: 1,
+  },
+  modalCloseButton: {
+    padding: 4,
+  },
+  optionsList: {
+    maxHeight: 300,
+  },
+  optionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+  },
+  optionIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0, 0, 0, 0.05)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  optionTextContainer: {
+    flex: 1,
+  },
+  optionLabel: {
+    fontSize: 16,
+    fontWeight: '500',
+    marginBottom: 2,
+  },
+  optionDescription: {
+    fontSize: 13,
+    opacity: 0.7,
   },
 });

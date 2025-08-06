@@ -5,20 +5,18 @@ import {
   StyleSheet,
   TouchableOpacity,
   Alert,
-  Platform,
   ScrollView,
   Modal,
   Image,
   ActivityIndicator,
-  RefreshControl
+  RefreshControl,
+  Dimensions
 } from "react-native";
 import { format, startOfWeek, addDays } from "date-fns";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import { Meal } from "../../../types/types";
 import { useTheme } from "../../../context/ThemeContext";
 import BottomNav from "../../../components/bottomNav";
-import { Dimensions } from "react-native";
 import { supabase } from "utils/supabase";
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';

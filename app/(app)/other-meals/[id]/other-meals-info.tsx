@@ -454,6 +454,12 @@ const MealDetails = () => {
           <View style={styles.cardHeader}>
             <Ionicons name="nutrition" size={20} color={theme.primary} />
             <Text style={[styles.cardTitle, { color: theme.text }]}>Nutrition Facts</Text>
+            {meal?.AI_Macros && (
+              <View style={[styles.aiMacroTag, { backgroundColor: theme.aiAccent }]}>
+                <Ionicons name="sparkles" size={10} color={theme.buttonText} />
+                <Text style={[styles.aiMacroTagText, { color: theme.buttonText }]}>AI</Text>
+              </View>
+            )}
           </View>
           <View style={styles.nutritionGrid}>
             <View style={styles.nutritionItem}>
@@ -546,7 +552,7 @@ const MealDetails = () => {
 
           <View style={styles.secondaryActions}>
             <TouchableOpacity
-              style={[styles.actionButton, styles.secondaryButton, { backgroundColor: theme.button, borderColor: theme.border }]}
+              style={[styles.actionButton, styles.secondaryButton, { backgroundColor: theme.button, borderColor: theme.border, flex: 1 }]}
               onPress={() => router.push(`/(app)/reviews/${meal.id}/create-review`)}
             >
               <Ionicons name="star" size={18} color={theme.text} />
@@ -554,7 +560,7 @@ const MealDetails = () => {
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[styles.actionButton, styles.secondaryButton, { backgroundColor: theme.button, borderColor: theme.border }]}
+              style={[styles.actionButton, styles.secondaryButton, { backgroundColor: theme.button, borderColor: theme.border, flex: 1 }]}
               onPress={() => router.push(`/(app)/reviews/${meal.id}/reviews`)}
             >
               <Ionicons name="chatbubbles" size={18} color={theme.text} />
@@ -584,7 +590,7 @@ const MealDetails = () => {
             
             <View style={styles.modalBody}>
               <Text style={[styles.modalDescription, { color: theme.subtext }]}>
-                Please describe why you're reporting this meal. Our team will review your report.
+                Please describe why you&apos;re reporting this meal. Our team will review your report.
               </Text>
               
               <View style={[styles.inputContainer, { borderColor: theme.border, backgroundColor: theme.background }]}>
@@ -1147,6 +1153,18 @@ const styles = StyleSheet.create({
   mealPicturePlaceholderText: {
     fontSize: 16,
     color: "#6c757d",
+  },
+  aiMacroTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    gap: 2,
+  },
+  aiMacroTagText: {
+    fontSize: 10,
+    fontWeight: '600',
   },
 });
 
