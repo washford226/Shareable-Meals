@@ -51,7 +51,7 @@ const CreateMealScreen = () => {
   const [showDietaryModal, setShowDietaryModal] = useState(false);
   const [showCuisineModal, setShowCuisineModal] = useState(false);
 
-  const pickMealImage = useCallback(async () => {
+  const pickMealImage = async () => {
     setError(null);
     setUploadingImage(true);
     
@@ -88,7 +88,7 @@ const CreateMealScreen = () => {
     } finally {
       setUploadingImage(false);
     }
-  }, []);
+  };
 
   const addIngredient = useCallback(() => {
     setIngredients(prev => [...prev, { name: "", quantity: "", unit: "" }]);

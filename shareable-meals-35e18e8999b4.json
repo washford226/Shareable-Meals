@@ -1,0 +1,13 @@
+{
+  "type": "service_account",
+  "project_id": "shareable-meals",
+  "private_key_id": "35e18e8999b416448d9afab165d1534517bb644c",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCwOVa5uUWaqvoo\nf7LjTb8WAGgY1mrw8U7ifWNetIA9rg5rj3JIV4GU/wvcszPF9acHJqd/uFyB0hBh\neVGHD1rUO2ZgM2tl+digMM5DZ/RLQIqlzWPihJSz/1/24+QVb6HTe131IX6NsFYX\nXkLJDbGp14byMx8ExmsHTUqIgpx+Rnt1qUNKBGMfycZTaGSN5VO2D+aS1UKodTDa\njRjdUAnWRNE4ZkQpl8Ez1z2w35TPZSU1zQdEbIyeA5gsM9CyM77EW7TkMwm2XKqz\nP2n4um0J9uzMzGRR2Jsloofh/MXPnmKHracVYB9cDCBifvz+r7TbaowlTiHf57Ds\nkWNc2xaTAgMBAAECggEAIYR2Y1LC010rwWIwcx1Jd/TR18+IfZVYDKoOqWepcJHX\nekvJT8sdAWrVJcAL294SS8DlYNx+884xgWiiwg6AlxdJLIj7J2Uy95zwzk9KXrnC\n5TBAjEftRKMQ7JOBwTX/UIsJXuNk/6wHY+Bw0W7CWOx+ZTil8LGQj836nCZDf5y1\nWkqL10YAF1Kg0eE9bwlHUTbHH8a9pU4IwTusSd3zsckKBniMDLHToFV4L10l+Cda\nNmzp3C7vusEOM/yY1RWnT0FMfF1yDYGaAJFp8Ke/oWCqP7g9X509BP1GwdkZ27SY\n/Ag1k1PZ591npSfQ6IJLqgij5jQOtFsgtNtyAegWqQKBgQDgO6RaVqDYgmmGqWVr\nmCvQjfSVBrXkTeeguQgJ36RXfqCbkja62q995s4RxFdVHO65wovTJC0Big5V3ugq\nT2YYV1wyNZT/jygF5flPr8uRMeZcvX/UzGex74/Hp7bNFNoWaZnRCcpbr70xgp8+\newuFlVSIHL5cwrvxdm914MVm/wKBgQDJMIht704dBR3eWNNcMQB2T4Qn0wVRfw4A\n2xZ+lKMPMqNpmTw9BufDbl3BQW1rhJiBJHMf2nyKnKj7y7p+nID0eF0F5zMXoHIU\n3xzFUd+NbeE1/rHZhVip6PLnBTpVNsNMIAZKF3esD49Jg/rPsot5eBFqruANj9CP\nYiq9tQ3EbQKBgQCmBuMpVI0h4mXaJGEI6pI+iG05Ts+s7JX9piMylFntwr+OkRNf\nBP79nMCl3RfA2HxWJJs9ScLdKeh1YmfKtCFnEoAcWRoqo0fCHkab3xE+P5FOx6z3\n1iVNVZDDBwZOEQttnuEaK0Ke4p+WIh5gt+CPF0OQyJ+WtUVNgyECSdw/5wKBgHH/\nC+6un6YV1hy8W9Zq9YYT/B/Mk8DfqwGVIiPK+LGN0cXty5IQrZWwnXL5LZS0Zu0V\nyB2OYO7xYVZ600sWRoM/CAZmQC7s/HcTDGxJvc+XKPq9O+yyf9CWa7u23JyYEQS7\nSJUGwwo9LsVLAPxagGjtPYEjYVSN3nDAANPJGOnpAoGAAd2LX5Nxu5jof9pk1jNL\nmcyTFqyEyGMG1pvIKaEr0Z44kN44i7VkNS9t9ocmaz/pR2/sdVyfkN9uC6sVfuEZ\neaVvGirFMdbCO3rYZYXpQU4rGPWU9iI+kF2kZIznLQKalU8Mh9x2x9Z434e29Xmc\nJnZFig16YQOmYjyksmK1GEQ=\n-----END PRIVATE KEY-----\n",
+  "client_email": "shareablemeals@shareable-meals.iam.gserviceaccount.com",
+  "client_id": "107407943723902470674",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/shareablemeals%40shareable-meals.iam.gserviceaccount.com",
+  "universe_domain": "googleapis.com"
+}

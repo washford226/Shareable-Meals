@@ -447,7 +447,7 @@ const AddMealToDate = () => {
       <View style={styles.actionContainer}>
         <TouchableOpacity
           style={[styles.backButton, { backgroundColor: theme.card, borderColor: theme.border }]}
-          onPress={() => router.back()}
+          onPress={() => router.push("/(app)/meal-plan/calendar")}
         >
           <Ionicons name="arrow-back" size={20} color={theme.text} />
           <Text style={[styles.backButtonText, { color: theme.text }]}>

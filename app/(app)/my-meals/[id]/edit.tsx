@@ -651,7 +651,7 @@ export default function EditMealScreen() {
   }, [hasUnsavedChanges, router]);
 
   // Handle image selection
-  const handleImagePicker = useCallback(async () => {
+  const handleImagePicker = async () => {
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
@@ -680,7 +680,7 @@ export default function EditMealScreen() {
       console.error('Error picking image:', error);
       Alert.alert('Error', 'Failed to select image. Please try again.');
     }
-  }, [handleFieldChange]);
+  };
 
   // Handle image removal
   const handleRemoveImage = useCallback(() => {

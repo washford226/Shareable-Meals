@@ -263,7 +263,14 @@ const LoginScreen = () => {
                 borderColor: theme.primary,
                 backgroundColor: theme.background 
               }]}
-              onPress={() => router.push("../(auth)/signup")}
+              onPress={() => {
+                try {
+                  router.push("/(auth)/signup");
+                } catch (navError) {
+                  console.error("Navigation error to signup:", navError);
+                  router.push("./signup");
+                }
+              }}
               disabled={loading}
             >
               <Ionicons name="person-add" size={16} color={theme.primary} />

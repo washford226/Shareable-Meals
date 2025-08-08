@@ -11,6 +11,15 @@ const SignUpScreen: React.FC = () => {
   const router = useRouter();
   const { theme } = useTheme();
 
+  // Safety check for theme
+  if (!theme) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator size="large" />
+      </View>
+    );
+  }
+
   const [username, setUsername] = useState("");
   const [isUsernameAvailable, setIsUsernameAvailable] = useState<null | boolean>(null);
   const [checkingUsername, setCheckingUsername] = useState(false);
@@ -37,7 +46,11 @@ const SignUpScreen: React.FC = () => {
   // Request permission for image picker
   useEffect(() => {
     (async () => {
-      await ImagePicker.requestMediaLibraryPermissionsAsync();
+      try {
+        await ImagePicker.requestMediaLibraryPermissionsAsync();
+      } catch (error) {
+        console.error("Error requesting image picker permissions:", error);
+      }
     })();
   }, []);
 
@@ -55,8 +68,16 @@ const SignUpScreen: React.FC = () => {
           .select("username")
           .eq("username", username)
           .single();
-        setIsUsernameAvailable(!data);
+        
+        if (error && error.code !== 'PGRST116') {
+          // PGRST116 is "no rows returned" which means username is available
+          console.error("Username check error:", error);
+          setIsUsernameAvailable(null);
+        } else {
+          setIsUsernameAvailable(!data);
+        }
       } catch (e) {
+        console.error("Username check exception:", e);
         setIsUsernameAvailable(null);
       } finally {
         setCheckingUsername(false);
@@ -117,15 +138,21 @@ const SignUpScreen: React.FC = () => {
   // Pick image and convert to base64
   const pickImage = async () => {
     try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Required', 'Sorry, we need camera roll permissions to upload images.');
+        return;
+      }
+
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
+        mediaTypes: 'images',
         allowsEditing: true,
         aspect: [3, 3],
         quality: 0.8,
         base64: true,
       });
 
-      if (!result.canceled && result.assets[0].base64) {
+      if (!result.canceled && result.assets[0]?.base64) {
         const base64Image = `data:image/jpeg;base64,${result.assets[0].base64}`;
         setProfilePicture(base64Image);
       }
