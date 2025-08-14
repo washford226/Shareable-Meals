@@ -18,6 +18,7 @@ import { Meal } from "../../../types/types";
 import { useTheme } from "../../../context/ThemeContext";
 import BottomNav from "../../../components/bottomNav";
 import { supabase } from "utils/supabase";
+import { cachedDataService } from "utils/cachedDataService";
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as FileSystem from 'expo-file-system';
@@ -29,7 +30,7 @@ import {
   validateImageNutritionData,
   ImageNutritionData 
 } from '../../../utils/edamamImageUtils';
-import { responsiveFontSizes, getResponsivePadding, getResponsiveMargin, isSmallScreen } from '../../../utils/responsiveUtils';
+import { responsiveFontSizes } from '../../../utils/responsiveUtils';
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
 const SCREEN_HEIGHT = Dimensions.get("window").height;
@@ -85,6 +86,19 @@ const MealPlanCalendar: React.FC = () => {
       if (!userId) {
         setLoadingDates(prev => ({ ...prev, [date]: false }));
         return [];
+      }
+
+      // Try cached data first for better performance
+      try {
+        const cachedMeals = await cachedDataService.getMealsForDate(userId, date, false);
+        if (cachedMeals && cachedMeals.length > 0) {
+          console.log(`📱 Using cached meals for ${date} (${cachedMeals.length} meals)`);
+          setLoadingDates(prev => ({ ...prev, [date]: false }));
+          setError(null);
+          return cachedMeals;
+        }
+      } catch (cacheError) {
+        console.log(`Cache miss for ${date}, fetching from Supabase`);
       }
 
       // Fetch both regular meal plan entries and macro meals
@@ -244,9 +258,78 @@ const MealPlanCalendar: React.FC = () => {
         setIsInitialLoading(true);
       }
       
+      const userId = await getCurrentUserId();
+      if (!userId) {
+        setError("Authentication required. Please log in again.");
+        return;
+      }
+
       const newMeals: { [key: string]: Meal[] } = {};
+
+      // Use cached data service for efficient fetching
+      if (!isRefresh) {
+        console.log('📱 Trying cached data for week...');
+        try {
+          // Fetch all days of the week using cached service
+          const fetchPromises = [];
+          for (let i = 0; i < daysToShow; i++) {
+            const currentDate = addDays(weekStartDate, i);
+            const currentDateString = format(currentDate, "yyyy-MM-dd");
+            fetchPromises.push(
+              cachedDataService.getMealsForDate(userId, currentDateString, false)
+                .then(mealsForDate => {
+                  newMeals[currentDateString] = mealsForDate;
+                })
+                .catch(error => {
+                  console.log(`Cache miss for ${currentDateString}, will fetch from Supabase`);
+                  return null; // Mark as needing fresh fetch
+                })
+            );
+          }
+          
+          await Promise.all(fetchPromises);
+          
+          // Check if we have data for all days
+          const datesWithData = Object.keys(newMeals).filter(date => newMeals[date].length > 0);
+          if (datesWithData.length > 0) {
+            console.log(`📱 Using cached data for ${datesWithData.length}/${daysToShow} days`);
+            setMeals((prevMeals) => ({ ...prevMeals, ...newMeals }));
+            
+            // If we have partial cached data, fetch missing days in background
+            const missingDates = [];
+            for (let i = 0; i < daysToShow; i++) {
+              const currentDate = addDays(weekStartDate, i);
+              const currentDateString = format(currentDate, "yyyy-MM-dd");
+              if (!newMeals[currentDateString] || newMeals[currentDateString].length === 0) {
+                missingDates.push(currentDateString);
+              }
+            }
+            
+            if (missingDates.length > 0) {
+              console.log(`🌐 Fetching missing dates from Supabase: ${missingDates.join(', ')}`);
+              // Fetch missing dates in parallel
+              const missingPromises = missingDates.map(date => 
+                fetchMealsForDate(date).then(mealsForDate => {
+                  setMeals(prevMeals => ({ 
+                    ...prevMeals, 
+                    [date]: mealsForDate 
+                  }));
+                })
+              );
+              await Promise.all(missingPromises);
+            }
+            
+            setError(null);
+            return; // Successfully used cached data
+          }
+        } catch (error) {
+          console.log('Cache failed, falling back to fresh fetch');
+        }
+      }
+
+      // Fresh fetch from Supabase for all days
+      console.log('🌐 Fetching all data from Supabase...');
       const fetchPromises = [];
-      
       for (let i = 0; i < daysToShow; i++) {
         const currentDate = addDays(weekStartDate, i);
         const currentDateString = format(currentDate, "yyyy-MM-dd");
@@ -259,6 +342,7 @@ const MealPlanCalendar: React.FC = () => {
       
       await Promise.all(fetchPromises);
       setMeals((prevMeals) => ({ ...prevMeals, ...newMeals }));
+      
       setError(null); // Clear any errors on successful fetch
     } catch (error) {
       console.error("Error fetching meals for week:", error);
@@ -308,6 +392,10 @@ const MealPlanCalendar: React.FC = () => {
                 }
 
                 Alert.alert("Success", `All meals for ${format(new Date(date), "EEEE, MMMM d")} have been deleted.`);
+                
+                // Invalidate meal plan cache to ensure fresh data on next load
+                await cachedDataService.invalidateMealPlanCache(userId);
+                
                 setMeals((prevMeals) => {
                   const updatedMeals = { ...prevMeals };
                   updatedMeals[date] = []; // Set to empty array instead of deleting
@@ -328,7 +416,12 @@ const MealPlanCalendar: React.FC = () => {
   };
 
   useEffect(() => {
-    fetchMealsForWeek(startOfCurrentWeek);
+    // Defer heavy data loading to allow fast navigation
+    const timer = setTimeout(() => {
+      fetchMealsForWeek(startOfCurrentWeek);
+    }, 100); // Small delay to allow UI to render first
+    
+    return () => clearTimeout(timer);
   }, []); // Only run on mount
 
   useEffect(() => {
@@ -1843,4 +1936,4 @@ mealScanButtonText: {
   },
 });
 
-export default MealPlanCalendar;
+export default React.memo(MealPlanCalendar);

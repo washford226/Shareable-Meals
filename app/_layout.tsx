@@ -3,8 +3,12 @@ import "../polyfills"; // Import polyfills first
 import React from "react";
 import { Stack } from "expo-router";
 import { ThemeProvider } from "../context/ThemeContext";
+import { useDataPreloader } from "../utils/appDataPreloader";
 
 export default function Layout() {
+  // Enable automatic data preloading
+  useDataPreloader(true);
+
   return (
     <ThemeProvider>
       <Stack 

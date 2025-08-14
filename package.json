@@ -34,6 +34,7 @@
     "expo-router": "~5.1.4",
     "expo-secure-store": "~14.2.3",
     "expo-splash-screen": "~0.30.8",
+    "expo-sqlite": "^15.2.14",
     "expo-status-bar": "~2.2.3",
     "expo-symbols": "~0.4.4",
     "expo-system-ui": "~5.0.7",
@@ -72,7 +73,11 @@
   "expo": {
     "doctor": {
       "reactNativeDirectoryCheck": {
-        "exclude": ["react-native-star-rating-widget", "lodash.clonedeep", "react-native-vector-icons"],
+        "exclude": [
+          "react-native-star-rating-widget",
+          "lodash.clonedeep",
+          "react-native-vector-icons"
+        ],
         "listUnknownPackages": false
       }
     }

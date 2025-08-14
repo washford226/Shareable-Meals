@@ -86,7 +86,12 @@ const OtherMeals: React.FC = () => {
 
   // Load saved filters on component mount
   useEffect(() => {
-    loadSavedFilters();
+    // Defer to improve navigation speed
+    const timer = setTimeout(() => {
+      loadSavedFilters();
+    }, 100);
+    
+    return () => clearTimeout(timer);
   }, []);
 
   const loadSavedFilters = async () => {
@@ -120,6 +125,10 @@ const OtherMeals: React.FC = () => {
 
   // Fetch all public meals from Supabase with pagination
   const fetchMeals = useCallback(async (showLoading = true, loadMore = false) => {
+    // Create AbortController for timeout handling
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
+
     try {
       if (showLoading && !loadMore) {
         setLoading(true);
@@ -144,7 +153,8 @@ const OtherMeals: React.FC = () => {
         .select("*")
         .eq("visibility", true)
         .order("id", { ascending: false }) // Order by newest first
-        .range(offset, offset + MEALS_PER_PAGE - 1);
+        .range(offset, offset + MEALS_PER_PAGE - 1)
+        .abortSignal(controller.signal);
 
       if (dietaryRestrictionFilter) query = query.eq("dietary_restrictions", dietaryRestrictionFilter);
       if (aiFilter === "ai") query = query.eq("created_by_ai", true);
@@ -152,6 +162,8 @@ const OtherMeals: React.FC = () => {
       if (cuisineFilter) query = query.eq("cuisine", cuisineFilter);
 
       const { data: mealsData, error: mealsError } = await query;
+      clearTimeout(timeoutId);
+      
       if (mealsError) throw mealsError;
 
       const newMeals = mealsData || [];
@@ -210,8 +222,48 @@ const OtherMeals: React.FC = () => {
       setRetryCount(0);
       
     } catch (error) {
+      clearTimeout(timeoutId);
       console.error("Error fetching meals:", error);
-      setError("Failed to load meals. Please check your connection and try again.");
+      
+      // Handle specific error types
+      let errorMessage = "Failed to load meals. Please try again.";
+      
+      if (error && typeof error === 'object') {
+        const errorObj = error as any;
+        
+        // AbortError from timeout
+        if (errorObj.name === 'AbortError') {
+          errorMessage = "Request timed out. Please check your internet connection and try again.";
+        }
+        // Network timeout errors
+        else if (errorObj.message?.includes('timeout') || 
+            errorObj.message?.includes('Network request timed out') ||
+            errorObj.details?.includes('Network request timed out')) {
+          errorMessage = "Request timed out. Please check your internet connection and try again.";
+        }
+        // Network connection errors
+        else if (errorObj.message?.includes('network') || 
+                 errorObj.message?.includes('fetch')) {
+          errorMessage = "Network error. Please check your internet connection.";
+        }
+        // Supabase specific errors
+        else if (errorObj.code) {
+          errorMessage = `Database error: ${errorObj.message || 'Unknown error occurred'}`;
+        }
+      }
+      
+      setError(errorMessage);
+      
+      // Auto-retry for network timeouts (up to 2 times)
+      if (retryCount < 2 && (errorMessage.includes('timeout') || errorMessage.includes('timed out'))) {
+        console.log(`Auto-retrying due to timeout, attempt ${retryCount + 1}/2`);
+        setTimeout(() => {
+          setRetryCount(prev => prev + 1);
+          fetchMeals(showLoading, loadMore);
+        }, 2000); // Wait 2 seconds before retry
+        return;
+      }
+      
     } finally {
       if (showLoading && !loadMore) {
         setLoading(false);
@@ -219,7 +271,7 @@ const OtherMeals: React.FC = () => {
       setLoadingMore(false);
       setRefreshing(false);
     }
-  }, [dietaryRestrictionFilter, aiFilter, cuisineFilter, currentPage]);
+  }, [dietaryRestrictionFilter, aiFilter, cuisineFilter, currentPage, retryCount]);
 
   const handleRetry = useCallback(async () => {
     const newRetryCount = retryCount + 1;
@@ -246,10 +298,14 @@ const OtherMeals: React.FC = () => {
   }, [loadingMore, hasMoreMeals, filteredMealsReady, fetchMeals]);
 
   useEffect(() => {
-    // Reset pagination when filters change
-    setCurrentPage(0);
-    setHasMoreMeals(true);
-    fetchMeals();
+    // Reset pagination when filters change - defer for better performance
+    const timer = setTimeout(() => {
+      setCurrentPage(0);
+      setHasMoreMeals(true);
+      fetchMeals();
+    }, 50);
+    
+    return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dietaryRestrictionFilter, aiFilter, cuisineFilter]);
 
@@ -332,27 +388,30 @@ const OtherMeals: React.FC = () => {
 
   if (loading && meals.length === 0) {
     return (
-      <View style={[styles.centerContent, { backgroundColor: theme.background }]}>
-        <ActivityIndicator size="large" color={theme.primary} />
-        <Text style={[styles.loadingText, { color: theme.text }]}>Loading meals...</Text>
-        {error && (
-          <View style={styles.errorContainer}>
-            <Text style={[styles.errorText, { color: theme.danger }]}>{error}</Text>
-            <TouchableOpacity
-              style={[styles.retryButton, { backgroundColor: theme.primary }]}
-              onPress={handleRetry}
-            >
-              <Text style={[styles.retryButtonText, { color: theme.buttonText }]}>
-                Retry
-              </Text>
-            </TouchableOpacity>
-            {retryCount > 0 && (
-              <Text style={[styles.retryText, { color: theme.subtext }]}>
-                Retry attempt {retryCount}/3
-              </Text>
-            )}
-          </View>
-        )}
+      <View style={[styles.container, { backgroundColor: theme.background }]}>
+        <View style={[styles.centerContent, { backgroundColor: theme.background, flex: 1 }]}>
+          <ActivityIndicator size="large" color={theme.primary} />
+          <Text style={[styles.loadingText, { color: theme.text }]}>Loading meals...</Text>
+          {error && (
+            <View style={styles.errorContainer}>
+              <Text style={[styles.errorText, { color: theme.danger }]}>{error}</Text>
+              <TouchableOpacity
+                style={[styles.retryButton, { backgroundColor: theme.primary }]}
+                onPress={handleRetry}
+              >
+                <Text style={[styles.retryButtonText, { color: theme.buttonText }]}>
+                  Retry
+                </Text>
+              </TouchableOpacity>
+              {retryCount > 0 && (
+                <Text style={[styles.retryText, { color: theme.subtext }]}>
+                  Retry attempt {retryCount}/3
+                </Text>
+              )}
+            </View>
+          )}
+        </View>
+        <BottomNav />
       </View>
     );
   }
@@ -1537,4 +1596,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default OtherMeals;
+export default React.memo(OtherMeals);

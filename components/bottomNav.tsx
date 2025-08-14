@@ -1,5 +1,5 @@
-import React, { memo, useCallback } from "react";
-import { View, TouchableOpacity, Text, StyleSheet, Platform } from "react-native";
+import React, { memo, useCallback, useState } from "react";
+import { View, TouchableOpacity, Text, StyleSheet, Platform, ActivityIndicator } from "react-native";
 import { router, usePathname } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "context/ThemeContext";
@@ -7,6 +7,7 @@ import { useTheme } from "context/ThemeContext";
 const BottomNav = memo(() => {
   const { theme } = useTheme();
   const pathname = usePathname();
+  const [navigatingTo, setNavigatingTo] = useState<string | null>(null);
 
   const navItems = [
     {
@@ -43,9 +44,18 @@ const BottomNav = memo(() => {
     },
   ];
 
-  const handleNavPress = useCallback((route: string) => {
+  const handleNavPress = useCallback((route: string, id: string) => {
+    // Prevent double navigation
+    if (navigatingTo === id) return;
+    
+    setNavigatingTo(id);
+    
+    // Navigate immediately without waiting
     router.push(route as any);
-  }, []);
+    
+    // Clear loading state quickly for visual feedback
+    setTimeout(() => setNavigatingTo(null), 200);
+  }, [navigatingTo]);
 
   return (
     <View style={[styles.nav, { 
@@ -55,22 +65,27 @@ const BottomNav = memo(() => {
       {navItems.map((item) => (
         <TouchableOpacity
           key={item.id}
-          onPress={() => handleNavPress(item.route)}
+          onPress={() => handleNavPress(item.route, item.id)}
           style={[
             styles.navItem,
             item.isActive && [styles.activeNavItem, { backgroundColor: `${theme.primary}15` }]
           ]}
           activeOpacity={0.7}
+          disabled={navigatingTo === item.id}
         >
           <View style={[
             styles.iconContainer,
             item.isActive && [styles.activeIconContainer, { backgroundColor: theme.primary }]
           ]}>
-            <Ionicons
-              name={item.isActive ? item.activeIcon as any : item.icon as any}
-              size={item.isActive ? 20 : 18}
-              color={item.isActive ? theme.buttonText : theme.subtext}
-            />
+            {navigatingTo === item.id ? (
+              <ActivityIndicator size={20} color={theme.primary} />
+            ) : (
+              <Ionicons
+                name={item.isActive ? item.activeIcon as any : item.icon as any}
+                size={item.isActive ? 20 : 18}
+                color={item.isActive ? theme.buttonText : theme.subtext}
+              />
+            )}
           </View>
           <Text style={[
             styles.navLabel,

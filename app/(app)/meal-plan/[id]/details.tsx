@@ -5,12 +5,12 @@ import {
   StyleSheet,
   TouchableOpacity,
   Alert,
-  FlatList,
   ActivityIndicator,
   Image,
   Linking,
   RefreshControl,
   ScrollView,
+  Platform,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -192,12 +192,14 @@ const MealPlanDetails = () => {
 
   if (loading) {
     return (
-      <View style={[styles.container, styles.centerContent, { backgroundColor: theme.background }]}>
-        <View style={[styles.loadingCard, { backgroundColor: theme.card }]}>
-          <ActivityIndicator size="large" color={theme.primary} />
-          <Text style={[styles.loadingText, { color: theme.text }]}>
-            Loading meal details...
-          </Text>
+      <View style={[styles.container, { backgroundColor: theme.background }]}>
+        <View style={styles.centerContent}>
+          <View style={[styles.loadingCard, { backgroundColor: theme.card }]}>
+            <ActivityIndicator size="large" color={theme.primary} />
+            <Text style={[styles.loadingText, { color: theme.text }]}>
+              Loading meal details...
+            </Text>
+          </View>
         </View>
       </View>
     );
@@ -205,29 +207,49 @@ const MealPlanDetails = () => {
 
   if (error && !meal) {
     return (
-      <View style={[styles.container, styles.centerContent, { backgroundColor: theme.background }]}>
-        <View style={[styles.errorContainer, { backgroundColor: theme.card, borderColor: theme.danger }]}>
-          <Ionicons name="warning-outline" size={48} color={theme.danger} />
-          <Text style={[styles.errorTitle, { color: theme.danger }]}>
-            Unable to Load Meal
-          </Text>
-          <Text style={[styles.errorText, { color: theme.text }]}>
-            {error}
-          </Text>
-          <TouchableOpacity
-            style={[styles.retryButton, { backgroundColor: theme.primary }]}
-            onPress={handleRefresh}
-          >
-            <Ionicons name="refresh-outline" size={20} color={theme.buttonText} style={{ marginRight: 8 }} />
-            <Text style={[styles.retryButtonText, { color: theme.buttonText }]}>
-              Try Again
+      <View style={[styles.container, { backgroundColor: theme.background }]}>
+        <View style={styles.centerContent}>
+          <View style={[styles.errorContainer, { backgroundColor: theme.card, borderColor: theme.danger }]}>
+            <Ionicons name="warning-outline" size={48} color={theme.danger} />
+            <Text style={[styles.errorTitle, { color: theme.danger }]}>
+              Unable to Load Meal
             </Text>
-          </TouchableOpacity>
+            <Text style={[styles.errorText, { color: theme.text }]}>
+              {error}
+            </Text>
+            <TouchableOpacity
+              style={[styles.retryButton, { backgroundColor: theme.primary }]}
+              onPress={handleRefresh}
+            >
+              <Ionicons name="refresh-outline" size={20} color={theme.buttonText} style={{ marginRight: 8 }} />
+              <Text style={[styles.retryButtonText, { color: theme.buttonText }]}>
+                Try Again
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.backButton, { backgroundColor: theme.button, borderColor: theme.border }]}
+              onPress={() => router.back()}
+            >
+              <Ionicons name="arrow-back-outline" size={20} color={theme.buttonText} style={{ marginRight: 8 }} />
+              <Text style={[styles.backButtonText, { color: theme.buttonText }]}>
+                Back to Calendar
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    );
+  }
+
+  if (!meal) {
+    return (
+      <View style={[styles.container, { backgroundColor: theme.background }]}>
+        <View style={styles.centerContent}>
+          <Text style={[styles.title, { color: theme.text }]}>Meal not found</Text>
           <TouchableOpacity
-            style={[styles.backButton, { backgroundColor: theme.button, borderColor: theme.border }]}
+            style={[styles.backButton, { backgroundColor: theme.button }]}
             onPress={() => router.back()}
           >
-            <Ionicons name="arrow-back-outline" size={20} color={theme.buttonText} style={{ marginRight: 8 }} />
             <Text style={[styles.backButtonText, { color: theme.buttonText }]}>
               Back to Calendar
             </Text>
@@ -237,151 +259,45 @@ const MealPlanDetails = () => {
     );
   }
 
-  if (!meal) {
-    return (
-      <View style={[styles.container, styles.centerContent, { backgroundColor: theme.background }]}>
-        <Text style={[styles.title, { color: theme.text }]}>Meal not found</Text>
-        <TouchableOpacity
-          style={[styles.backButton, { backgroundColor: theme.button }]}
-          onPress={() => router.back()}
-        >
-          <Text style={[styles.backButtonText, { color: theme.buttonText }]}>
-            Back to Calendar
-          </Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
-
   const ingredients = meal.ingredients && Array.isArray(meal.ingredients) 
     ? meal.ingredients.map(ing => `${ing.quantity} ${ing.unit || ''} ${ing.raw_name}`.trim())
     : [];
 
-  const data = [
-    { type: "picture", content: meal.picture },
-    { type: "title", content: meal.name },
-    { type: "instructions", content: meal.instructions },
-    { type: "ingredients", content: ingredients },
-    { type: "recipeLink", content: meal.recipeLink },
-    { type: "nutrition", content: meal },
-  ];
-
-  const renderItem = ({ item }: { item: any }) => {
-    switch (item.type) {
-      case "picture":
-        return (
-          item.content && (
-            <View style={[styles.imageCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
-              <Image
-                source={{ uri: item.content }}
-                style={styles.mealImage}
-                resizeMode="cover"
-              />
-            </View>
-          )
-        );
-      case "title":
-        return (
-          <View style={[styles.titleCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
-            <Ionicons name="restaurant-outline" size={28} color={theme.primary} />
-            <Text style={[styles.title, { color: theme.text }]}>{item.content}</Text>
-          </View>
-        );
-      case "instructions":
-        return (
-          item.content && (
-            <View style={[styles.contentCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
-              <View style={styles.cardHeader}>
-                <Ionicons name="book-outline" size={24} color={theme.primary} />
-                <Text style={[styles.cardTitle, { color: theme.text }]}>Instructions</Text>
-              </View>
-              <Text style={[styles.instructionsText, { color: theme.subtext }]}>{item.content}</Text>
-            </View>
-          )
-        );
-      case "ingredients":
-        return (
-          <View style={[styles.contentCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
-            <View style={styles.cardHeader}>
-              <Ionicons name="leaf-outline" size={24} color={theme.success} />
-              <Text style={[styles.cardTitle, { color: theme.text }]}>Ingredients</Text>
-            </View>
-            {item.content && item.content.length > 0 ? (
-              <View style={styles.ingredientsList}>
-                {item.content.map((ingredient: string, index: number) => (
-                  <View key={index} style={styles.ingredientItem}>
-                    <Ionicons name="ellipse" size={6} color={theme.success} style={{ marginTop: 6 }} />
-                    <Text style={[styles.ingredientText, { color: theme.subtext }]}>
-                      {ingredient}
-                    </Text>
-                  </View>
-                ))}
-              </View>
-            ) : (
-              <Text style={[styles.noIngredientsText, { color: theme.subtext }]}>
-                No ingredients available
-              </Text>
-            )}
-          </View>
-        );
-      case "recipeLink":
-        return (
-          item.content && (
-            <TouchableOpacity 
-              style={[styles.linkCard, { backgroundColor: theme.primaryLight, borderColor: theme.primary }]}
-              onPress={() => Linking.openURL(item.content)}
-            >
-              <Ionicons name="link-outline" size={24} color={theme.primary} />
-              <Text style={[styles.recipeLinkText, { color: theme.primary }]}>
-                View Full Recipe
-              </Text>
-              <Ionicons name="arrow-forward-outline" size={20} color={theme.primary} />
-            </TouchableOpacity>
-          )
-        );
-      case "nutrition":
-        return (
-          <View style={[styles.nutritionCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
-            <View style={styles.cardHeader}>
-              <Ionicons name="fitness-outline" size={24} color={theme.primary} />
-              <Text style={[styles.cardTitle, { color: theme.text }]}>Nutrition Information</Text>
-            </View>
-            <View style={styles.nutritionGrid}>
-              <View style={[styles.nutritionItem, { backgroundColor: theme.background }]}>
-                <Ionicons name="flame-outline" size={20} color={theme.warning} />
-                <Text style={[styles.nutritionLabel, { color: theme.subtext }]}>Calories</Text>
-                <Text style={[styles.nutritionValue, { color: theme.text }]}>{item.content.calories}</Text>
-              </View>
-              <View style={[styles.nutritionItem, { backgroundColor: theme.background }]}>
-                <Ionicons name="barbell-outline" size={20} color={theme.protein} />
-                <Text style={[styles.nutritionLabel, { color: theme.subtext }]}>Protein</Text>
-                <Text style={[styles.nutritionValue, { color: theme.text }]}>{item.content.protein}g</Text>
-              </View>
-              <View style={[styles.nutritionItem, { backgroundColor: theme.background }]}>
-                <Ionicons name="analytics-outline" size={20} color={theme.carbs} />
-                <Text style={[styles.nutritionLabel, { color: theme.subtext }]}>Carbs</Text>
-                <Text style={[styles.nutritionValue, { color: theme.text }]}>{item.content.carbohydrates}g</Text>
-              </View>
-              <View style={[styles.nutritionItem, { backgroundColor: theme.background }]}>
-                <Ionicons name="water-outline" size={20} color={theme.fat} />
-                <Text style={[styles.nutritionLabel, { color: theme.subtext }]}>Fat</Text>
-                <Text style={[styles.nutritionValue, { color: theme.text }]}>{item.content.fat}g</Text>
-              </View>
-            </View>
-          </View>
-        );
-      default:
-        return null;
-    }
-  };
-
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
-      <FlatList
-        data={data}
-        keyExtractor={(item, index) => index.toString()}
-        renderItem={renderItem}
-        contentContainerStyle={styles.scrollContent}
+      {/* Top Back Button */}
+      <View style={[styles.topNavContainer, { backgroundColor: theme.background }]}>
+        <TouchableOpacity
+          style={[styles.topBackButton, { backgroundColor: theme.card }]}
+          onPress={() => router.back()}
+        >
+          <Ionicons name="arrow-back" size={24} color={theme.text} />
+        </TouchableOpacity>
+      </View>
+
+      {/* Error Banner */}
+      {error && (
+        <View style={[styles.errorBanner, { 
+          backgroundColor: `${theme.danger}15`, 
+          borderColor: theme.danger 
+        }]}>
+          <Ionicons name="alert-circle" size={20} color={theme.danger} />
+          <Text style={[styles.errorBannerText, { color: theme.danger }]}>
+            {error}
+          </Text>
+          <TouchableOpacity
+            style={[styles.errorBannerButton, { backgroundColor: theme.danger }]}
+            onPress={() => setError(null)}
+          >
+            <Text style={[styles.errorBannerButtonText, { color: theme.buttonText }]}>
+              Dismiss
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      <ScrollView 
+        contentContainerStyle={styles.scrollContainer}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -390,79 +306,208 @@ const MealPlanDetails = () => {
             tintColor={theme.primary}
           />
         }
-        ListHeaderComponent={
-          error ? (
-            <View style={[styles.errorBanner, { backgroundColor: theme.card, borderColor: theme.danger }]}>
-              <Ionicons name="warning" size={20} color={theme.danger} />
-              <Text style={[styles.errorBannerText, { color: theme.danger }]}>
-                {error}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Meal Image Card */}
+        <View style={[styles.imageCard, { backgroundColor: theme.card, shadowColor: theme.shadow }]}>
+          {meal?.picture && typeof meal.picture === "string" ? (
+            <Image 
+              source={{ uri: meal.picture }} 
+              style={styles.mealImage} 
+            />
+          ) : (
+            <View style={[styles.imagePlaceholder, { backgroundColor: theme.background }]}>
+              <Ionicons name="image-outline" size={64} color={theme.subtext} />
+              <Text style={[styles.imagePlaceholderText, { color: theme.subtext }]}>
+                No image available
               </Text>
-              <TouchableOpacity
-                style={[styles.errorBannerRetry, { backgroundColor: theme.danger }]}
-                onPress={handleRefresh}
-              >
-                <Text style={[styles.errorBannerRetryText, { color: theme.buttonText }]}>
-                  Retry
-                </Text>
-              </TouchableOpacity>
             </View>
-          ) : null
-        }
-        ListFooterComponent={
-          <View style={styles.actionContainer}>
-            <TouchableOpacity
-              style={[
-                styles.deleteButton, 
-                { 
-                  backgroundColor: theme.danger,
-                  opacity: deleting ? 0.7 : 1
-                }
-              ]}
-              onPress={handleDeleteMeal}
-              disabled={deleting}
-            >
-              {deleting ? (
-                <ActivityIndicator size="small" color={theme.buttonText} />
-              ) : (
-                <View style={styles.buttonContent}>
-                  <Ionicons name="trash-outline" size={20} color={theme.buttonText} />
-                  <Text style={[styles.deleteButtonText, { color: theme.buttonText }]}>
-                    Remove from Meal Plan
+          )}
+        </View>
+
+        {/* Meal Info Card */}
+        <View style={[styles.infoCard, { backgroundColor: theme.card, shadowColor: theme.shadow }]}>
+          <Text style={[styles.mealTitle, { color: theme.text }]}>{meal.name}</Text>
+          {meal.description && (
+            <Text style={[styles.mealDescription, { color: theme.subtext }]}>{meal.description}</Text>
+          )}
+        </View>
+
+        {/* Nutrition Card */}
+        <View style={[styles.nutritionCard, { backgroundColor: theme.card, shadowColor: theme.shadow }]}>
+          <View style={styles.cardHeader}>
+            <Ionicons name="nutrition" size={20} color={theme.primary} />
+            <Text style={[styles.cardTitle, { color: theme.text }]}>
+              Nutrition Information
+            </Text>
+            <View style={{ flex: 1 }} />
+            <Image 
+              source={require('../../../../assets/images/Edamam_Badge_Transparent.png')} 
+              style={styles.edamamLogo} 
+              resizeMode="contain"
+            />
+          </View>
+          <View style={styles.nutritionGrid}>
+            <View style={[styles.nutritionItem, { backgroundColor: theme.background }]}>
+              <Ionicons name="flame-outline" size={20} color={theme.warning} />
+              <Text style={[styles.nutritionValue, { color: theme.text }]}>{meal.calories}</Text>
+              <Text style={[styles.nutritionLabel, { color: theme.subtext }]}>Calories</Text>
+            </View>
+            <View style={[styles.nutritionItem, { backgroundColor: theme.background }]}>
+              <Ionicons name="barbell-outline" size={20} color={theme.protein} />
+              <Text style={[styles.nutritionValue, { color: theme.text }]}>{meal.protein}g</Text>
+              <Text style={[styles.nutritionLabel, { color: theme.subtext }]}>Protein</Text>
+            </View>
+            <View style={[styles.nutritionItem, { backgroundColor: theme.background }]}>
+              <Ionicons name="analytics-outline" size={20} color={theme.carbs} />
+              <Text style={[styles.nutritionValue, { color: theme.text }]}>{meal.carbohydrates}g</Text>
+              <Text style={[styles.nutritionLabel, { color: theme.subtext }]}>Carbs</Text>
+            </View>
+            <View style={[styles.nutritionItem, { backgroundColor: theme.background }]}>
+              <Ionicons name="water-outline" size={20} color={theme.fat} />
+              <Text style={[styles.nutritionValue, { color: theme.text }]}>{meal.fat}g</Text>
+              <Text style={[styles.nutritionLabel, { color: theme.subtext }]}>Fat</Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Ingredients Card */}
+        <View style={[styles.ingredientsCard, { backgroundColor: theme.card, shadowColor: theme.shadow }]}>
+          <View style={styles.cardHeader}>
+            <Ionicons name="list" size={20} color={theme.success} />
+            <Text style={[styles.cardTitle, { color: theme.text }]}>
+              Ingredients
+            </Text>
+          </View>
+          {ingredients && ingredients.length > 0 ? (
+            <View style={styles.ingredientsList}>
+              {ingredients.map((ingredient, index) => (
+                <View key={index} style={styles.ingredientItem}>
+                  <View style={[styles.ingredientBullet, { backgroundColor: theme.success }]} />
+                  <Text style={[styles.ingredientText, { color: theme.text }]}>
+                    {ingredient}
                   </Text>
                 </View>
-              )}
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.backButton, { backgroundColor: theme.button, borderColor: theme.border }]}
-              onPress={() => router.back()}
-            >
-              <View style={styles.buttonContent}>
-                <Ionicons name="arrow-back-outline" size={20} color={theme.buttonText} />
-                <Text style={[styles.backButtonText, { color: theme.buttonText }]}>
-                  Back to Calendar
-                </Text>
-              </View>
-            </TouchableOpacity>
+              ))}
+            </View>
+          ) : (
+            <Text style={[styles.emptyText, { color: theme.subtext }]}>
+              No ingredients available
+            </Text>
+          )}
+        </View>
+
+        {/* Instructions Card */}
+        {meal.instructions && (
+          <View style={[styles.instructionsCard, { backgroundColor: theme.card, shadowColor: theme.shadow }]}>
+            <View style={styles.cardHeader}>
+              <Ionicons name="receipt" size={20} color={theme.warning} />
+              <Text style={[styles.cardTitle, { color: theme.text }]}>
+                Instructions
+              </Text>
+            </View>
+            <Text style={[styles.instructionsText, { color: theme.text }]}>{meal.instructions}</Text>
           </View>
-        }
-      />
+        )}
+
+        {/* Recipe Link Card */}
+        {meal?.recipeLink && meal.recipeLink.trim() !== '' && (
+          <TouchableOpacity 
+            style={[styles.linkCard, { backgroundColor: theme.primaryLight, borderColor: theme.primary }]}
+            onPress={() => meal?.recipeLink && Linking.openURL(meal.recipeLink)}
+          >
+            <Ionicons name="link-outline" size={24} color={theme.primary} />
+            <View style={styles.linkContent}>
+              <Text style={[styles.linkTitle, { color: theme.primary }]}>
+                View Full Recipe
+              </Text>
+              <Text style={[styles.linkSubtext, { color: theme.primary }]}>
+                Open in browser
+              </Text>
+            </View>
+            <Ionicons name="arrow-forward-outline" size={20} color={theme.primary} />
+          </TouchableOpacity>
+        )}
+
+        {/* Action Buttons */}
+        <View style={styles.actionButtons}>
+          <TouchableOpacity
+            style={[
+              styles.actionButton, 
+              styles.dangerButton,
+              { 
+                backgroundColor: theme.danger,
+                opacity: deleting ? 0.7 : 1
+              }
+            ]}
+            onPress={handleDeleteMeal}
+            disabled={deleting}
+          >
+            {deleting ? (
+              <ActivityIndicator size="small" color={theme.buttonText} />
+            ) : (
+              <>
+                <Ionicons name="trash-outline" size={20} color={theme.buttonText} />
+                <Text style={[styles.actionButtonText, { color: theme.buttonText }]}>
+                  Remove from Meal Plan
+                </Text>
+              </>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.actionButton, styles.backToMealsButton, { backgroundColor: theme.background, borderColor: theme.border }]}
+            onPress={() => router.back()}
+          >
+            <Ionicons name="arrow-back-outline" size={20} color={theme.text} />
+            <Text style={[styles.secondaryButtonText, { color: theme.text }]}>
+              Back to Calendar
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { 
-    flex: 1, 
-    backgroundColor: 'transparent',
+  container: {
+    flex: 1,
   },
+
+  // Top Navigation Styles
+  topNavContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    paddingTop: Platform.OS === 'ios' ? 50 : 12,
+    zIndex: 1000,
+  },
+  topBackButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  
+  // Content Styles
+  scrollContainer: {
+    paddingBottom: 20,
+  },
+
+  // Loading and Error States
   centerContent: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
   },
-  
-  // Enhanced Loading Card
   loadingCard: {
     padding: 40,
     borderRadius: 16,
@@ -472,15 +517,13 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 12,
     elevation: 5,
+    maxWidth: '90%',
   },
   loadingText: {
     marginTop: 16,
     fontSize: 16,
     textAlign: 'center',
-    fontWeight: '600',
   },
-  
-  // Enhanced Error Styles
   errorContainer: {
     padding: 32,
     borderRadius: 16,
@@ -501,191 +544,148 @@ const styles = StyleSheet.create({
   },
   errorText: {
     fontSize: 16,
-    marginBottom: 24,
+    marginBottom: 16,
     textAlign: 'center',
-    lineHeight: 24,
   },
   retryButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 12,
-    marginBottom: 12,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+    marginVertical: 5,
   },
   retryButtonText: {
     fontSize: 16,
-    fontWeight: '600',
-    textAlign: 'center',
+    fontWeight: 'bold',
   },
-  
-  // Enhanced Error Banner
+
+  // Error Banner
   errorBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
-    marginHorizontal: 20,
-    marginBottom: 16,
-    borderRadius: 12,
+    padding: 12,
+    marginHorizontal: 16,
+    marginTop: 8,
+    borderRadius: 8,
     borderWidth: 1,
+    gap: 8,
+  },
+  errorBannerText: {
+    flex: 1,
+    fontSize: 14,
+  },
+  errorBannerButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  errorBannerButtonText: {
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+
+  // Image Card Styles
+  imageCard: {
+    margin: 16,
+    borderRadius: 16,
+    overflow: 'hidden',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 6,
+    position: 'relative',
+  },
+  mealImage: {
+    width: '100%',
+    height: 240,
+    resizeMode: 'cover',
+  },
+  imagePlaceholder: {
+    width: '100%',
+    height: 240,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  imagePlaceholderText: {
+    fontSize: 14,
+    marginTop: 8,
+  },
+
+  // Info Card Styles
+  infoCard: {
+    margin: 16,
+    marginTop: 8,
+    padding: 20,
+    borderRadius: 16,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
   },
-  errorBannerText: {
-    flex: 1,
-    fontSize: 14,
-    fontWeight: '600',
-    marginLeft: 8,
+  mealTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginBottom: 8,
+    textAlign: 'center',
   },
-  errorBannerRetry: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
+  mealDescription: {
+    fontSize: 16,
+    lineHeight: 24,
+    textAlign: 'center',
+    marginBottom: 16,
   },
-  errorBannerRetryText: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  
-  scrollContent: {
-    flexGrow: 1,
-    padding: 20,
-  },
-  
-  // Enhanced Card Styles
-  imageCard: {
-    marginBottom: 20,
-    borderRadius: 16,
-    borderWidth: 1,
-    overflow: 'hidden',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 5,
-  },
-  mealImage: { 
-    width: "100%", 
-    height: 250, 
-    resizeMode: 'cover',
-  },
-  
-  titleCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 20,
+
+  // Card Components
+  nutritionCard: {
+    margin: 16,
+    marginTop: 8,
     padding: 20,
     borderRadius: 16,
-    borderWidth: 1,
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 5,
+    shadowRadius: 4,
+    elevation: 3,
   },
-  title: { 
-    fontSize: 24, 
-    fontWeight: "800", 
-    marginLeft: 12,
-    textAlign: "center",
-    flex: 1,
-  },
-  
-  contentCard: {
-    marginBottom: 20,
+  ingredientsCard: {
+    margin: 16,
+    marginTop: 8,
     padding: 20,
     borderRadius: 16,
-    borderWidth: 1,
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 5,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  instructionsCard: {
+    margin: 16,
+    marginTop: 8,
+    padding: 20,
+    borderRadius: 16,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   cardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 16,
+    gap: 8,
   },
   cardTitle: {
     fontSize: 18,
-    fontWeight: '700',
-    marginLeft: 12,
+    fontWeight: '600',
   },
-  
-  // Instructions Styles
-  instructionsText: { 
-    fontSize: 15, 
-    lineHeight: 24,
-    fontWeight: '500',
+  edamamLogo: {
+    width: 150,
+    height: 30,
   },
-  
-  // Ingredients Styles
-  ingredientsList: {
-    gap: 8,
-  },
-  ingredientItem: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 12,
-  },
-  ingredientText: {
-    fontSize: 15,
-    lineHeight: 22,
-    fontWeight: '500',
-    flex: 1,
-  },
-  noIngredientsText: { 
-    fontSize: 15, 
-    fontStyle: "italic", 
-    textAlign: "center",
-    fontWeight: '500',
-  },
-  
-  // Link Card Styles
-  linkCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 20,
-    padding: 20,
-    borderRadius: 16,
-    borderWidth: 2,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 5,
-  },
-  recipeLinkText: { 
-    fontSize: 16, 
-    fontWeight: "700", 
-    textAlign: "center",
-    marginHorizontal: 12,
-  },
-  
-  // Nutrition Card Styles
-  nutritionCard: {
-    marginBottom: 20,
-    padding: 20,
-    borderRadius: 16,
-    borderWidth: 1,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 5,
-  },
+
+  // Nutrition Styles
   nutritionGrid: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
+    justifyContent: 'space-around',
   },
   nutritionItem: {
-    flex: 1,
-    minWidth: '45%',
     alignItems: 'center',
     padding: 16,
     borderRadius: 12,
@@ -694,31 +694,150 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 2,
   },
+  nutritionValue: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 4,
+  },
   nutritionLabel: {
     fontSize: 12,
-    fontWeight: '600',
-    marginTop: 8,
-    marginBottom: 4,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
-  nutritionValue: {
-    fontSize: 18,
-    fontWeight: '800',
+
+  // Ingredients Styles
+  ingredientsList: {
+    gap: 8,
   },
-  
-  // Action Container
-  actionContainer: {
-    marginTop: 20,
+  ingredientItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+    gap: 12,
+  },
+  ingredientBullet: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  ingredientText: {
+    fontSize: 15,
+    lineHeight: 22,
+    flex: 1,
+  },
+  emptyText: {
+    fontSize: 15,
+    fontStyle: 'italic',
+    textAlign: 'center',
+  },
+
+  // Instructions Styles
+  instructionsText: {
+    fontSize: 15,
+    lineHeight: 24,
+  },
+
+  // Link Card
+  linkCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    margin: 16,
+    marginTop: 8,
+    padding: 20,
+    borderRadius: 16,
+    borderWidth: 2,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 5,
     gap: 16,
+  },
+  linkContent: {
+    flex: 1,
+  },
+  linkTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  linkSubtext: {
+    fontSize: 14,
+    fontWeight: '500',
+    opacity: 0.8,
+  },
+
+  // Action Buttons
+  actionButtons: {
+    margin: 16,
+    marginTop: 8,
+    gap: 12,
+  },
+  actionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    gap: 8,
+  },
+  dangerButton: {
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  actionButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  secondaryButtonText: {
+    fontSize: 15,
+    fontWeight: '500',
+  },
+  backToMealsButton: {
+    borderWidth: 1,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+
+  // Legacy styles for compatibility
+  title: {
+    fontSize: 24,
+    fontWeight: "bold",
+    marginBottom: 16,
+    textAlign: "center",
+  },
+  backButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  backButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+
+  // Original legacy styles
+  scrollContent: {
+    flexGrow: 1,
+    padding: 20,
   },
   buttonContent: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  
-  // Enhanced Button Styles
   deleteButton: { 
     paddingVertical: 16,
     paddingHorizontal: 24,
@@ -734,32 +853,43 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     marginLeft: 8,
   },
-  backButton: { 
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 12, 
-    alignItems: "center",
-    borderWidth: 1,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  backButtonText: { 
-    fontSize: 16, 
-    fontWeight: "600",
-    marginLeft: 8,
+  actionContainer: {
+    marginTop: 20,
+    gap: 16,
   },
   
-  // Legacy styles (keeping for compatibility)
-  instructionsTitle: { 
+  // Remaining legacy styles for FlatList compatibility
+  titleCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+    padding: 20,
+    borderRadius: 16,
+    borderWidth: 1,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 5,
+  },
+  contentCard: {
+    marginBottom: 20,
+    padding: 20,
+    borderRadius: 16,
+    borderWidth: 1,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 5,
+  },
+  ingredientsTitle: { 
     fontSize: 18, 
     fontWeight: "bold", 
     marginTop: 16, 
     marginBottom: 8, 
     textAlign: "center" 
   },
-  ingredientsTitle: { 
+  instructionsTitle: { 
     fontSize: 18, 
     fontWeight: "bold", 
     marginTop: 16, 
@@ -783,6 +913,27 @@ const styles = StyleSheet.create({
     fontSize: 14, 
     fontWeight: "bold",
     marginBottom: 4,
+  },
+  noIngredientsText: { 
+    fontSize: 15, 
+    fontStyle: "italic", 
+    textAlign: "center",
+    fontWeight: '500',
+  },
+  recipeLinkText: { 
+    fontSize: 16, 
+    fontWeight: "700", 
+    textAlign: "center",
+    marginHorizontal: 12,
+  },
+  errorBannerRetry: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  errorBannerRetryText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
 });
 

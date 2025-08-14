@@ -19,6 +19,7 @@ import { Meal } from "../../../../types/types";
 import { useTheme } from "../../../../context/ThemeContext";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { supabase } from "utils/supabase";
+import { cachedDataService } from "utils/cachedDataService";
 
 const AddMealToDate = () => {
   const { theme } = useTheme();
@@ -45,7 +46,7 @@ const AddMealToDate = () => {
     }
   };
 
-  // Fetch user's meals from Supabase
+  // Fetch user's meals using cached data service
   const fetchMeals = async (retryCount = 0): Promise<boolean> => {
     try {
       setError(null);
@@ -64,6 +65,23 @@ const AddMealToDate = () => {
       
       const userId = userData.user.id;
 
+      // Try cached data first for better performance
+      try {
+        console.log('📱 Trying cached meals for add-to-date...');
+        const cachedMeals = await cachedDataService.getUserMeals(userId, false);
+        
+        if (cachedMeals && cachedMeals.length > 0) {
+          console.log(`📱 Using cached meals (${cachedMeals.length} meals)`);
+          setMeals(cachedMeals);
+          setFilteredMeals(cachedMeals);
+          return true;
+        }
+      } catch (cacheError) {
+        console.log('Cache miss, fetching from Supabase:', cacheError);
+      }
+
+      // Fallback to direct Supabase query
+      console.log('🌐 Fetching meals from Supabase...');
       const { data, error } = await supabase
         .from("meals")
         .select("*")
@@ -85,6 +103,7 @@ const AddMealToDate = () => {
       }
 
       const mealsData = data || [];
+      console.log(`🌐 Loaded ${mealsData.length} meals from Supabase`);
       setMeals(mealsData);
       setFilteredMeals(mealsData);
       return true;
@@ -166,6 +185,15 @@ const AddMealToDate = () => {
         console.error("Insert error:", error.message);
         Alert.alert("Error", `Failed to add meal: ${error.message}`);
         return;
+      }
+
+      // Invalidate meal plan cache to ensure fresh data on calendar
+      try {
+        await cachedDataService.invalidateMealPlanCache(userId);
+        console.log('🗑️ Invalidated meal plan cache after adding meal');
+      } catch (cacheError) {
+        console.warn('Failed to invalidate cache:', cacheError);
+        // Don't fail the operation if cache invalidation fails
       }
 
       Alert.alert(

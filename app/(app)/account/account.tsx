@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { 
   View, 
   Text, 
@@ -15,6 +15,8 @@ import { useTheme } from '../../../context/ThemeContext';
 import BottomNav from 'components/bottomNav';
 import { useRouter } from 'expo-router';
 import { supabase } from 'utils/supabase';
+import { cachedDataService } from 'utils/cachedDataService';
+import CacheDebugComponent from 'components/CacheDebugComponent';
 
 const AccountScreen: React.FC = () => {
   const [username, setUsername] = useState<string>('');
@@ -26,84 +28,78 @@ const AccountScreen: React.FC = () => {
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [navigationLoading, setNavigationLoading] = useState<string | null>(null);
+  const [showCacheDebug, setShowCacheDebug] = useState<boolean>(false);
 
   const { theme, toggleTheme } = useTheme();
   const router = useRouter();
 
-  useEffect(() => {
-    const fetchUserData = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        
-        // Get the current user
-        const { data: userData, error: userError } = await supabase.auth.getUser();
-        if (userError) {
-          throw new Error(`Authentication error: ${userError.message}`);
-        }
-        
-        if (!userData?.user) {
-          throw new Error('No authenticated user found');
-        }
-        
-        const userId = userData.user.id;
-
-        // Fetch user profile from 'user_profiles' table
-        const { data, error } = await supabase
-          .from('user_profiles')
-          .select('*')
-          .eq('id', userId)
-          .single();
-
-        if (error) {
-          throw new Error(`Failed to fetch user profile: ${error.message}`);
-        }
-
-        if (!data) {
-          throw new Error('User profile not found');
-        }
-
-        // Set user data with fallback values
-        setUsername(data.username || 'Unknown User');
-        setCaloriesGoal(data.calories_goal);
-        setDietaryRestrictions(data.dietary_restrictions || 'None specified');
-        setEmail(userData.user.email || 'No email provided');
-        setAllergies(data.allergies || 'None specified');
-        
-        // Handle profile picture - convert hex bytes to string if needed
-        let profilePictureUri = data.profile_picture;
-        if (profilePictureUri && typeof profilePictureUri === 'string' && profilePictureUri.startsWith('\\x')) {
-          // Convert hex bytes back to string
-          const hexString = profilePictureUri.slice(2); // Remove \x prefix
-          const bytes = hexString.match(/.{1,2}/g) || [];
-          profilePictureUri = bytes.map(byte => String.fromCharCode(parseInt(byte, 16))).join('');
-        }
-        
-        setProfilePicture(profilePictureUri);
-        setIsAdmin(data.is_admin || false);
-        
-      } catch (error) {
-        console.error('Error fetching user data:', error);
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-        setError(errorMessage);
-        
-        // If authentication error, redirect to login
-        if (errorMessage.includes('Authentication') || errorMessage.includes('No authenticated user')) {
-          Alert.alert('Session Expired', 'Please log in again.', [
-            { text: 'OK', onPress: () => router.replace('/login') }
-          ]);
-        } else {
-          Alert.alert('Error', `Failed to load user data: ${errorMessage}`);
-        }
-      } finally {
-        setLoading(false);
+  const fetchUserData = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      // Get the current user
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+      if (userError) {
+        throw new Error(`Authentication error: ${userError.message}`);
       }
-    };
+      
+      if (!userData?.user) {
+        throw new Error('No authenticated user found');
+      }
+      
+      const userId = userData.user.id;
 
-    fetchUserData();
+      // Use cached data service for faster loading
+      const data = await cachedDataService.getUserProfile(userId);
+
+      if (!data) {
+        throw new Error('User profile not found');
+      }
+
+      // Set user data with fallback values
+      setUsername(data.username || 'Unknown User');
+      setCaloriesGoal(data.calories_goal);
+      setDietaryRestrictions(data.dietary_restrictions || 'None specified');
+      setEmail(userData.user.email || 'No email provided');
+      setAllergies(data.allergies || 'None specified');
+      
+      // Handle profile picture - convert hex bytes to string if needed
+      let profilePictureUri = data.profile_picture;
+      if (profilePictureUri && typeof profilePictureUri === 'string' && profilePictureUri.startsWith('\\x')) {
+        // Convert hex bytes back to string
+        const hexString = profilePictureUri.slice(2); // Remove \x prefix
+        const bytes = hexString.match(/.{1,2}/g) || [];
+        profilePictureUri = bytes.map(byte => String.fromCharCode(parseInt(byte, 16))).join('');
+      }
+      
+      setProfilePicture(profilePictureUri);
+      setIsAdmin(data.is_admin || false);
+      
+    } catch (error) {
+      console.error('Error fetching user data:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      setError(errorMessage);
+      
+      // If authentication error, redirect to login
+      if (errorMessage.includes('Authentication') || errorMessage.includes('No authenticated user')) {
+        Alert.alert('Session Expired', 'Please log in again.', [
+          { text: 'OK', onPress: () => router.replace('/login') }
+        ]);
+      } else {
+        Alert.alert('Error', `Failed to load user data: ${errorMessage}`);
+      }
+    } finally {
+      setLoading(false);
+    }
   }, [router]);
 
-  const handleLogout = async () => {
+  useEffect(() => {
+    fetchUserData();
+  }, [fetchUserData]);
+
+  const handleLogout = useCallback(async () => {
     try {
       const { error } = await supabase.auth.signOut();
       if (error) {
@@ -115,9 +111,17 @@ const AccountScreen: React.FC = () => {
       const errorMessage = error instanceof Error ? error.message : 'Failed to logout';
       Alert.alert('Logout Error', errorMessage);
     }
-  };
+  }, [router]);
 
-  const handleDeleteAccount = async () => {
+  const handleNavigation = useCallback((path: string, label: string) => {
+    setNavigationLoading(label);
+    // Navigate immediately without waiting
+    router.push(path as any);
+    // Clear loading state after a short delay for visual feedback
+    setTimeout(() => setNavigationLoading(null), 300);
+  }, [router]);
+
+  const handleDeleteAccount = useCallback(async () => {
     Alert.alert(
       "Confirm Deletion",
       "Are you sure you want to delete your account? This action cannot be undone and will permanently remove all your data.",
@@ -176,7 +180,7 @@ const AccountScreen: React.FC = () => {
         },
       ]
     );
-  };
+  }, [router]);
 
   // Show loading state
   if (loading) {
@@ -229,51 +233,7 @@ const AccountScreen: React.FC = () => {
                 style={[styles.retryButton, { backgroundColor: theme.primary }]}
                 onPress={() => {
                   setError(null);
-                  // Trigger re-fetch by calling useEffect logic
-                  const fetchData = async () => {
-                    try {
-                      setLoading(true);
-                      setError(null);
-                      
-                      const { data: userData, error: userError } = await supabase.auth.getUser();
-                      if (userError) throw new Error(`Authentication error: ${userError.message}`);
-                      if (!userData?.user) throw new Error('No authenticated user found');
-                      
-                      const { data, error } = await supabase
-                        .from('user_profiles')
-                        .select('*')
-                        .eq('id', userData.user.id)
-                        .single();
-
-                      if (error) throw new Error(`Failed to fetch user profile: ${error.message}`);
-                      if (!data) throw new Error('User profile not found');
-
-                      setUsername(data.username || 'Unknown User');
-                      setCaloriesGoal(data.calories_goal);
-                      setDietaryRestrictions(data.dietary_restrictions || 'None specified');
-                      setEmail(userData.user.email || 'No email provided');
-                      setAllergies(data.allergies || 'None specified');
-                      
-                      // Handle profile picture - convert hex bytes to string if needed
-                      let profilePictureUri = data.profile_picture;
-                      if (profilePictureUri && typeof profilePictureUri === 'string' && profilePictureUri.startsWith('\\x')) {
-                        // Convert hex bytes back to string
-                        const hexString = profilePictureUri.slice(2); // Remove \x prefix
-                        const bytes = hexString.match(/.{1,2}/g) || [];
-                        profilePictureUri = bytes.map(byte => String.fromCharCode(parseInt(byte, 16))).join('');
-                      }
-                      
-                      setProfilePicture(profilePictureUri);
-                      setIsAdmin(data.is_admin || false);
-                      
-                    } catch (err) {
-                      const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred';
-                      setError(errorMessage);
-                    } finally {
-                      setLoading(false);
-                    }
-                  };
-                  fetchData();
+                  fetchUserData();
                 }}
               >
                 <Ionicons name="refresh" size={16} color={theme.buttonText} />
@@ -299,9 +259,14 @@ const AccountScreen: React.FC = () => {
         </Text>
         <TouchableOpacity
           style={[styles.headerActionButton, { backgroundColor: theme.card }]}
-          onPress={() => router.push('./edit-user')}
+          onPress={() => handleNavigation('./edit-user', 'Edit User')}
+          disabled={navigationLoading === 'Edit User'}
         >
-          <Ionicons name="pencil" size={20} color={theme.text} />
+          {navigationLoading === 'Edit User' ? (
+            <ActivityIndicator size={16} color={theme.text} />
+          ) : (
+            <Ionicons name="pencil" size={20} color={theme.text} />
+          )}
         </TouchableOpacity>
       </View>
 
@@ -423,10 +388,15 @@ const AccountScreen: React.FC = () => {
           {/* Edit User Information */}
           <TouchableOpacity
             style={styles.actionItem}
-            onPress={() => router.push('./edit-user')}
+            onPress={() => handleNavigation('./edit-user', 'Edit Information')}
+            disabled={navigationLoading === 'Edit Information'}
           >
             <View style={styles.actionItemLeft}>
-              <Ionicons name="pencil" size={16} color={theme.primary} />
+              {navigationLoading === 'Edit Information' ? (
+                <ActivityIndicator size={16} color={theme.primary} />
+              ) : (
+                <Ionicons name="pencil" size={16} color={theme.primary} />
+              )}
               <Text style={[styles.actionItemLabel, { color: theme.text }]}>
                 Edit Information
               </Text>
@@ -438,16 +408,53 @@ const AccountScreen: React.FC = () => {
           {isAdmin && (
             <TouchableOpacity
               style={styles.actionItem}
-              onPress={() => router.push('./admin-reports')}
+              onPress={() => handleNavigation('./admin-reports', 'Admin Reports')}
+              disabled={navigationLoading === 'Admin Reports'}
             >
               <View style={styles.actionItemLeft}>
-                <Ionicons name="shield-checkmark" size={16} color={theme.primary} />
+                {navigationLoading === 'Admin Reports' ? (
+                  <ActivityIndicator size={16} color={theme.primary} />
+                ) : (
+                  <Ionicons name="shield-checkmark" size={16} color={theme.primary} />
+                )}
                 <Text style={[styles.actionItemLabel, { color: theme.text }]}>
                   Admin Reports
                 </Text>
               </View>
               <Ionicons name="chevron-forward" size={16} color={theme.subtext} />
             </TouchableOpacity>
+          )}
+
+          {/* Cache Debug - Show for admins */}
+          {isAdmin && (
+            <TouchableOpacity
+              style={styles.actionItem}
+              onPress={() => setShowCacheDebug(!showCacheDebug)}
+            >
+              <View style={styles.actionItemLeft}>
+                <Ionicons 
+                  name={showCacheDebug ? "analytics" : "analytics-outline"} 
+                  size={16} 
+                  color={theme.primary} 
+                />
+                <Text style={[styles.actionItemLabel, { color: theme.text }]}>
+                  Cache Debug
+                </Text>
+              </View>
+              <Ionicons 
+                name={showCacheDebug ? "chevron-down" : "chevron-forward"} 
+                size={16} 
+                color={theme.subtext} 
+              />
+            </TouchableOpacity>
+          )}
+
+          {/* Cache Debug Component */}
+          {showCacheDebug && (
+            <CacheDebugComponent 
+              visible={showCacheDebug} 
+              onClose={() => setShowCacheDebug(false)} 
+            />
           )}
 
           {/* Logout */}
@@ -801,4 +808,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default AccountScreen;
+export default React.memo(AccountScreen);

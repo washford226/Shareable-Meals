@@ -23,6 +23,7 @@ import { dietaryFilterOptionsEnhanced, cuisineFilterOptionsEnhanced } from "../.
 import { useRouter } from "expo-router";  // Import Expo Router hook
 import BottomNav from "components/bottomNav";
 import { supabase } from "utils/supabase";
+import { cachedDataService } from "utils/cachedDataService";
 
 interface MyMealsProps {
   onCreateMeal: () => void;
@@ -71,6 +72,8 @@ const MyMeals: React.FC<MyMealsProps> = ({ onCreateMeal}) => {
   // Animation values for fast modal transitions
   const modalOpacity = useState(new Animated.Value(0))[0];
   const modalScale = useState(new Animated.Value(0.8))[0];
+  const filterModalOpacity = useState(new Animated.Value(0))[0];
+  const filterModalTranslateY = useState(new Animated.Value(300))[0];
 
   const isFilterActive =
     aiFilter !== "" ||
@@ -95,42 +98,87 @@ const MyMeals: React.FC<MyMealsProps> = ({ onCreateMeal}) => {
     }
   }, []);
 
-  // Optimized modal handlers with ultra-fast animations
+  // Optimized modal handlers with smooth fast animations
   const openCreateMealModal = useCallback(() => {
     setIsCreateMealModalVisible(true);
-    // Ultra-fast spring animation for opening
-    Animated.parallel([
-      Animated.timing(modalOpacity, {
-        toValue: 1,
-        duration: 100, // Even faster
-        useNativeDriver: true,
-      }),
-      Animated.spring(modalScale, {
-        toValue: 1,
-        tension: 400, // Higher tension for speed
-        friction: 8, // Lower friction for speed
-        useNativeDriver: true,
-      }),
-    ]).start();
+    // Start animation immediately after state update
+    requestAnimationFrame(() => {
+      Animated.parallel([
+        Animated.timing(modalOpacity, {
+          toValue: 1,
+          duration: 200, // Smooth and responsive
+          useNativeDriver: true,
+        }),
+        Animated.spring(modalScale, {
+          toValue: 1,
+          tension: 300, // Balanced for smooth motion
+          friction: 10, // Smooth damping
+          useNativeDriver: true,
+        }),
+      ]).start();
+    });
   }, [modalOpacity, modalScale]);
 
   const closeCreateMealModal = useCallback(() => {
-    // Ultra-fast animation for closing
+    // Fast but smooth animation for closing
     Animated.parallel([
       Animated.timing(modalOpacity, {
         toValue: 0,
-        duration: 80, // Ultra fast close
+        duration: 150, // Quick but not jarring
         useNativeDriver: true,
       }),
       Animated.timing(modalScale, {
         toValue: 0.8,
-        duration: 80,
+        duration: 150,
         useNativeDriver: true,
       }),
     ]).start(() => {
       setIsCreateMealModalVisible(false);
     });
   }, [modalOpacity, modalScale]);
+
+  // Fast filter modal handlers
+  const openFilterModal = useCallback(() => {
+    setTempAiFilter(aiFilter);
+    setTempDietaryRestrictionFilter(dietaryRestrictionFilter);
+    setTempCuisineFilter(cuisineFilter);
+    setIsFilterModalVisible(true);
+    
+    // Start animation immediately after state update
+    requestAnimationFrame(() => {
+      Animated.parallel([
+        Animated.timing(filterModalOpacity, {
+          toValue: 1,
+          duration: 250, // Smooth backdrop fade
+          useNativeDriver: true,
+        }),
+        Animated.spring(filterModalTranslateY, {
+          toValue: 0,
+          tension: 200, // Smooth slide up
+          friction: 8,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    });
+  }, [aiFilter, dietaryRestrictionFilter, cuisineFilter, filterModalOpacity, filterModalTranslateY]);
+
+  const closeFilterModal = useCallback(() => {
+    // Smooth slide down animation
+    Animated.parallel([
+      Animated.timing(filterModalOpacity, {
+        toValue: 0,
+        duration: 200, // Smooth close
+        useNativeDriver: true,
+      }),
+      Animated.timing(filterModalTranslateY, {
+        toValue: 300,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      setIsFilterModalVisible(false);
+    });
+  }, [filterModalOpacity, filterModalTranslateY]);
 
   const navigateToManualCreate = useCallback(() => {
     closeCreateMealModal();
@@ -332,14 +380,21 @@ const MyMeals: React.FC<MyMealsProps> = ({ onCreateMeal}) => {
   }, []);
 
   useEffect(() => {
-    restoreFiltersAndFetchMeals();
+    // Defer heavy operations to improve navigation speed
+    const timer = setTimeout(() => {
+      restoreFiltersAndFetchMeals();
+    }, 100);
+    
+    return () => clearTimeout(timer);
   }, [restoreFiltersAndFetchMeals]);
 
   // Initialize animation values for optimal performance
   useEffect(() => {
     modalOpacity.setValue(0);
     modalScale.setValue(0.8);
-  }, [modalOpacity, modalScale]);
+    filterModalOpacity.setValue(0);
+    filterModalTranslateY.setValue(300);
+  }, [modalOpacity, modalScale, filterModalOpacity, filterModalTranslateY]);
 
 useEffect(() => {
   const restoreFiltersAndFetchMeals = async () => {
@@ -395,29 +450,49 @@ useEffect(() => {
         throw new Error("Authentication required. Please log in again.");
       }
 
+      // Use cached data service for initial load, Supabase for filtered/paginated loads
+      let useCache = !loadMore && !dietaryRestrictionFilter && !aiFilter && !cuisineFilter;
       const pageToLoad = loadMore ? currentPage + 1 : 0;
-      const offset = pageToLoad * MEALS_PER_PAGE;
-
-      let query = supabase
-        .from("meals")
-        .select("*")
-        .eq("user_id", userId)
-        .order("favorite", { ascending: false })
-        .order("id", { ascending: false })
-        .range(offset, offset + MEALS_PER_PAGE - 1);
-
-      if (dietaryRestrictionFilter) query = query.eq("dietary_restrictions", dietaryRestrictionFilter);
-      if (aiFilter === "ai") query = query.eq("created_by_ai", true);
-      if (aiFilter === "not_ai") query = query.eq("created_by_ai", false);
-      if (cuisineFilter) query = query.eq("cuisine", cuisineFilter);
-
-      const { data, error } = await query;
-
-      if (error) {
-        throw new Error(error.message || "Failed to fetch meals");
+      
+      let newMeals = [];
+      
+      if (useCache) {
+        // Try to get cached meals first
+        try {
+          newMeals = await cachedDataService.getUserMeals(userId);
+          console.log(`📱 Loaded ${newMeals.length} meals from cache`);
+        } catch (error) {
+          console.log('Cache failed, falling back to Supabase');
+          useCache = false;
+        }
       }
+      
+      if (!useCache || newMeals.length === 0) {
+        // Fallback to Supabase for filtered queries or if cache is empty
+        const offset = pageToLoad * MEALS_PER_PAGE;
 
-      const newMeals = data || [];
+        let query = supabase
+          .from("meals")
+          .select("*")
+          .eq("user_id", userId)
+          .order("favorite", { ascending: false })
+          .order("id", { ascending: false })
+          .range(offset, offset + MEALS_PER_PAGE - 1);
+
+        if (dietaryRestrictionFilter) query = query.eq("dietary_restrictions", dietaryRestrictionFilter);
+        if (aiFilter === "ai") query = query.eq("created_by_ai", true);
+        if (aiFilter === "not_ai") query = query.eq("created_by_ai", false);
+        if (cuisineFilter) query = query.eq("cuisine", cuisineFilter);
+
+        const { data, error } = await query;
+
+        if (error) {
+          throw new Error(error.message || "Failed to fetch meals");
+        }
+
+        newMeals = data || [];
+        console.log(`🌐 Loaded ${newMeals.length} meals from Supabase`);
+      }
       
       if (loadMore) {
         setMeals(prevMeals => [...prevMeals, ...newMeals]);
@@ -686,12 +761,7 @@ const applyFilters = useCallback(async () => {
               borderColor: theme.border
             }
           ]}
-          onPress={() => {
-            setTempAiFilter(aiFilter);
-            setTempDietaryRestrictionFilter(dietaryRestrictionFilter);
-            setTempCuisineFilter(cuisineFilter);
-            setIsFilterModalVisible(true);
-          }}
+          onPress={openFilterModal}
         >
           <Ionicons 
             name="filter" 
@@ -909,9 +979,35 @@ const applyFilters = useCallback(async () => {
         </Animated.View>
       </Modal>
 
-      <Modal visible={isFilterModalVisible} transparent animationType="slide">
-        <View style={styles.modalContainer}>
-          <View style={[styles.filterModalContent, { backgroundColor: theme.card, shadowColor: theme.shadow }]}>
+      <Modal 
+        visible={isFilterModalVisible} 
+        transparent 
+        animationType="none"
+        presentationStyle="overFullScreen"
+        statusBarTranslucent
+        hardwareAccelerated
+      >
+        <Animated.View 
+          style={[
+            styles.modalContainer, 
+            { opacity: filterModalOpacity }
+          ]}
+        >
+          <Pressable 
+            style={StyleSheet.absoluteFillObject}
+            onPress={closeFilterModal}
+          />
+          <Animated.View 
+            style={[
+              styles.filterModalContent, 
+              { 
+                backgroundColor: theme.card, 
+                shadowColor: theme.shadow,
+                transform: [{ translateY: filterModalTranslateY }]
+              }
+            ]}
+          >
+            <Pressable onPress={(e) => e.stopPropagation()}>
             <ScrollView style={styles.filterModalScrollView} showsVerticalScrollIndicator={false}>
               {/* Modal Header */}
               <View style={styles.filterModalHeader}>
@@ -921,13 +1017,7 @@ const applyFilters = useCallback(async () => {
                 </View>
                 <TouchableOpacity
                   style={[styles.filterModalCloseButton, { backgroundColor: theme.background }]}
-                  onPress={() => {
-                    setTempFilters(filters);
-                    setTempDietaryRestrictionFilter(dietaryRestrictionFilter);
-                    setTempAiFilter(aiFilter);
-                    setTempCuisineFilter(cuisineFilter);
-                    setIsFilterModalVisible(false);
-                  }}
+                  onPress={closeFilterModal}
                 >
                   <Ionicons name="close" size={20} color={theme.subtext} />
                 </TouchableOpacity>
@@ -1106,18 +1196,22 @@ const applyFilters = useCallback(async () => {
                 <Text style={[styles.filterModalButtonText, { color: theme.buttonText }]}>Apply Filters</Text>
               </TouchableOpacity>
             </View>
-          </View>
-        </View>
+            </Pressable>
+          </Animated.View>
+        </Animated.View>
       </Modal>
 
       {/* Dietary Restrictions Modal */}
       <Modal
         visible={showDietaryModal}
         transparent={true}
-        animationType="slide"
+        animationType="fade"
+        presentationStyle="overFullScreen"
+        statusBarTranslucent
+        hardwareAccelerated
         onRequestClose={() => {
           setShowDietaryModal(false);
-          setTimeout(() => setIsFilterModalVisible(true), 10);
+          setTimeout(() => setIsFilterModalVisible(true), 50);
         }}
       >
         <View style={styles.modalContainer}>
@@ -1130,7 +1224,7 @@ const applyFilters = useCallback(async () => {
                 style={styles.modalCloseButton}
                 onPress={() => {
                   setShowDietaryModal(false);
-                  setTimeout(() => setIsFilterModalVisible(true), 10);
+                  setTimeout(() => setIsFilterModalVisible(true), 50);
                 }}
               >
                 <Ionicons name="close" size={24} color={theme.text} />
@@ -1180,10 +1274,13 @@ const applyFilters = useCallback(async () => {
       <Modal
         visible={showCuisineModal}
         transparent={true}
-        animationType="slide"
+        animationType="fade"
+        presentationStyle="overFullScreen"
+        statusBarTranslucent
+        hardwareAccelerated
         onRequestClose={() => {
           setShowCuisineModal(false);
-          setTimeout(() => setIsFilterModalVisible(true), 10);
+          setTimeout(() => setIsFilterModalVisible(true), 50);
         }}
       >
         <View style={styles.modalContainer}>
@@ -1196,7 +1293,7 @@ const applyFilters = useCallback(async () => {
                 style={styles.modalCloseButton}
                 onPress={() => {
                   setShowCuisineModal(false);
-                  setTimeout(() => setIsFilterModalVisible(true), 10);
+                  setTimeout(() => setIsFilterModalVisible(true), 50);
                 }}
               >
                 <Ionicons name="close" size={24} color={theme.text} />
@@ -1968,4 +2065,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default MyMeals;
+export default React.memo(MyMeals);
