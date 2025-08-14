@@ -1,10 +1,10 @@
-import React from "react";
+import React, { memo, useCallback } from "react";
 import { View, TouchableOpacity, Text, StyleSheet, Platform } from "react-native";
 import { router, usePathname } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "context/ThemeContext";
 
-export default function BottomNav() {
+const BottomNav = memo(() => {
   const { theme } = useTheme();
   const pathname = usePathname();
 
@@ -43,9 +43,9 @@ export default function BottomNav() {
     },
   ];
 
-  const handleNavPress = (route: string) => {
+  const handleNavPress = useCallback((route: string) => {
     router.push(route as any);
-  };
+  }, []);
 
   return (
     <View style={[styles.nav, { 
@@ -88,7 +88,11 @@ export default function BottomNav() {
       ))}
     </View>
   );
-}
+});
+
+BottomNav.displayName = 'BottomNav';
+
+export default BottomNav;
 
 const styles = StyleSheet.create({
   nav: {

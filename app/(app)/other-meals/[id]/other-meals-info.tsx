@@ -182,7 +182,7 @@ const MealDetails = () => {
           user_id: userId,
           visibility: true, // Make copied meals public by default
           created_by: username,
-          AI_Macros: false, // Copied meals keep original macro values, not AI-generated
+          Edamam_macros: false, // Copied meals keep original macro values, not Edamam-generated
         },
       ]).select("id").single();
 
@@ -424,12 +424,6 @@ const MealDetails = () => {
                 <Text style={[styles.tagText, { color: theme.danger }]}>Private</Text>
               </View>
             )}
-            {meal.AI_Macros && (
-              <View style={[styles.tag, { backgroundColor: theme.info + '20', borderColor: theme.info }]}>
-                <Ionicons name="calculator" size={12} color={theme.info} />
-                <Text style={[styles.tagText, { color: theme.info }]}>AI Macros</Text>
-              </View>
-            )}
           </View>
           
           {/* Tags */}
@@ -454,11 +448,12 @@ const MealDetails = () => {
           <View style={styles.cardHeader}>
             <Ionicons name="nutrition" size={20} color={theme.primary} />
             <Text style={[styles.cardTitle, { color: theme.text }]}>Nutrition Facts</Text>
-            {meal?.AI_Macros && (
-              <View style={[styles.aiMacroTag, { backgroundColor: theme.aiAccent }]}>
-                <Ionicons name="sparkles" size={10} color={theme.buttonText} />
-                <Text style={[styles.aiMacroTagText, { color: theme.buttonText }]}>AI</Text>
-              </View>
+            {meal?.Edamam_macros && (
+              <Image
+                source={require('../../../../assets/images/Edamam_Badge_Transparent.png')}
+                style={styles.edamamLogo}
+                resizeMode="contain"
+              />
             )}
           </View>
           <View style={styles.nutritionGrid}>
@@ -1154,17 +1149,10 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#6c757d",
   },
-  aiMacroTag: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-    gap: 2,
-  },
-  aiMacroTagText: {
-    fontSize: 10,
-    fontWeight: '600',
+  edamamLogo: {
+    width: 200,
+    height: 40,
+    marginLeft: 8,
   },
 });
 

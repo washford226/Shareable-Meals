@@ -1,9 +1,10 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useMemo } from "react";
 import {
   View,
   Text,
   FlatList,
   TouchableOpacity,
+  Pressable,
   StyleSheet,
   ActivityIndicator,
   Alert,
@@ -12,6 +13,7 @@ import {
   Image,
   RefreshControl,
   ScrollView,
+  Animated,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -59,12 +61,16 @@ const MyMeals: React.FC<MyMealsProps> = ({ onCreateMeal}) => {
   const [favoriteLoading, setFavoriteLoading] = useState<{ [key: string]: boolean }>({});
   const [showDietaryModal, setShowDietaryModal] = useState(false);
   const [showCuisineModal, setShowCuisineModal] = useState(false);
-  const [macroUsageInfo, setMacroUsageInfo] = useState<{
-    daily_usage: number;
-    daily_limit: number;
-    remaining: number;
-  } | null>(null);
-  const [macroUsageLoading, setMacroUsageLoading] = useState<boolean>(false);
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState<number>(0);
+  const [hasMoreMeals, setHasMoreMeals] = useState<boolean>(true);
+  const [loadingMore, setLoadingMore] = useState<boolean>(false);
+  const MEALS_PER_PAGE = 20; // Load 20 meals at a time
+
+  // Animation values for fast modal transitions
+  const modalOpacity = useState(new Animated.Value(0))[0];
+  const modalScale = useState(new Animated.Value(0.8))[0];
 
   const isFilterActive =
     aiFilter !== "" ||
@@ -89,44 +95,148 @@ const MyMeals: React.FC<MyMealsProps> = ({ onCreateMeal}) => {
     }
   }, []);
 
-  const fetchMacroUsageInfo = useCallback(async () => {
-    try {
-      setMacroUsageLoading(true);
-      const userId = await getCurrentUserId();
-      if (!userId) return;
+  // Optimized modal handlers with ultra-fast animations
+  const openCreateMealModal = useCallback(() => {
+    setIsCreateMealModalVisible(true);
+    // Ultra-fast spring animation for opening
+    Animated.parallel([
+      Animated.timing(modalOpacity, {
+        toValue: 1,
+        duration: 100, // Even faster
+        useNativeDriver: true,
+      }),
+      Animated.spring(modalScale, {
+        toValue: 1,
+        tension: 400, // Higher tension for speed
+        friction: 8, // Lower friction for speed
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [modalOpacity, modalScale]);
 
-      const today = new Date().toISOString().split('T')[0];
-      
-      const { data: userProfile, error } = await supabase
-        .from("user_profiles")
-        .select("macro_calculation_uses, macro_calculation_uses_last_date")
-        .eq("id", userId)
-        .single();
+  const closeCreateMealModal = useCallback(() => {
+    // Ultra-fast animation for closing
+    Animated.parallel([
+      Animated.timing(modalOpacity, {
+        toValue: 0,
+        duration: 80, // Ultra fast close
+        useNativeDriver: true,
+      }),
+      Animated.timing(modalScale, {
+        toValue: 0.8,
+        duration: 80,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      setIsCreateMealModalVisible(false);
+    });
+  }, [modalOpacity, modalScale]);
 
-      if (error) {
-        console.error("Error fetching macro usage info:", error);
-        return;
-      }
+  const navigateToManualCreate = useCallback(() => {
+    closeCreateMealModal();
+    router.push("/my-meals/create");
+  }, [router, closeCreateMealModal]);
 
-      if (userProfile) {
-        const lastUsageDate = userProfile.macro_calculation_uses_last_date;
-        const currentUsageCount = userProfile.macro_calculation_uses || 0;
+  const navigateToAICreate = useCallback(() => {
+    closeCreateMealModal();
+    router.push("../AI/AICreateMeal");
+  }, [router, closeCreateMealModal]);
 
-        // Reset count if it's a new day
-        const dailyUsage = lastUsageDate === today ? currentUsageCount : 0;
-        
-        setMacroUsageInfo({
-          daily_usage: dailyUsage,
-          daily_limit: 20,
-          remaining: Math.max(0, 20 - dailyUsage)
-        });
-      }
-    } catch (error: any) {
-      console.error("Error fetching macro usage info:", error);
-    } finally {
-      setMacroUsageLoading(false);
-    }
-  }, [getCurrentUserId]);
+  const navigateToImageCreate = useCallback(() => {
+    closeCreateMealModal();
+    router.push("./image-create");
+  }, [router, closeCreateMealModal]);
+
+  const navigateToURLCreate = useCallback(() => {
+    closeCreateMealModal();
+    router.push("./url-create");
+  }, [router, closeCreateMealModal]);
+
+  // Memoized modal header for better performance
+  const modalHeader = useMemo(() => (
+    <View style={styles.modalHeader}>
+      <Text style={[styles.modalTitle, { color: theme.text }]}>Create New Meal</Text>
+      <Pressable
+        style={({ pressed }) => [
+          styles.modalCloseButton,
+          { opacity: pressed ? 0.6 : 1 }
+        ]}
+        onPress={closeCreateMealModal}
+      >
+        <Ionicons name="close" size={24} color={theme.subtext} />
+      </Pressable>
+    </View>
+  ), [theme.text, theme.subtext, closeCreateMealModal]);
+
+  // Memoized modal content for better performance
+  const modalButtons = useMemo(() => (
+    <>
+      <Pressable
+        style={({ pressed }) => [
+          styles.modalButton, 
+          { backgroundColor: theme.primary, opacity: pressed ? 0.8 : 1 }
+        ]}
+        onPress={navigateToManualCreate}
+      >
+        <Ionicons name="create-outline" size={24} color={theme.buttonText} />
+        <View style={styles.modalButtonContent}>
+          <Text style={[styles.modalButtonText, { color: theme.buttonText }]}>Manual Entry</Text>
+          <Text style={[styles.modalButtonSubtext, { color: theme.buttonText, opacity: 0.8 }]}>
+            Enter meal details yourself
+          </Text>
+        </View>
+        <Ionicons name="chevron-forward" size={20} color={theme.buttonText} />
+      </Pressable>
+
+      <Pressable
+        style={({ pressed }) => [
+          styles.modalButton, 
+          { backgroundColor: theme.aiAccent, opacity: pressed ? 0.8 : 1 }
+        ]}
+        onPress={navigateToAICreate}
+      >
+        <Ionicons name="sparkles" size={24} color={theme.buttonText} />
+        <View style={styles.modalButtonContent}>
+          <Text style={[styles.modalButtonText, { color: theme.buttonText }]}>AI Generated</Text>
+          <Text style={[styles.modalButtonSubtext, { color: theme.buttonText, opacity: 0.8 }]}>
+            Let AI create a meal for you
+          </Text>
+        </View>
+        <Ionicons name="chevron-forward" size={20} color={theme.buttonText} />
+      </Pressable>
+
+      <Pressable
+        style={({ pressed }) => [
+          styles.modalButton, 
+          { backgroundColor: theme.info, opacity: pressed ? 0.8 : 1 }
+        ]}
+        onPress={navigateToURLCreate}
+      >
+        <Ionicons name="link-outline" size={24} color={theme.buttonText} />
+        <View style={styles.modalButtonContent}>
+          <Text style={[styles.modalButtonText, { color: theme.buttonText }]}>From URL</Text>
+          <Text style={[styles.modalButtonSubtext, { color: theme.buttonText, opacity: 0.8 }]}>
+            Import from recipe website
+          </Text>
+        </View>
+        <Ionicons name="chevron-forward" size={20} color={theme.buttonText} />
+      </Pressable>
+
+      <Pressable
+        style={({ pressed }) => [
+          styles.cancelButton, 
+          { 
+            backgroundColor: theme.background, 
+            borderColor: theme.border,
+            opacity: pressed ? 0.8 : 1 
+          }
+        ]}
+        onPress={closeCreateMealModal}
+      >
+        <Text style={[styles.cancelButtonText, { color: theme.text }]}>Cancel</Text>
+      </Pressable>
+    </>
+  ), [theme, navigateToManualCreate, navigateToAICreate, navigateToURLCreate, closeCreateMealModal]);
 
   const toggleFavorite = async (mealId: number | string) => {
     if (favoriteLoading[mealId]) return; // Prevent multiple toggles
@@ -223,8 +333,13 @@ const MyMeals: React.FC<MyMealsProps> = ({ onCreateMeal}) => {
 
   useEffect(() => {
     restoreFiltersAndFetchMeals();
-    fetchMacroUsageInfo();
-  }, [restoreFiltersAndFetchMeals, fetchMacroUsageInfo]);
+  }, [restoreFiltersAndFetchMeals]);
+
+  // Initialize animation values for optimal performance
+  useEffect(() => {
+    modalOpacity.setValue(0);
+    modalScale.setValue(0.8);
+  }, [modalOpacity, modalScale]);
 
 useEffect(() => {
   const restoreFiltersAndFetchMeals = async () => {
@@ -255,31 +370,41 @@ useEffect(() => {
   restoreFiltersAndFetchMeals();
 }, []);
 
-  const fetchMyMeals = useCallback(async (isRefresh = false) => {
+  const fetchMyMeals = useCallback(async (isRefresh = false, loadMore = false) => {
     if (!filtersLoaded) return;
     
     try {
       if (isRefresh) {
         setRefreshing(true);
         setError(null);
+        setCurrentPage(0);
+        setHasMoreMeals(true);
+      } else if (loadMore) {
+        setLoadingMore(true);
       } else {
         setLoading(true);
         setError(null);
       }
       
-      setFilteredMealsReady(false);
+      if (!loadMore) {
+        setFilteredMealsReady(false);
+      }
 
       const userId = await getCurrentUserId();
       if (!userId) {
         throw new Error("Authentication required. Please log in again.");
       }
 
+      const pageToLoad = loadMore ? currentPage + 1 : 0;
+      const offset = pageToLoad * MEALS_PER_PAGE;
+
       let query = supabase
         .from("meals")
         .select("*")
         .eq("user_id", userId)
         .order("favorite", { ascending: false })
-        .order("id", { ascending: false });
+        .order("id", { ascending: false })
+        .range(offset, offset + MEALS_PER_PAGE - 1);
 
       if (dietaryRestrictionFilter) query = query.eq("dietary_restrictions", dietaryRestrictionFilter);
       if (aiFilter === "ai") query = query.eq("created_by_ai", true);
@@ -292,8 +417,20 @@ useEffect(() => {
         throw new Error(error.message || "Failed to fetch meals");
       }
 
-      setMeals(data || []);
+      const newMeals = data || [];
+      
+      if (loadMore) {
+        setMeals(prevMeals => [...prevMeals, ...newMeals]);
+        setCurrentPage(pageToLoad);
+      } else {
+        setMeals(newMeals);
+        setCurrentPage(0);
+      }
+      
+      // Check if we have more meals to load
+      setHasMoreMeals(newMeals.length === MEALS_PER_PAGE);
       setRetryCount(0); // Reset retry count on success
+      
     } catch (error: any) {
       console.error("Error fetching meals:", error);
       const errorMessage = error.message || "Failed to fetch meals. Please try again later.";
@@ -304,64 +441,33 @@ useEffect(() => {
         const delay = Math.pow(2, retryCount) * 1000; // 1s, 2s, 4s
         setTimeout(() => {
           setRetryCount(prev => prev + 1);
-          fetchMyMeals(isRefresh);
+          fetchMyMeals(isRefresh, loadMore);
         }, delay);
       }
     } finally {
       setLoading(false);
       setRefreshing(false);
+      setLoadingMore(false);
     }
-  }, [filtersLoaded, dietaryRestrictionFilter, aiFilter, cuisineFilter, getCurrentUserId, retryCount]);
+  }, [filtersLoaded, dietaryRestrictionFilter, aiFilter, cuisineFilter, getCurrentUserId, retryCount, currentPage]);
 
   const handleRefresh = useCallback(() => {
     setRetryCount(0);
     fetchMyMeals(true);
-    fetchMacroUsageInfo(); // Also refresh usage info
-  }, [fetchMyMeals, fetchMacroUsageInfo]);
+  }, [fetchMyMeals]);
 
-  useEffect(() => {
-    fetchMyMeals();
-  }, [filtersLoaded, dietaryRestrictionFilter, aiFilter, cuisineFilter, fetchMyMeals]);
-
-  useEffect(() => {
-  if (!filtersLoaded) return;
-
-  const fetchMyMeals = async () => {
-  setLoading(true);
-  try {
-    const userId = await getCurrentUserId();
-    if (!userId) {
-      Alert.alert("Error", "User not authenticated. Please log in.");
-      return;
+  const loadMoreMeals = useCallback(() => {
+    if (!loadingMore && hasMoreMeals && filteredMealsReady) {
+      fetchMyMeals(false, true);
     }
+  }, [loadingMore, hasMoreMeals, filteredMealsReady, fetchMyMeals]);
 
-    let query = supabase
-      .from("meals")
-      .select("*")
-      .eq("user_id", userId)
-      .order("favorite", { ascending: false })
-      .order("id", { ascending: false });
-
-    if (dietaryRestrictionFilter) query = query.eq("dietary_restrictions", dietaryRestrictionFilter);
-    if (aiFilter === "ai") query = query.eq("created_by_ai", true);
-    if (aiFilter === "not_ai") query = query.eq("created_by_ai", false);
-    if (cuisineFilter) query = query.eq("cuisine", cuisineFilter);
-
-    const { data, error } = await query;
-
-    if (error) throw error;
-
-    setMeals(data || []);
-  } catch (error) {
-    console.error("Error fetching meals:", error);
-    Alert.alert("Error", "Failed to fetch meals. Please try again later.");
-  } finally {
-    setLoading(false);
-  }
-};
-
-  fetchMyMeals();
-}, [filtersLoaded, dietaryRestrictionFilter, aiFilter, cuisineFilter, getCurrentUserId]);
+  useEffect(() => {
+    // Reset pagination when filters change
+    setCurrentPage(0);
+    setHasMoreMeals(true);
+    fetchMyMeals();
+  }, [filtersLoaded, dietaryRestrictionFilter, aiFilter, cuisineFilter]);
 
   useEffect(() => {
     const filtered = meals.filter((meal) => {
@@ -393,8 +499,16 @@ useEffect(() => {
     });
   
     setFilteredMeals(filtered);
-    setFilteredMealsReady(true);
-  }, [searchQuery, filters, meals]);
+    // Only set filteredMealsReady to true if we're not in initial loading state
+    if (!loading || meals.length > 0) {
+      setFilteredMealsReady(true);
+    }
+    
+    // Auto-load more if we have few visible results and more data is available
+    if (filtered.length < 10 && hasMoreMeals && !loadingMore && meals.length > 0) {
+      setTimeout(() => loadMoreMeals(), 100); // Small delay to avoid rapid calls
+    }
+  }, [searchQuery, filters, meals, hasMoreMeals, loadingMore, loadMoreMeals, loading]);
 
   const onMealSelect = (meal: Meal) => {
     router.push(`/my-meals/${meal.id}/info`); // Navigate to the meal details screen
@@ -598,16 +712,22 @@ const applyFilters = useCallback(async () => {
 
       <TouchableOpacity
         style={[styles.createMealButton, { backgroundColor: theme.primary }]}
-        onPress={() => {
-          fetchMacroUsageInfo(); // Refresh usage info when opening modal
-          setIsCreateMealModalVisible(true);
-        }}
+        onPress={openCreateMealModal}
       >
         <Ionicons name="add-circle-outline" size={24} color={theme.buttonText} style={{ marginRight: 8 }} />
         <Text style={[styles.createMealButtonText, { color: theme.buttonText }]}>Create New Meal</Text>
       </TouchableOpacity>
 
-      {filteredMeals.length === 0 ? (
+      {loading && meals.length === 0 ? (
+        <View style={styles.centerContent}>
+          <View style={[styles.loadingCard, { backgroundColor: theme.card }]}>
+            <ActivityIndicator size="large" color={theme.primary} />
+            <Text style={[styles.loadingText, { color: theme.text }]}>
+              Loading your meals...
+            </Text>
+          </View>
+        </View>
+      ) : filteredMeals.length === 0 && filteredMealsReady && !loading ? (
         <View style={styles.emptyStateContainer}>
           <View style={[styles.emptyStateCard, { backgroundColor: theme.card }]}>
             <Ionicons name="restaurant-outline" size={64} color={theme.subtext} />
@@ -623,7 +743,7 @@ const applyFilters = useCallback(async () => {
             {!searchQuery && !isFilterActive && (
               <TouchableOpacity
                 style={[styles.emptyStateButton, { backgroundColor: theme.primary }]}
-                onPress={() => setIsCreateMealModalVisible(true)}
+                onPress={openCreateMealModal}
               >
                 <Ionicons name="add" size={20} color={theme.buttonText} style={{ marginRight: 8 }} />
                 <Text style={[styles.emptyStateButtonText, { color: theme.buttonText }]}>
@@ -646,6 +766,24 @@ const applyFilters = useCallback(async () => {
               tintColor={theme.primary}
             />
           }
+          onEndReached={loadMoreMeals}
+          onEndReachedThreshold={0.3}
+          ListFooterComponent={() => (
+            loadingMore ? (
+              <View style={styles.loadingMoreContainer}>
+                <ActivityIndicator size="small" color={theme.primary} />
+                <Text style={[styles.loadingMoreText, { color: theme.subtext }]}>
+                  Loading more meals...
+                </Text>
+              </View>
+            ) : !hasMoreMeals && filteredMeals.length > 0 ? (
+              <View style={styles.endOfListContainer}>
+                <Text style={[styles.endOfListText, { color: theme.subtext }]}>
+                  You&apos;ve reached the end of your meals!
+                </Text>
+              </View>
+            ) : null
+          )}
           renderItem={({ item }) => (
             <TouchableOpacity
               style={[styles.mealItem, { backgroundColor: theme.card, borderColor: theme.border }]}
@@ -734,140 +872,41 @@ const applyFilters = useCallback(async () => {
         />
       )}
 
-      <Modal visible={isCreateMealModalVisible} transparent animationType="slide">
-        <View style={styles.modalContainer}>
-          <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
-            <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: theme.text }]}>Create New Meal</Text>
-              <TouchableOpacity
-                style={styles.modalCloseButton}
-                onPress={() => setIsCreateMealModalVisible(false)}
-              >
-                <Ionicons name="close" size={24} color={theme.subtext} />
-              </TouchableOpacity>
-            </View>
-            
-            <Text style={[styles.modalSubtitle, { color: theme.subtext }]}>
-              Choose how you&apos;d like to create your meal
-            </Text>
+      <Modal 
+        visible={isCreateMealModalVisible} 
+        transparent 
+        animationType="none"
+        presentationStyle="overFullScreen"
+        statusBarTranslucent
+        hardwareAccelerated
+      >
+        <Animated.View 
+          style={[styles.modalContainer, { opacity: modalOpacity }]}
+        >
+          <Pressable 
+            style={StyleSheet.absoluteFillObject}
+            onPress={closeCreateMealModal}
+          />
+          <Animated.View 
+            style={[
+              styles.modalContent, 
+              { 
+                backgroundColor: theme.card,
+                transform: [{ scale: modalScale }]
+              }
+            ]}
+          >
+            <Pressable onPress={(e) => e.stopPropagation()}>
+              {modalHeader}
+              
+              <Text style={[styles.modalSubtitle, { color: theme.subtext }]}>
+                Choose how you&apos;d like to create your meal
+              </Text>
 
-            {/* Macro Usage Info in Modal */}
-            {macroUsageInfo && (
-              <View style={[styles.usageInfoContainer, { backgroundColor: theme.cardSecondary, borderColor: theme.border, marginBottom: 20 }]}>
-                <View style={styles.usageInfoHeader}>
-                  <Ionicons name="calculator-outline" size={18} color={theme.primary} />
-                  <Text style={[styles.usageInfoTitle, { color: theme.text, fontSize: 14 }]}>
-                    AI Macro Calculations Today
-                  </Text>
-                </View>
-                <View style={styles.usageInfoContent}>
-                  <Text style={[styles.usageInfoText, { color: theme.subtext, fontSize: 12 }]}>
-                    {macroUsageInfo.daily_usage}/{macroUsageInfo.daily_limit} used
-                  </Text>
-                  <View style={[styles.usageProgressBar, { backgroundColor: theme.background, height: 4 }]}>
-                    <View 
-                      style={[
-                        styles.usageProgressFill, 
-                        { 
-                          backgroundColor: macroUsageInfo.remaining <= 5 ? theme.danger : theme.primary,
-                          width: `${(macroUsageInfo.daily_usage / macroUsageInfo.daily_limit) * 100}%`
-                        }
-                      ]} 
-                    />
-                  </View>
-                  <Text style={[
-                    styles.usageRemainingText, 
-                    { 
-                      color: macroUsageInfo.remaining <= 5 ? theme.danger : theme.success,
-                      fontSize: 11,
-                      textAlign: 'center'
-                    }
-                  ]}>
-                    {macroUsageInfo.remaining} calculations remaining
-                  </Text>
-                </View>
-              </View>
-            )}
-
-            <TouchableOpacity
-              style={[
-                styles.modalButton, 
-                { 
-                  backgroundColor: theme.primary,
-                  opacity: macroUsageInfo?.remaining === 0 ? 0.5 : 1
-                }
-              ]}
-              onPress={() => {
-                setIsCreateMealModalVisible(false);
-                router.push("/my-meals/create");
-              }}
-              disabled={macroUsageInfo?.remaining === 0}
-            >
-              <Ionicons name="create-outline" size={24} color={theme.buttonText} />
-              <View style={styles.modalButtonContent}>
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <Text style={[styles.modalButtonText, { color: theme.buttonText }]}>Manual Entry</Text>
-                  <Ionicons name="calculator-outline" size={14} color={theme.buttonText} style={{ marginLeft: 8, opacity: 0.7 }} />
-                </View>
-                <Text style={[styles.modalButtonSubtext, { color: theme.buttonText, opacity: 0.8 }]}>
-                  Enter meal details yourself (uses AI macros)
-                </Text>
-              </View>
-              <Ionicons name="chevron-forward" size={20} color={theme.buttonText} />
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[
-                styles.modalButton, 
-                { 
-                  backgroundColor: theme.aiAccent,
-                  opacity: macroUsageInfo?.remaining === 0 ? 0.5 : 1
-                }
-              ]}
-              onPress={() => {
-                setIsCreateMealModalVisible(false);
-                router.push("../AI/AICreateMeal");
-              }}
-              disabled={macroUsageInfo?.remaining === 0}
-            >
-              <Ionicons name="sparkles" size={24} color={theme.buttonText} />
-              <View style={styles.modalButtonContent}>
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <Text style={[styles.modalButtonText, { color: theme.buttonText }]}>AI Generated</Text>
-                  <Ionicons name="calculator-outline" size={14} color={theme.buttonText} style={{ marginLeft: 8, opacity: 0.7 }} />
-                </View>
-                <Text style={[styles.modalButtonSubtext, { color: theme.buttonText, opacity: 0.8 }]}>
-                  Let AI create a meal for you (uses AI macros)
-                </Text>
-              </View>
-              <Ionicons name="chevron-forward" size={20} color={theme.buttonText} />
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.modalButton, { backgroundColor: theme.info }]}
-              onPress={() => {
-                setIsCreateMealModalVisible(false);
-                router.push("./url-create");
-              }}
-            >
-              <Ionicons name="link-outline" size={24} color={theme.buttonText} />
-              <View style={styles.modalButtonContent}>
-                <Text style={[styles.modalButtonText, { color: theme.buttonText }]}>From URL</Text>
-                <Text style={[styles.modalButtonSubtext, { color: theme.buttonText, opacity: 0.8 }]}>
-                  Import from recipe website
-                </Text>
-              </View>
-              <Ionicons name="chevron-forward" size={20} color={theme.buttonText} />
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.cancelButton, { backgroundColor: theme.background, borderColor: theme.border }]}
-              onPress={() => setIsCreateMealModalVisible(false)}
-            >
-              <Text style={[styles.cancelButtonText, { color: theme.text }]}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+              {modalButtons}
+            </Pressable>
+          </Animated.View>
+        </Animated.View>
       </Modal>
 
       <Modal visible={isFilterModalVisible} transparent animationType="slide">
@@ -1542,10 +1581,10 @@ const styles = StyleSheet.create({
     maxWidth: 400,
     padding: 24,
     borderRadius: 20,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.2,
-    shadowRadius: 16,
-    elevation: 10,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 8,
   },
   modalHeader: {
     flexDirection: 'row',
@@ -1905,6 +1944,27 @@ const styles = StyleSheet.create({
   optionDescription: {
     fontSize: 13,
     opacity: 0.7,
+  },
+  // Pagination styles
+  loadingMoreContainer: {
+    padding: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadingMoreText: {
+    marginTop: 8,
+    fontSize: 14,
+    textAlign: 'center',
+  },
+  endOfListContainer: {
+    padding: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  endOfListText: {
+    fontSize: 14,
+    textAlign: 'center',
+    fontStyle: 'italic',
   },
 });
 

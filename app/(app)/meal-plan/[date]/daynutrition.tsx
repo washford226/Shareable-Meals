@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   RefreshControl,
   Dimensions,
+  Image,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { format } from "date-fns";
@@ -566,6 +567,18 @@ const NutritionScreen = () => {
         );
       })}
       
+      {/* Edamam Attribution */}
+      <View style={styles.attributionContainer}>
+        <Image 
+          source={require("../../../../assets/images/Edamam_Badge_Transparent.png")}
+          style={styles.attributionBadge}
+          resizeMode="contain"
+        />
+        <Text style={[styles.attributionText, { color: theme.textSecondary }]}>
+          Nutrition data powered by Edamam
+        </Text>
+      </View>
+      
       <TouchableOpacity 
         style={[styles.backButton, { 
           backgroundColor: theme.primary,
@@ -855,6 +868,23 @@ const styles = StyleSheet.create({
   statusText: {
     fontSize: 14,
     fontWeight: "500",
+    textAlign: 'center',
+  },
+  attributionContainer: {
+    alignItems: 'center',
+    marginVertical: 20,
+    paddingVertical: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#e0e0e0',
+  },
+  attributionBadge: {
+    width: 120,
+    height: 40,
+    marginBottom: 8,
+  },
+  attributionText: {
+    fontSize: 12,
+    fontStyle: 'italic',
     textAlign: 'center',
   },
 });

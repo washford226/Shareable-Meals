@@ -13,6 +13,12 @@ import {
 import { useRouter } from "expo-router";
 import { supabase } from "utils/supabase";
 import { useTheme } from "../../../context/ThemeContext";
+import { 
+  calculateAndSaveMealNutrition, 
+  formatNutritionDisplay, 
+  getIngredientSuggestions,
+  type IngredientInput 
+} from "utils/edamamUtils";
 
 const AICreateMeal = () => {
   const { theme } = useTheme();
@@ -281,7 +287,7 @@ const AICreateMeal = () => {
 
       const username = profileData?.username || "Unknown User";
 
-      // 1. Insert the meal (without ingredients)
+      // 1. Insert the meal (without nutrition - will be calculated by Edamam)
       const { data: mealData, error: mealError } = await supabase.from("meals").insert([
         {
           name: generatedMeal.name.trim(),
@@ -293,11 +299,12 @@ const AICreateMeal = () => {
           dietary_restrictions: dietaryRestrictions,
           created_by_ai: true,
           created_by: username,
-          AI_Macros: true, // AI-created meals always use AI for nutrition calculation
-          calories: generatedMeal.macros?.calories || 0,
-          protein: generatedMeal.macros?.protein || 0,
-          fat: generatedMeal.macros?.fat || 0,
-          carbohydrates: generatedMeal.macros?.carbohydrates || 0,
+          AI_Macros: false, // Will use Edamam for accurate nutrition calculation
+          Edamam_macros: false, // This is user-input meal, not Edamam calculated
+          calories: 0, // Will be updated by Edamam
+          protein: 0,
+          fat: 0,
+          carbohydrates: 0,
         },
       ]).select("id").single();
 
@@ -331,6 +338,23 @@ const AICreateMeal = () => {
         if (ingredientsError) {
           throw ingredientsError;
         }
+      }
+
+      // 3. Calculate nutrition using Edamam and update the meal
+      console.log("Calculating nutrition using Edamam...");
+      try {
+        // Format ingredients for Edamam
+        const edamamIngredients = validIngredients.map(ingredient => ({
+          name: ingredient.name.trim(),
+          quantity: ingredient.quantity?.toString() || "1",
+          unit: ingredient.unit || ""
+        }));
+        
+        await calculateAndSaveMealNutrition(mealId, edamamIngredients);
+        console.log("Nutrition calculated and saved successfully");
+      } catch (nutritionError) {
+        console.error("Error calculating nutrition with Edamam:", nutritionError);
+        alert("Meal saved but nutrition calculation failed. You can manually calculate nutrition later.");
       }
 
       Alert.alert("Success", "Meal added successfully!", [
@@ -407,18 +431,22 @@ const AICreateMeal = () => {
     });
 
     try {
+      console.log("🤖 Calling AI meal generator...");
+      
       const { data, error } = await supabase.functions.invoke("generate-AImeal", {
         body: {
           prompt: prompt.trim(),
           dietaryRestrictions,
           allergies,
-          usePantry,
+          pantryItems: usePantry ? [] : [], // You can implement pantry selection later
         },
       });
 
       if (error || !data) {
         throw new Error(error?.message || "Failed to generate meal.");
       }
+
+      console.log("✅ AI meal generated successfully:", data.name);
 
       // Update AI usage count in database
       if (userId) {
@@ -472,7 +500,8 @@ const AICreateMeal = () => {
           }
         }),
         instructions: data.instructions || "",
-        macros: data.macros || {
+        // Note: No macros - will be calculated by Edamam when meal is saved
+        macros: {
           calories: 0,
           protein: 0,
           fat: 0,
@@ -809,7 +838,7 @@ const AICreateMeal = () => {
                 <View key={idx} style={styles.ingredientRow}>
                   <TextInput
                     style={[styles.ingredientInput, styles.ingredientName, { borderColor: theme.border, color: theme.text, backgroundColor: theme.card }]}
-                    placeholder="Name"
+                    placeholder="Ingredient name"
                     placeholderTextColor={theme.subtext}
                     value={ingredient.name}
                     onChangeText={text => updateIngredient(idx, "name", text)}
@@ -817,7 +846,7 @@ const AICreateMeal = () => {
                   />
                   <TextInput
                     style={[styles.ingredientInput, styles.ingredientQuantity, { borderColor: theme.border, color: theme.text, backgroundColor: theme.card }]}
-                    placeholder="Qty"
+                    placeholder="Amount"
                     placeholderTextColor={theme.subtext}
                     value={ingredient.quantity}
                     onChangeText={text => updateIngredient(idx, "quantity", text)}
@@ -826,7 +855,7 @@ const AICreateMeal = () => {
                   />
                   <TextInput
                     style={[styles.ingredientInput, styles.ingredientUnit, { borderColor: theme.border, color: theme.text, backgroundColor: theme.card }]}
-                    placeholder="Unit"
+                    placeholder="Unit (cup, tsp, oz)"
                     placeholderTextColor={theme.subtext}
                     value={ingredient.unit}
                     onChangeText={text => updateIngredient(idx, "unit", text)}
@@ -841,6 +870,14 @@ const AICreateMeal = () => {
                   </TouchableOpacity>
                 </View>
               ))}
+              
+              {/* Example hint - moved below the inputs */}
+              <View style={[styles.exampleHint, { backgroundColor: theme.cardSecondary, borderColor: theme.border }]}>
+                <Text style={[styles.exampleText, { color: theme.textSecondary }]}>
+                  Examples: <Text style={{ fontWeight: '600' }}>flour, 2, cups</Text> • <Text style={{ fontWeight: '600' }}>salt, 1, tsp</Text> • <Text style={{ fontWeight: '600' }}>olive oil, 3, tbsp</Text>
+                </Text>
+              </View>
+              
               <TouchableOpacity 
                 onPress={addIngredient} 
                 style={[styles.addIngredientButton, { opacity: saving ? 0.6 : 1 }]}
@@ -1260,7 +1297,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   ingredientUnit: {
-    flex: 1,
+    width: 200,
   },
   removeButton: {
     padding: 8,
@@ -1275,6 +1312,19 @@ const styles = StyleSheet.create({
   addIngredientText: {
     fontWeight: "bold",
     fontSize: 16,
+  },
+  exampleHint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginBottom: 12,
+  },
+  exampleText: {
+    fontSize: 12,
+    marginLeft: 8,
+    flex: 1,
   },
   saveButton: {
     padding: 12,

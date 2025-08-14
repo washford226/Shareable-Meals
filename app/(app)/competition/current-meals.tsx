@@ -70,6 +70,18 @@ const CurrentMeals = () => {
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
+  
+  // Pagination state for current meals
+  const [currentPage, setCurrentPage] = useState<number>(0);
+  const [hasMoreMeals, setHasMoreMeals] = useState<boolean>(true);
+  const [loadingMore, setLoadingMore] = useState<boolean>(false);
+  const MEALS_PER_PAGE = 20; // Load 20 meals at a time
+  
+  // Pagination state for winners
+  const [winnersPage, setWinnersPage] = useState<number>(0);
+  const [hasMoreWinners, setHasMoreWinners] = useState<boolean>(true);
+  const [loadingMoreWinners, setLoadingMoreWinners] = useState<boolean>(false);
+  const WINNERS_PER_PAGE = 20;
   const router = useRouter();
   const { theme } = useTheme();
 
@@ -96,10 +108,20 @@ const CurrentMeals = () => {
     }
   }, [activeTab]);
 
-  // Fetch past winners
-  const fetchPastWinners = useCallback(async () => {
-    setWinnersLoading(true);
+  // Fetch past winners with pagination
+  const fetchPastWinners = useCallback(async (loadMore = false) => {
     try {
+      if (!loadMore) {
+        setWinnersLoading(true);
+        setWinnersPage(0);
+        setHasMoreWinners(true);
+      } else {
+        setLoadingMoreWinners(true);
+      }
+
+      const pageToLoad = loadMore ? winnersPage + 1 : 0;
+      const offset = pageToLoad * WINNERS_PER_PAGE;
+
       const { data, error } = await supabase
         .from("weekly_winners")
         .select(`
@@ -121,15 +143,18 @@ const CurrentMeals = () => {
             theme_id
           )
         `)
-        .order("declared_at", { ascending: false });
+        .order("declared_at", { ascending: false })
+        .range(offset, offset + WINNERS_PER_PAGE - 1);
 
       if (error) {
         throw error;
       }
 
+      const newWinners = data || [];
+
       // For each winner, fetch the theme name separately
       const formattedWinners: Winner[] = await Promise.all(
-        (data || []).map(async (winner: any) => {
+        newWinners.map(async (winner: any) => {
           let themeName = "Unknown Theme";
           
           if (winner.weekly_competitions?.theme_id) {
@@ -158,15 +183,26 @@ const CurrentMeals = () => {
         })
       );
 
-      setWinners(formattedWinners);
+      if (loadMore) {
+        setWinners(prevWinners => [...prevWinners, ...formattedWinners]);
+        setWinnersPage(pageToLoad);
+      } else {
+        setWinners(formattedWinners);
+        setWinnersPage(0);
+      }
+
+      // Check if we have more winners to load
+      setHasMoreWinners(newWinners.length === WINNERS_PER_PAGE);
+
     } catch (error) {
       console.error("Error fetching past winners:", error);
       Alert.alert("Error", "Failed to load past winners. Please try again.");
     } finally {
       setWinnersLoading(false);
+      setLoadingMoreWinners(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [winnersPage]);
 
   // Fetch the latest competition from Supabase
   const fetchLatestCompetition = useCallback(async (showLoading = true) => {
@@ -254,9 +290,19 @@ const CurrentMeals = () => {
     }
   }, []);
 
-  // Fetch meals for the given competition from Supabase
-  const fetchMeals = async (competitionId: number, showLoading = true) => {
+  // Fetch meals for the given competition from Supabase with pagination
+  const fetchMeals = async (competitionId: number, showLoading = true, loadMore = false) => {
     try {
+      if (showLoading && !loadMore) {
+        setCurrentPage(0);
+        setHasMoreMeals(true);
+      } else if (loadMore) {
+        setLoadingMore(true);
+      }
+
+      const pageToLoad = loadMore ? currentPage + 1 : 0;
+      const offset = pageToLoad * MEALS_PER_PAGE;
+
       const { data, error } = await supabase
         .from("competition_submissions")
         .select(`
@@ -280,15 +326,18 @@ const CurrentMeals = () => {
             username
           )
         `)
-        .eq("competition_id", competitionId);
+        .eq("competition_id", competitionId)
+        .range(offset, offset + MEALS_PER_PAGE - 1);
 
       if (error) {
         throw error;
       }
 
+      const newSubmissions = data || [];
+
       // Process the data to include vote counts
       const mealsWithVotes = await Promise.all(
-        (data || []).map(async (submission: any) => {
+        newSubmissions.map(async (submission: any) => {
           const { data: voteData } = await supabase
             .from("meal_votes")
             .select("vote_id")
@@ -315,14 +364,25 @@ const CurrentMeals = () => {
         })
       );
 
-      setMeals(mealsWithVotes);
+      if (loadMore) {
+        setMeals(prevMeals => [...prevMeals, ...mealsWithVotes]);
+        setCurrentPage(pageToLoad);
+      } else {
+        setMeals(mealsWithVotes);
+        setCurrentPage(0);
+      }
+
+      // Check if we have more meals to load
+      setHasMoreMeals(newSubmissions.length === MEALS_PER_PAGE);
+
     } catch (error) {
       console.error("Error fetching meals:", error);
       setError("Failed to load meals. Please try again.");
     } finally {
-      if (showLoading) {
+      if (showLoading && !loadMore) {
         setLoading(false);
       }
+      setLoadingMore(false);
       setRefreshing(false);
     }
   };
@@ -381,6 +441,18 @@ const CurrentMeals = () => {
       setVoting(false);
     }
   };
+
+  const loadMoreMeals = useCallback(() => {
+    if (!loadingMore && hasMoreMeals && competitionId) {
+      fetchMeals(competitionId, false, true);
+    }
+  }, [loadingMore, hasMoreMeals, competitionId]);
+
+  const loadMoreWinners = useCallback(() => {
+    if (!loadingMoreWinners && hasMoreWinners) {
+      fetchPastWinners(true);
+    }
+  }, [loadingMoreWinners, hasMoreWinners, fetchPastWinners]);
 
   useEffect(() => {
     fetchLatestCompetition();
@@ -830,6 +902,24 @@ const CurrentMeals = () => {
           data={meals}
           keyExtractor={(item) => item.meal_id.toString()}
           numColumns={2}
+          onEndReached={loadMoreMeals}
+          onEndReachedThreshold={0.3}
+          ListFooterComponent={() => (
+            loadingMore ? (
+              <View style={styles.loadingMoreContainer}>
+                <ActivityIndicator size="small" color={theme.primary} />
+                <Text style={[styles.loadingMoreText, { color: theme.subtext }]}>
+                  Loading more meals...
+                </Text>
+              </View>
+            ) : !hasMoreMeals && meals.length > 0 ? (
+              <View style={styles.endOfListContainer}>
+                <Text style={[styles.endOfListText, { color: theme.subtext }]}>
+                  All competition meals loaded!
+                </Text>
+              </View>
+            ) : null
+          )}
           renderItem={({ item }) => (
             <TouchableOpacity 
               style={[styles.mealItem, { backgroundColor: theme.card, borderColor: theme.border }]}
@@ -1010,6 +1100,24 @@ const CurrentMeals = () => {
       <FlatList
         data={winners}
         keyExtractor={(item) => item.winner_id.toString()}
+        onEndReached={loadMoreWinners}
+        onEndReachedThreshold={0.3}
+        ListFooterComponent={() => (
+          loadingMoreWinners ? (
+            <View style={styles.loadingMoreContainer}>
+              <ActivityIndicator size="small" color={theme.primary} />
+              <Text style={[styles.loadingMoreText, { color: theme.subtext }]}>
+                Loading more winners...
+              </Text>
+            </View>
+          ) : !hasMoreWinners && winners.length > 0 ? (
+            <View style={styles.endOfListContainer}>
+              <Text style={[styles.endOfListText, { color: theme.subtext }]}>
+                All past winners loaded!
+              </Text>
+            </View>
+          ) : null
+        )}
         renderItem={({ item }) => (
           <TouchableOpacity 
             style={[styles.winnerCard, { backgroundColor: theme.card }]}
@@ -1689,6 +1797,28 @@ const styles = StyleSheet.create({
   tagText: {
     fontSize: 10,
     fontWeight: '500',
+  },
+
+  // Pagination styles
+  loadingMoreContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 20,
+    gap: 8,
+  },
+  loadingMoreText: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  endOfListContainer: {
+    alignItems: 'center',
+    paddingVertical: 20,
+  },
+  endOfListText: {
+    fontSize: 14,
+    fontWeight: '500',
+    fontStyle: 'italic',
   },
 });
 

@@ -11,15 +11,7 @@ const SignUpScreen: React.FC = () => {
   const router = useRouter();
   const { theme } = useTheme();
 
-  // Safety check for theme
-  if (!theme) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator size="large" />
-      </View>
-    );
-  }
-
+  // All hooks must be called before any conditional returns
   const [username, setUsername] = useState("");
   const [isUsernameAvailable, setIsUsernameAvailable] = useState<null | boolean>(null);
   const [checkingUsername, setCheckingUsername] = useState(false);
@@ -85,6 +77,15 @@ const SignUpScreen: React.FC = () => {
     }, 500);
     return () => clearTimeout(delayDebounce);
   }, [username]);
+
+  // Safety check for theme - now after all hooks
+  if (!theme) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator size="large" />
+      </View>
+    );
+  }
 
   // Validation functions
   const validateEmail = (email: string) => {

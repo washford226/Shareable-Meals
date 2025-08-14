@@ -67,6 +67,13 @@ const OtherMeals: React.FC = () => {
   // Modal state for enhanced pickers
   const [showDietaryModal, setShowDietaryModal] = useState(false);
   const [showCuisineModal, setShowCuisineModal] = useState(false);
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState<number>(0);
+  const [hasMoreMeals, setHasMoreMeals] = useState<boolean>(true);
+  const [loadingMore, setLoadingMore] = useState<boolean>(false);
+  const [filteredMealsReady, setFilteredMealsReady] = useState<boolean>(false);
+  const MEALS_PER_PAGE = 20; // Load 20 meals at a time
 
   const { theme } = useTheme();
   const router = useRouter();
@@ -111,19 +118,33 @@ const OtherMeals: React.FC = () => {
     }
   };
 
-  // Fetch all public meals from Supabase
-  const fetchMeals = useCallback(async (showLoading = true) => {
-    if (showLoading) {
-      setLoading(true);
-    }
-    setError(null);
-    
+  // Fetch all public meals from Supabase with pagination
+  const fetchMeals = useCallback(async (showLoading = true, loadMore = false) => {
     try {
-      // 1. Fetch all public meals
+      if (showLoading && !loadMore) {
+        setLoading(true);
+        setCurrentPage(0);
+        setHasMoreMeals(true);
+      } else if (loadMore) {
+        setLoadingMore(true);
+      }
+      
+      if (!loadMore) {
+        setFilteredMealsReady(false);
+      }
+      
+      setError(null);
+      
+      const pageToLoad = loadMore ? currentPage + 1 : 0;
+      const offset = pageToLoad * MEALS_PER_PAGE;
+
+      // 1. Fetch public meals with pagination
       let query = supabase
         .from("meals")
         .select("*")
-        .eq("visibility", true);
+        .eq("visibility", true)
+        .order("id", { ascending: false }) // Order by newest first
+        .range(offset, offset + MEALS_PER_PAGE - 1);
 
       if (dietaryRestrictionFilter) query = query.eq("dietary_restrictions", dietaryRestrictionFilter);
       if (aiFilter === "ai") query = query.eq("created_by_ai", true);
@@ -133,8 +154,10 @@ const OtherMeals: React.FC = () => {
       const { data: mealsData, error: mealsError } = await query;
       if (mealsError) throw mealsError;
 
-      // 2. Fetch all user_profiles for those user_ids
-      const userIds = Array.from(new Set((mealsData || []).map(meal => meal.user_id)));
+      const newMeals = mealsData || [];
+
+      // 2. Fetch user profiles for the new meals
+      const userIds = Array.from(new Set(newMeals.map(meal => meal.user_id)));
       let userIdToUsername: Record<string, string> = {};
       if (userIds.length > 0) {
         const { data: profilesData, error: profilesError } = await supabase
@@ -149,8 +172,8 @@ const OtherMeals: React.FC = () => {
         });
       }
 
-      // 3. Fetch review counts for all meals
-      const mealIds = (mealsData || []).map(meal => meal.id);
+      // 3. Fetch review counts for the new meals
+      const mealIds = newMeals.map(meal => meal.id);
       let mealIdToReviewCount: Record<string, number> = {};
       if (mealIds.length > 0) {
         const { data: reviewCounts, error: reviewError } = await supabase
@@ -167,29 +190,36 @@ const OtherMeals: React.FC = () => {
       }
 
       // 4. Combine meals, usernames, and review counts
-      const mealsWithUsernames = (mealsData || []).map(meal => ({
+      const mealsWithUsernames = newMeals.map(meal => ({
         ...meal,
         userName: userIdToUsername[meal.user_id] || "Unknown",
         averageRating: 0,
         reviewCount: mealIdToReviewCount[meal.id] || 0,
       }));
 
-      // 5. Sort by review count (descending)
-      mealsWithUsernames.sort((a, b) => b.reviewCount - a.reviewCount);
-
-      setMeals(mealsWithUsernames);
-      setFilteredMeals(mealsWithUsernames);
+      if (loadMore) {
+        setMeals(prevMeals => [...prevMeals, ...mealsWithUsernames]);
+        setCurrentPage(pageToLoad);
+      } else {
+        setMeals(mealsWithUsernames);
+        setCurrentPage(0);
+      }
+      
+      // Check if we have more meals to load
+      setHasMoreMeals(newMeals.length === MEALS_PER_PAGE);
       setRetryCount(0);
+      
     } catch (error) {
       console.error("Error fetching meals:", error);
       setError("Failed to load meals. Please check your connection and try again.");
     } finally {
-      if (showLoading) {
+      if (showLoading && !loadMore) {
         setLoading(false);
       }
+      setLoadingMore(false);
       setRefreshing(false);
     }
-  }, [dietaryRestrictionFilter, aiFilter, cuisineFilter]);
+  }, [dietaryRestrictionFilter, aiFilter, cuisineFilter, currentPage]);
 
   const handleRetry = useCallback(async () => {
     const newRetryCount = retryCount + 1;
@@ -209,7 +239,16 @@ const OtherMeals: React.FC = () => {
     fetchMeals(false);
   }, [fetchMeals]);
 
+  const loadMoreMeals = useCallback(() => {
+    if (!loadingMore && hasMoreMeals && filteredMealsReady) {
+      fetchMeals(false, true);
+    }
+  }, [loadingMore, hasMoreMeals, filteredMealsReady, fetchMeals]);
+
   useEffect(() => {
+    // Reset pagination when filters change
+    setCurrentPage(0);
+    setHasMoreMeals(true);
     fetchMeals();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dietaryRestrictionFilter, aiFilter, cuisineFilter]);
@@ -245,7 +284,16 @@ const OtherMeals: React.FC = () => {
     });
 
     setFilteredMeals(filtered);
-  }, [searchQuery, filters, meals]);
+    // Only set filteredMealsReady to true if we're not in initial loading state
+    if (!loading || meals.length > 0) {
+      setFilteredMealsReady(true);
+    }
+    
+    // Auto-load more if we have few visible results and more data is available
+    if (filtered.length < 10 && hasMoreMeals && !loadingMore && meals.length > 0) {
+      setTimeout(() => loadMoreMeals(), 100); // Small delay to avoid rapid calls
+    }
+  }, [searchQuery, filters, meals, hasMoreMeals, loadingMore, loadMoreMeals, loading]);
 
   const onMealSelect = (meal: Meal) => {
     router.push(`/other-meals/${meal.id}/other-meals-info`);
@@ -282,7 +330,7 @@ const OtherMeals: React.FC = () => {
     setSearchQuery(text);
   };
 
-  if (loading) {
+  if (loading && meals.length === 0) {
     return (
       <View style={[styles.centerContent, { backgroundColor: theme.background }]}>
         <ActivityIndicator size="large" color={theme.primary} />
@@ -416,6 +464,24 @@ const OtherMeals: React.FC = () => {
             tintColor={theme.primary}
           />
         }
+        onEndReached={loadMoreMeals}
+        onEndReachedThreshold={0.3}
+        ListFooterComponent={() => (
+          loadingMore ? (
+            <View style={styles.loadingMoreContainer}>
+              <ActivityIndicator size="small" color={theme.primary} />
+              <Text style={[styles.loadingMoreText, { color: theme.subtext }]}>
+                Loading more meals...
+              </Text>
+            </View>
+          ) : !hasMoreMeals && filteredMeals.length > 0 ? (
+            <View style={styles.endOfListContainer}>
+              <Text style={[styles.endOfListText, { color: theme.subtext }]}>
+                You&apos;ve reached the end of available meals!
+              </Text>
+            </View>
+          ) : null
+        )}
         renderItem={({ item }) => (
           <TouchableOpacity
             style={[styles.mealCard, { backgroundColor: theme.card, shadowColor: theme.shadow }]}
@@ -1447,6 +1513,27 @@ const styles = StyleSheet.create({
   optionDescription: {
     fontSize: 13,
     opacity: 0.7,
+  },
+  // Pagination styles
+  loadingMoreContainer: {
+    padding: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadingMoreText: {
+    marginTop: 8,
+    fontSize: 14,
+    textAlign: 'center',
+  },
+  endOfListContainer: {
+    padding: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  endOfListText: {
+    fontSize: 14,
+    textAlign: 'center',
+    fontStyle: 'italic',
   },
 });
 

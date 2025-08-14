@@ -13,8 +13,15 @@ export default function Index() {
 
   const checkAuthStatus = async () => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      setIsAuthenticated(!!session);
+      // Use getSession instead of getUser for faster auth check
+      const { data: { session }, error } = await supabase.auth.getSession();
+      
+      if (error) {
+        console.error("Auth check error:", error);
+        setIsAuthenticated(false);
+      } else {
+        setIsAuthenticated(!!session);
+      }
     } catch (error) {
       console.error("Error checking auth status:", error);
       setIsAuthenticated(false);
@@ -25,8 +32,8 @@ export default function Index() {
 
   if (isLoading) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator size="large" color="#000A68" />
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#000A68' }}>
+        <ActivityIndicator size="large" color="#FFFFFF" />
       </View>
     );
   }

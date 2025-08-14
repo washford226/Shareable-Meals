@@ -40,7 +40,7 @@ interface CompetitionMeal {
   visibility?: boolean;
   created_at?: string;
   forever_invis?: boolean;
-  AI_Macros?: boolean; 
+  Edamam_macros?: boolean; 
   ingredients?: MealIngredient[];
 }
 
@@ -572,11 +572,12 @@ const CompetitionMealDetails = () => {
           <View style={styles.cardHeader}>
             <Ionicons name="nutrition" size={20} color={theme.primary} />
             <Text style={[styles.cardTitle, { color: theme.text }]}>Nutrition Facts</Text>
-            {meal.AI_Macros && (
-              <View style={[styles.aiMacroTag, { backgroundColor: theme.aiAccent }]}>
-                <Ionicons name="sparkles" size={12} color={theme.buttonText} />
-                <Text style={[styles.aiMacroTagText, { color: theme.buttonText }]}>AI</Text>
-              </View>
+            {meal.Edamam_macros && (
+              <Image
+                source={require('../../../../assets/images/Edamam_Badge_Transparent.png')}
+                style={styles.edamamLogo}
+                resizeMode="contain"
+              />
             )}
           </View>
           <View style={styles.nutritionGrid}>
@@ -1414,6 +1415,13 @@ const styles = StyleSheet.create({
     elevation: 2,
     marginTop: 8,
     marginBottom: 16,
+  },
+  
+  // Edamam Logo
+  edamamLogo: {
+    width: 200,
+    height: 40,
+    marginLeft: 8,
   },
 });
 

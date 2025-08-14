@@ -24,7 +24,8 @@ export interface Meal {
   cuisine?: string; // Optional field for cuisine type
   ingredients?: MealIngredient[]; // Optional array of ingredients from meal_ingredients table
   isMacroMeal?: boolean; // Flag to identify meals from macro_meals table
-  AI_Macros?: boolean; // Indicates if AI was used to calculate macros
+  AI_Macros?: boolean; // Indicates if AI was used to calculate macros (deprecated, use Edamam_macros)
+  Edamam_macros?: boolean; // Indicates if Edamam was used to calculate macros
 }
 
 export interface MealIngredient {

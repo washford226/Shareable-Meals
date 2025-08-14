@@ -22,7 +22,14 @@ import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as FileSystem from 'expo-file-system';
 import { Ionicons } from '@expo/vector-icons';
-import { checkScannerUsage, incrementScannerUsage, getScannerUsageStatus } from '../../../utils/aiUsageUtils';
+import { 
+  analyzeImageNutrition, 
+  convertImageNutritionToMeal, 
+  formatImageNutritionDisplay,
+  validateImageNutritionData,
+  ImageNutritionData 
+} from '../../../utils/edamamImageUtils';
+import { responsiveFontSizes, getResponsivePadding, getResponsiveMargin, isSmallScreen } from '../../../utils/responsiveUtils';
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
 const SCREEN_HEIGHT = Dimensions.get("window").height;
@@ -44,9 +51,8 @@ const MealPlanCalendar: React.FC = () => {
   // Meal scanning states
   const [mealScanModalVisible, setMealScanModalVisible] = useState(false);
   const [scanningMeal, setScanningMeal] = useState(false);
-  const [scannedMealData, setScannedMealData] = useState<any>(null);
+  const [scannedMealData, setScannedMealData] = useState<ImageNutritionData | null>(null);
   const [selectedScanDate, setSelectedScanDate] = useState<string | null>(null);
-  const [scannerUsage, setScannerUsage] = useState<{ used: number; remaining: number; total: number } | null>(null);
 
   const startOfCurrentWeek = startOfWeek(today, { weekStartsOn: 0 });
 
@@ -191,7 +197,7 @@ const MealPlanCalendar: React.FC = () => {
         fat: macroMeal.fat || 0,
         picture: null, // Macro meals don't have pictures
         meal_type: "Scanned", // Special type for scanned meals
-        userName: "AI Scanner",
+        userName: "Edamam Food Scanner",
         visibility: false,
         averageRating: 0,
         reviewCount: 0,
@@ -267,12 +273,6 @@ const MealPlanCalendar: React.FC = () => {
     await fetchMealsForWeek(startOfCurrentWeek, true);
   };
 
-  // Load scanner usage status
-  const loadScannerUsage = async () => {
-    const usage = await getScannerUsageStatus();
-    setScannerUsage(usage);
-  };
-
   const deleteAllMealsForDate = async (date: string) => {
     try {
       const userId = await getCurrentUserId();
@@ -329,7 +329,6 @@ const MealPlanCalendar: React.FC = () => {
 
   useEffect(() => {
     fetchMealsForWeek(startOfCurrentWeek);
-    loadScannerUsage();
   }, []); // Only run on mount
 
   useEffect(() => {
@@ -503,17 +502,6 @@ const MealPlanCalendar: React.FC = () => {
   };
 
   const openCameraForMealScan = async (dateKey: string) => {
-    // Check usage limit first
-    const usageCheck = await checkScannerUsage();
-    if (!usageCheck.canUse) {
-      Alert.alert(
-        'Scanner Limit Reached',
-        usageCheck.message || 'You have reached your daily scanner limit.',
-        [{ text: 'OK' }]
-      );
-      return;
-    }
-
     const hasPermission = await requestCameraPermissions();
     if (!hasPermission) return;
 
@@ -546,61 +534,59 @@ const MealPlanCalendar: React.FC = () => {
 
   const scanMealImage = async (base64Image: string, dateKey: string) => {
     setScanningMeal(true);
+    setSelectedScanDate(dateKey);
     
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
+      console.log(`Analyzing meal image with Edamam Food Vision - Size: ${Math.round(base64Image.length * 0.75 / 1024)} KB`);
+
+      // Use the new Edamam Food Vision API
+      const result = await analyzeImageNutrition(base64Image, false);
+      
+      if ('error' in result) {
+        throw new Error(result.details);
+      }
+
+      if (!validateImageNutritionData(result.nutrition)) {
+        throw new Error('Could not detect valid nutrition information from this image. Please try a different image with clearer food items.');
+      }
+
+      // Save the meal to macro_meals table (for backward compatibility with existing nutrition screens)
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
         throw new Error('Not authenticated');
       }
 
-      console.log(`Scanning meal image - Size: ${Math.round(base64Image.length * 0.75 / 1024)} KB`);
+      const { error: insertError } = await supabase
+        .from('macro_meals')
+        .insert([{
+          user_id: user.id,
+          meal_name: result.nutrition.foodLabel,
+          calories: result.nutrition.calories,
+          protein: result.nutrition.protein,
+          carbs: result.nutrition.carbohydrates,
+          fat: result.nutrition.fat,
+          created_at: `${dateKey}T12:00:00.000Z`, // Set to noon of the selected date
+          ingredients: result.nutrition.ingredients.join(', '),
+          diet_labels: result.nutrition.dietLabels.join(', '),
+          health_labels: result.nutrition.healthLabels.join(', '),
+          cautions: result.nutrition.cautions.join(', ')
+        }]);
 
-      // Create timeout promise
-      const timeout = (ms: number) => 
-        new Promise<never>((_, reject) => 
-          setTimeout(() => reject(new Error('Request timed out - please try again')), ms)
-        );
-
-      // Race between fetch and timeout
-      const response = await Promise.race([
-        fetch('https://zcnavyhdotofxjkxgcyl.supabase.co/functions/v1/Meal_Scanner', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${session.access_token}`,
-          },
-          body: JSON.stringify({
-            image: base64Image,
-            date: dateKey,
-          }),
-        }),
-        timeout(30000) // 30 second timeout
-      ]);
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      if (insertError) {
+        console.error('Error saving meal to database:', insertError);
+        throw new Error('Failed to save meal data');
       }
-
-      const result = await response.json();
-      
-      if (result.success && result.data) {
-        // Increment usage count on successful scan
-        await incrementScannerUsage();
-        // Update local usage display
-        await loadScannerUsage();
         
-        setScannedMealData(result.data);
-        setMealScanModalVisible(true);
-        // Refresh the meals for this date to show the new macro meal
-        await fetchMealsForDate(dateKey);
-        console.log(`Successfully analyzed meal nutrition:`, result.data);
-      } else {
-        throw new Error(result.error || 'Failed to analyze meal image');
-      }
+      setScannedMealData(result.nutrition);
+      setMealScanModalVisible(true);
+      // Refresh the meals for this date to show the new macro meal
+      await fetchMealsForDate(dateKey);
+      console.log(`Successfully analyzed meal nutrition with Edamam:`, result.nutrition);
+      
     } catch (error) {
       console.error('Error scanning meal image:', error);
       Alert.alert(
-        'Meal Scan Failed',
+        'Meal Analysis Failed',
         error instanceof Error ? error.message : 'Failed to analyze meal nutrition. Please try again.',
         [{ text: 'OK' }]
       );
@@ -668,8 +654,8 @@ const MealPlanCalendar: React.FC = () => {
             onPress={() => {
               // Show enhanced modal to select date for meal scan
               Alert.alert(
-                "🤖 AI Meal Scanner",
-                `Scan a meal photo to automatically detect nutrition data!\n\nScans remaining: ${scannerUsage?.remaining || 0}/${scannerUsage?.total || 3}`,
+                "📸 Edamam Food Scanner",
+                "Scan a meal photo to automatically detect nutrition data using Edamam Food Vision!",
                 [
                   { 
                     text: "📅 Today", 
@@ -688,7 +674,7 @@ const MealPlanCalendar: React.FC = () => {
                 ]
               );
             }}
-            disabled={scanningMeal || (scannerUsage?.remaining === 0)}
+            disabled={scanningMeal}
           >
             <View style={styles.scanButtonWrapper}>
               {scanningMeal ? (
@@ -706,20 +692,8 @@ const MealPlanCalendar: React.FC = () => {
                   </View>
                   <View style={styles.scanButtonContent}>
                     <Text style={[styles.headerButtonText, { color: theme.warning, fontSize: 15 }]}>
-                      AI Scanner
+                      Edamam Food Scanner
                     </Text>
-                    {scannerUsage && (
-                      <View style={[styles.usageContainer, { backgroundColor: theme.warning }]}>
-                        <Text style={[styles.usageText, { color: theme.buttonText }]}>
-                          {scannerUsage.remaining}/{scannerUsage.total} left
-                        </Text>
-                      </View>
-                    )}
-                    {scannerUsage?.remaining === 0 && (
-                      <Text style={[styles.limitReachedText, { color: theme.danger }]}>
-                        Daily limit reached
-                      </Text>
-                    )}
                   </View>
                 </>
               )}
@@ -840,7 +814,7 @@ const MealPlanCalendar: React.FC = () => {
                             </View>
                           </View>
 
-                          {/* AI Scanner Badge for macro meals */}
+                          {/* Edamam Food Scanner Badge for macro meals */}
                           {meal.isMacroMeal && (
                             <View style={[styles.aiScannerBadge, { backgroundColor: theme.aiAccent }]}>
                               <View style={styles.aiScannerBadgeContent}>
@@ -927,7 +901,7 @@ const MealPlanCalendar: React.FC = () => {
                         </View>
                         <View style={styles.nutritionRow}>
                           <View style={[styles.nutritionColumn, styles.caloriesColumn]}>
-                            <Text style={[styles.nutritionValue, { color: theme.primary, fontSize: 20, fontWeight: '800' }]}>
+                            <Text style={[styles.nutritionValue, { color: theme.primary, fontSize: responsiveFontSizes.h4, fontWeight: '800' }]}>
                               {totals.calories}
                             </Text>
                             <Text style={[styles.nutritionLabel, { color: theme.textSecondary }]}>calories</Text>
@@ -1024,11 +998,11 @@ const MealPlanCalendar: React.FC = () => {
         <View style={styles.modalContainer}>
           <View style={[styles.scanModalContent, { backgroundColor: theme.card }]}>
             <View style={styles.scanModalHeader}>
-              <View style={[styles.scanModalIcon, { backgroundColor: theme.aiAccent }]}>
-                <Ionicons name="sparkles" size={24} color={theme.buttonText} />
+              <View style={[styles.scanModalIcon, { backgroundColor: theme.success }]}>
+                <Ionicons name="leaf" size={24} color={theme.buttonText} />
               </View>
               <Text style={[styles.modalTitle, { color: theme.text }]}>
-                🤖 AI Meal Analysis Complete!
+                📸 Edamam Food Analysis Complete!
               </Text>
               <Text style={[styles.scanModalSubtitle, { color: theme.textSecondary }]}>
                 Your meal has been analyzed and nutrition data saved
@@ -1041,7 +1015,7 @@ const MealPlanCalendar: React.FC = () => {
                   <View style={styles.scanResultHeader}>
                     <Ionicons name="restaurant" size={20} color={theme.primary} />
                     <Text style={[styles.scanResultItemName, { color: theme.text }]}>
-                      {scannedMealData.meal_name || 'Analyzed Meal'}
+                      {scannedMealData.foodLabel || 'Analyzed Meal'}
                     </Text>
                   </View>
                   
@@ -1065,7 +1039,7 @@ const MealPlanCalendar: React.FC = () => {
                     <View style={[styles.nutritionGridItem, { backgroundColor: theme.carbs + '20' }]}>
                       <Ionicons name="leaf" size={16} color={theme.carbs} />
                       <Text style={[styles.nutritionGridValue, { color: theme.carbs }]}>
-                        {scannedMealData.carbs || 'N/A'}g
+                        {scannedMealData.carbohydrates || 'N/A'}g
                       </Text>
                       <Text style={[styles.nutritionGridLabel, { color: theme.carbs }]}>carbs</Text>
                     </View>
@@ -1085,6 +1059,16 @@ const MealPlanCalendar: React.FC = () => {
                   <Text style={[styles.scanSuccessText, { color: theme.success }]}>
                     Meal data has been automatically added to your daily nutrition totals!
                   </Text>
+                </View>
+                
+                {/* Edamam Attribution */}
+                <View style={[styles.edamamAttribution, { backgroundColor: theme.cardSecondary, borderColor: theme.border }]}>
+                  <Text style={[styles.attributionText, { color: theme.textSecondary }]}>
+                    Nutrition analysis powered by
+                  </Text>
+                  <View style={styles.edamamLogoContainer}>
+                    <Text style={[styles.edamamLogoText, { color: theme.success }]}>EDAMAM</Text>
+                  </View>
                 </View>
               </ScrollView>
             )}
@@ -1194,10 +1178,10 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   headerButtonIcon: {
-    fontSize: 20,
+    fontSize: responsiveFontSizes.h4,
   },
   headerButtonText: {
-    fontSize: 16,
+    fontSize: responsiveFontSizes.button,
     fontWeight: '700',
   },
   initialLoadingContainer: {
@@ -1249,16 +1233,16 @@ mealScanButtonText: {
     flex: 1, // Ensure equal width for each column
   },
   nutritionLabel: {
-    fontSize: 14,
+    fontSize: responsiveFontSizes.nutritionLabel,
     fontWeight: "bold",
     marginBottom: 4, // Add spacing between the label and the value
   },
   nutritionValue: {
-    fontSize: 16,
+    fontSize: responsiveFontSizes.nutritionValue,
     fontWeight: "bold",
   },
   nutritionTitle: {
-    fontSize: 16,
+    fontSize: responsiveFontSizes.h5,
     fontWeight: "bold",
     textAlign: "center",
     marginBottom: 8, // Add spacing between the title and the nutrition rows
@@ -1576,7 +1560,7 @@ mealScanButtonText: {
     elevation: 8,
   },
   modalTitle: { 
-    fontSize: 20, 
+    fontSize: responsiveFontSizes.h3, 
     fontWeight: "800", 
     marginBottom: 8,
     textAlign: 'center',
@@ -1833,6 +1817,29 @@ mealScanButtonText: {
     shadowOpacity: 0.1,
     shadowRadius: 8,
     elevation: 4,
+  },
+  edamamAttribution: {
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginTop: 12,
+    gap: 6,
+  },
+  attributionText: {
+    fontSize: 12,
+    fontStyle: 'italic',
+    textAlign: 'center',
+  },
+  edamamLogoContainer: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+  },
+  edamamLogoText: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    letterSpacing: 1,
   },
 });
 

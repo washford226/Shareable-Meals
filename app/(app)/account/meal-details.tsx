@@ -38,6 +38,7 @@ interface MealDetails {
   created_at: string;
   user_id: string;
   creator_username?: string;
+  Edamam_macros?: boolean;
 }
 
 interface MealIngredient {
@@ -542,6 +543,20 @@ const AdminMealDetailsScreen: React.FC = () => {
             </View>
           </View>
         </View>
+
+        {/* Edamam Attribution - Only show when nutrition is calculated with Edamam (not AI) */}
+        {meal.Edamam_macros && (
+          <View style={styles.attributionContainer}>
+            <Image 
+              source={require("../../../assets/images/Edamam_Badge_Transparent.png")}
+              style={styles.attributionBadge}
+              resizeMode="contain"
+            />
+            <Text style={[styles.attributionText, { color: theme.textSecondary }]}>
+              Nutrition data powered by Edamam
+            </Text>
+          </View>
+        )}
 
         {/* Additional Info Card */}
         <View style={[styles.additionalCard, { backgroundColor: theme.card }]}>
@@ -1238,6 +1253,24 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     marginBottom: 12,
+  },
+  attributionContainer: {
+    alignItems: 'center',
+    marginVertical: 12,
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#e0e0e0',
+    marginHorizontal: 20,
+  },
+  attributionBadge: {
+    width: 100,
+    height: 35,
+    marginBottom: 6,
+  },
+  attributionText: {
+    fontSize: 11,
+    fontStyle: 'italic',
+    textAlign: 'center',
   },
 });
 

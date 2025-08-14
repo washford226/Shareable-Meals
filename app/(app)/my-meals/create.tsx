@@ -18,6 +18,12 @@ import * as ImagePicker from "expo-image-picker";
 import { useTheme } from "../../../context/ThemeContext";
 import { useRouter } from "expo-router";
 import { supabase } from "utils/supabase";
+import { 
+  calculateAndSaveMealNutrition, 
+  formatNutritionDisplay, 
+  getIngredientSuggestions,
+  type IngredientInput 
+} from "utils/edamamUtils";
 import { dietaryCreateOptionsEnhanced, cuisineOptionsEnhanced } from "../../../constants/dietaryOptions";
 
 const CreateMealScreen = () => {
@@ -39,7 +45,7 @@ const CreateMealScreen = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
   const [uploadingImage, setUploadingImage] = useState(false);
-  const [useAIMacros, setUseAIMacros] = useState(true);
+  const [useEdamamCalculation, setUseEdamamCalculation] = useState(true);
   const [manualMacros, setManualMacros] = useState({
     calories: "",
     protein: "",
@@ -67,18 +73,20 @@ const CreateMealScreen = () => {
         mediaTypes: 'images',
         allowsEditing: true,
         aspect: [4, 3],
-        quality: 0.8,
-        base64: true,
+        quality: 0.6, // Reduce quality to manage file size
+        base64: true, // Get base64 for storing in database
       });
 
-      if (!result.canceled && result.assets[0]) {
+      if (!result.canceled && result.assets && result.assets.length > 0) {
         const asset = result.assets[0];
-        if (asset.base64) {
-          const imageUri = `data:image/jpeg;base64,${asset.base64}`;
-          setMealPicture(imageUri);
-        } else {
-          Alert.alert('Error', 'Failed to process the selected image. Please try again.');
+        
+        if (!asset.base64) {
+          throw new Error('Failed to get image data');
         }
+        
+        // Create data URI from base64
+        const dataUri = `data:image/jpeg;base64,${asset.base64}`;
+        setMealPicture(dataUri);
       }
     } catch (error) {
       console.error("Error picking image:", error);
@@ -126,8 +134,8 @@ const CreateMealScreen = () => {
       errors.push("Servings must be a positive number");
     }
 
-    // Validate manual macros if not using AI
-    if (!useAIMacros) {
+    // Validate manual macros if not using Edamam
+    if (!useEdamamCalculation) {
       if (!manualMacros.calories.trim()) errors.push("Calories is required when using manual macros");
       if (!manualMacros.protein.trim()) errors.push("Protein is required when using manual macros");
       if (!manualMacros.fat.trim()) errors.push("Fat is required when using manual macros");
@@ -144,7 +152,7 @@ const CreateMealScreen = () => {
     }
     
     return errors;
-  }, [mealName, mealDescription, ingredients, mealServings, useAIMacros, manualMacros]);
+  }, [mealName, mealDescription, ingredients, mealServings, useEdamamCalculation, manualMacros]);
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -162,7 +170,7 @@ const CreateMealScreen = () => {
       setMealDietaryRestriction("");
       setMealCuisine("");
       setMealServings("1");
-      setUseAIMacros(true);
+      setUseEdamamCalculation(true);
       setManualMacros({
         calories: "",
         protein: "",
@@ -231,12 +239,13 @@ const CreateMealScreen = () => {
           servings: mealServings ? parseInt(mealServings) : 1,
           cuisine: mealCuisine || null,
           picture: pictureData,
-          AI_Macros: useAIMacros,
+          Edamam_Calculation: useEdamamCalculation,
+          Edamam_macros: useEdamamCalculation, // Set to true if using Edamam for calculation
           created_by: username,
         };
 
-        // Add manual macros if not using AI
-        if (!useAIMacros) {
+        // Add manual macros if not using Edamam
+        if (!useEdamamCalculation) {
           mealData.calories = Math.round(parseFloat(manualMacros.calories));
           mealData.protein = Math.round(parseFloat(manualMacros.protein));
           mealData.fat = Math.round(parseFloat(manualMacros.fat));
@@ -271,30 +280,49 @@ const CreateMealScreen = () => {
           throw ingredientsError;
         }
 
-        // 3. Calculate nutrition data using AI if enabled
-        if (useAIMacros) {
+        // 3. Calculate nutrition data using Edamam if enabled
+        if (useEdamamCalculation) {
           try {
-            // Get the current session to include in the function call
-            const { data: { session } } = await supabase.auth.getSession();
+            console.log("🥗 Calculating nutrition with Edamam for meal:", mealId);
             
-            const { error: nutritionError } = await supabase.functions.invoke('calculate-ai-nutrition', {
-              body: { meal_id: mealId },
-              headers: session?.access_token ? {
-                Authorization: `Bearer ${session.access_token}`
-              } : undefined
-            });
+            // Use the new Edamam nutrition calculation
+            const nutritionData = await calculateAndSaveMealNutrition(mealId, ingredients);
             
-            if (nutritionError) {
-              console.warn("Failed to calculate nutrition:", nutritionError);
-              // Don't fail the whole process if nutrition calculation fails
+            console.log("✅ Edamam nutrition calculation successful:", nutritionData);
+            
+            // Show detailed nutrition info including any failed ingredients
+            const nutritionDisplay = formatNutritionDisplay(nutritionData);
+            const suggestions = getIngredientSuggestions(nutritionData.failedIngredients);
+            
+            let message = "Meal added successfully!\n\n" + nutritionDisplay;
+            if (suggestions) {
+              message += "\n" + suggestions;
             }
+            
+            Alert.alert("Success", message, [{ text: "OK" }]);
+            
           } catch (nutritionErr) {
-            console.warn("Nutrition calculation error:", nutritionErr);
-            // Continue even if nutrition calculation fails
+            console.warn("❌ Edamam nutrition calculation error:", nutritionErr);
+            
+            // Show different messages based on the error
+            let errorTitle = "Nutrition Calculation Failed";
+            let errorMessage = "The meal was saved successfully, but nutrition calculation failed. You can edit the meal later to add nutrition information manually.";
+            
+            if (nutritionErr instanceof Error) {
+              if (nutritionErr.message.includes("No valid ingredients")) {
+                errorTitle = "Ingredients Not Recognized";
+                errorMessage = "The meal was saved, but the ingredients couldn't be analyzed for nutrition. Try using more specific ingredient descriptions (e.g., '2 cups all-purpose flour' instead of just 'flour').";
+              } else if (nutritionErr.message.includes("configuration error")) {
+                errorTitle = "Service Configuration Error";
+                errorMessage = "The meal was saved, but nutrition calculation is temporarily unavailable due to a service configuration issue.";
+              }
+            }
+            
+            Alert.alert(errorTitle, errorMessage, [{ text: "OK" }]);
           }
+        } else {
+          Alert.alert("Success", "Meal added successfully with manual nutrition values!");
         }
-
-        Alert.alert("Success", "Meal added successfully!");
         router.push("/(app)/my-meals/meals");
         return; // Success, exit retry loop
         
@@ -328,7 +356,7 @@ const CreateMealScreen = () => {
     mealDietaryRestriction, 
     mealCuisine, 
     mealServings,
-    useAIMacros,
+    useEdamamCalculation,
     manualMacros,
     router
   ]);
@@ -498,7 +526,7 @@ const CreateMealScreen = () => {
             />
             <TextInput
               style={[styles.ingredientInput, styles.ingredientQuantity, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
-              placeholder="Qty"
+              placeholder="Amount"
               placeholderTextColor={theme.placeholder}
               value={ingredient.quantity}
               onChangeText={text => updateIngredient(idx, "quantity", text)}
@@ -506,26 +534,36 @@ const CreateMealScreen = () => {
             />
             <TextInput
               style={[styles.ingredientInput, styles.ingredientUnit, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
-              placeholder="Unit"
+              placeholder="Unit (cup, tsp, oz)"
               placeholderTextColor={theme.placeholder}
               value={ingredient.unit}
               onChangeText={text => updateIngredient(idx, "unit", text)}
             />
-            <TouchableOpacity 
-              style={styles.removeButton}
-              onPress={() => removeIngredient(idx)}
-            >
-              <Ionicons name="close-circle" size={24} color={theme.danger} />
-            </TouchableOpacity>
+            {ingredients.length > 1 && (
+              <TouchableOpacity 
+                style={styles.removeButton}
+                onPress={() => removeIngredient(idx)}
+              >
+                <Ionicons name="close-circle" size={24} color={theme.danger} />
+              </TouchableOpacity>
+            )}
           </View>
         ))}
+        
+        {/* Example hint - moved below the inputs */}
+        <View style={[styles.exampleHint, { backgroundColor: theme.cardSecondary, borderColor: theme.border }]}>
+          <Ionicons name="information-circle-outline" size={16} color={theme.primary} />
+          <Text style={[styles.exampleText, { color: theme.textSecondary }]}>
+            Examples: <Text style={{ fontWeight: '600' }}>corn, 1, cup</Text> • <Text style={{ fontWeight: '600' }}>chicken breast, 8, oz</Text> • <Text style={{ fontWeight: '600' }}>salt, 1, tsp</Text>
+          </Text>
+        </View>
         
         <TouchableOpacity
           style={[styles.addButton, { borderColor: theme.primary }]}
           onPress={addIngredient}
         >
           <Ionicons name="add-circle" size={20} color={theme.primary} />
-          <Text style={[styles.addButtonText, { color: theme.primary }]}>Add Ingredient</Text>
+          <Text style={[styles.addButtonText, { color: theme.primary }]}>Add Another Ingredient</Text>
         </TouchableOpacity>
       </View>
 
@@ -539,22 +577,22 @@ const CreateMealScreen = () => {
         <View style={styles.switchRow}>
           <View style={styles.switchInfo}>
             <View style={styles.switchHeader}>
-              <Ionicons name="sparkles" size={20} color={theme.primary} />
-              <Text style={[styles.label, { color: theme.text, marginTop: 0, marginBottom: 0, marginLeft: 8 }]}>Use AI Calculation</Text>
+              <Ionicons name="nutrition" size={20} color={theme.primary} />
+              <Text style={[styles.label, { color: theme.text, marginTop: 0, marginBottom: 0, marginLeft: 8 }]}>Calculate with Edamam</Text>
             </View>
             <Text style={[styles.switchSubtext, { color: theme.textSecondary }]}>
-              {useAIMacros ? "AI will calculate macros from ingredients" : "Enter macros manually"}
+              {useEdamamCalculation ? "Automatic nutrition calculation using Edamam Food Database" : "Enter macros manually"}
             </Text>
           </View>
           <Switch
-            value={useAIMacros}
-            onValueChange={setUseAIMacros}
+            value={useEdamamCalculation}
+            onValueChange={setUseEdamamCalculation}
             trackColor={{ false: theme.border, true: theme.primary }}
-            thumbColor={useAIMacros ? theme.buttonText : theme.textSecondary}
+            thumbColor={useEdamamCalculation ? theme.buttonText : theme.textSecondary}
           />
         </View>
 
-        {!useAIMacros && (
+        {!useEdamamCalculation && (
           <View style={styles.macroInputsContainer}>
             <Text style={[styles.label, { color: theme.text, marginBottom: 16 }]}>Enter Nutrition Values (per serving)</Text>
             
@@ -1180,7 +1218,7 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   ingredientUnit: {
-    width: 80,
+    width: 200,
     marginRight: 8,
   },
   removeButton: {
@@ -1409,6 +1447,34 @@ const styles = StyleSheet.create({
   optionDescription: {
     fontSize: 13,
     opacity: 0.7,
+  },
+
+  // New ingredient styles
+  exampleHint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 8,
+    marginTop: 8,
+    marginBottom: 8,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  exampleText: {
+    fontSize: 12,
+    marginLeft: 6,
+    flex: 1,
+    fontStyle: 'italic',
+  },
+  ingredientHeaders: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+    marginBottom: 8,
+  },
+  ingredientHeaderText: {
+    fontSize: 12,
+    fontWeight: '600',
+    textAlign: 'center',
   },
 });
 

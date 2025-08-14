@@ -506,12 +506,6 @@ const MyMealInfo = () => {
                 <Text style={[styles.tagText, { color: theme.danger }]}>Private</Text>
               </View>
             )}
-            {meal?.AI_Macros && (
-              <View style={[styles.tag, { backgroundColor: theme.info + '20', borderColor: theme.info }]}>
-                <Ionicons name="calculator" size={12} color={theme.info} />
-                <Text style={[styles.tagText, { color: theme.info }]}>AI Macros</Text>
-              </View>
-            )}
           </View>
           
           {/* Tags */}
@@ -536,11 +530,12 @@ const MyMealInfo = () => {
           <View style={styles.cardHeader}>
             <Ionicons name="nutrition" size={20} color={theme.primary} />
             <Text style={[styles.cardTitle, { color: theme.text }]}>Nutrition Facts</Text>
-            {meal?.AI_Macros && (
-              <View style={[styles.aiMacroTag, { backgroundColor: theme.aiAccent }]}>
-                <Ionicons name="sparkles" size={12} color={theme.buttonText} />
-                <Text style={[styles.aiMacroTagText, { color: theme.buttonText }]}>AI</Text>
-              </View>
+            {meal?.Edamam_macros && (
+              <Image
+                source={require('../../../../assets/images/Edamam_Badge_Transparent.png')}
+                style={styles.edamamLogo}
+                resizeMode="contain"
+              />
             )}
           </View>
           <View style={styles.nutritionGrid}>
@@ -937,6 +932,17 @@ const styles = StyleSheet.create({
     gap: 3,
   },
   aiMacroTagText: {
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  edamamBadgeContainer: {
+    marginLeft: 'auto',
+  },
+  edamamBadgeSmall: {
+    width: 60,
+    height: 20,
+  },
+  edamamBadgeText: {
     fontSize: 10,
     fontWeight: '600',
   },
@@ -1338,6 +1344,13 @@ const styles = StyleSheet.create({
   buttonText: {
     fontSize: 16,
     fontWeight: '600',
+  },
+
+  // Edamam Logo
+  edamamLogo: {
+    width: 200,
+    height: 40,
+    marginLeft: 8,
   },
 
   // Legacy compatibility styles

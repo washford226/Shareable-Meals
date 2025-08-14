@@ -18,6 +18,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "../../../../context/ThemeContext";
 import { supabase } from "utils/supabase";
+import { calculateAndSaveMealNutrition } from "../../../../utils/edamamUtils";
 import { dietaryCreateOptionsEnhanced, cuisineOptionsEnhanced } from "../../../../constants/dietaryOptions";
 
 export default function EditMealScreen() {
@@ -144,8 +145,8 @@ export default function EditMealScreen() {
         setCuisine(mealData.cuisine || "");
         
         // Set macro data
-        const aiMacros = mealData.AI_Macros ?? true;
-        setUseAIMacros(aiMacros);
+        const edamamMacros = mealData.Edamam_macros ?? false;
+        setUseAIMacros(edamamMacros);
         
         const macroData = {
           calories: mealData.calories || 0,
@@ -155,7 +156,7 @@ export default function EditMealScreen() {
         };
         setCurrentMacros(macroData);
         
-        if (!aiMacros) {
+        if (!edamamMacros) {
           // If manual macros, populate the manual input fields
           setManualMacros({
             calories: macroData.calories.toString(),
@@ -251,7 +252,7 @@ export default function EditMealScreen() {
     return errors;
   }, [name, description, ingredients, useAIMacros, manualMacros]);
 
-  // Function to update AI macros
+  // Function to update nutrition using Edamam
   const updateAIMacros = async () => {
     // Filter valid ingredients before checking
     const validIngredients = ingredients.filter(ingredient => 
@@ -267,35 +268,48 @@ export default function EditMealScreen() {
 
     setUpdatingMacros(true);
     try {
-      const ingredientsText = validIngredients
-        .map(ingredient => `${ingredient.quantity} ${ingredient.unit} ${ingredient.name}`)
-        .join(", ");
+      // Format ingredients for Edamam
+      const edamamIngredients = validIngredients.map(ingredient => ({
+        name: ingredient.name.trim(),
+        quantity: ingredient.quantity.toString(),
+        unit: ingredient.unit.trim()
+      }));
 
-      const { data, error } = await supabase.functions.invoke('generate-AImeal', {
-        body: {
-          mealName: name.trim(),
-          description: description.trim(),
-          ingredients: ingredientsText,
-          servings: 1, // Default to 1 serving for macro calculation
-          calculateMacrosOnly: true
-        }
+      console.log("🔄 Calculating nutrition with Edamam for meal:", mealId);
+      
+      // Use Edamam to calculate and save nutrition
+      const nutritionData = await calculateAndSaveMealNutrition(mealId, edamamIngredients);
+      
+      console.log("✅ Edamam nutrition calculation successful:", nutritionData);
+      
+      // Update the current macros state with the new values
+      setCurrentMacros({
+        calories: nutritionData.calories,
+        protein: nutritionData.protein,
+        fat: nutritionData.fat,
+        carbohydrates: nutritionData.carbohydrates
       });
 
-      if (error) {
-        console.error('Error updating AI macros:', error);
-        Alert.alert("Error", "Failed to update nutrition information. Please try again.");
-        return;
+      // Create detailed success message
+      let successMessage = `Nutrition updated successfully!\n\n`;
+      successMessage += `📊 Per Serving:\n`;
+      successMessage += `🔥 ${nutritionData.calories} calories\n`;
+      successMessage += `🥩 ${nutritionData.protein}g protein\n`;
+      successMessage += `🥑 ${nutritionData.fat}g fat\n`;
+      successMessage += `🍞 ${nutritionData.carbohydrates}g carbs\n`;
+      
+      if (nutritionData.parsedCount !== nutritionData.totalCount) {
+        successMessage += `\n⚠️ Note: ${nutritionData.parsedCount} of ${nutritionData.totalCount} ingredients were successfully analyzed.`;
       }
 
-      if (data?.macros) {
-        setCurrentMacros(data.macros);
-        Alert.alert("Success", "Nutrition information updated successfully!");
-      } else {
-        Alert.alert("Error", "Unable to calculate nutrition information. Please try again or enter manually.");
-      }
+      Alert.alert("Success", successMessage);
+      
     } catch (error) {
-      console.error('Error updating AI macros:', error);
-      Alert.alert("Error", "Failed to update nutrition information. Please try again.");
+      console.error('❌ Error updating nutrition with Edamam:', error);
+      Alert.alert(
+        "Nutrition Calculation Error", 
+        "Failed to calculate nutrition using Edamam. Please check your ingredients for clarity (e.g., '1 cup diced tomatoes' instead of just 'tomatoes') and try again."
+      );
     } finally {
       setUpdatingMacros(false);
     }
@@ -405,7 +419,7 @@ export default function EditMealScreen() {
             dietary_restrictions: dietaryRestriction || null,
             cuisine: cuisine || null,
             picture: picture || null,
-            AI_Macros: useAIMacros,
+            // Preserve existing Edamam_macros and AI_Macros values - don't change them during edit
             calories: macroData.calories,
             protein: macroData.protein,
             fat: macroData.fat,
@@ -663,18 +677,20 @@ export default function EditMealScreen() {
         mediaTypes: 'images',
         allowsEditing: true,
         aspect: [4, 3],
-        quality: 0.8,
-        base64: true,
+        quality: 0.6, // Reduce quality to manage file size
+        base64: true, // Get base64 for storing in database
       });
 
-      if (!result.canceled && result.assets[0]) {
+      if (!result.canceled && result.assets && result.assets.length > 0) {
         const asset = result.assets[0];
-        if (asset.base64) {
-          const imageUri = `data:image/jpeg;base64,${asset.base64}`;
-          handleFieldChange(setPicture, imageUri);
-        } else {
-          Alert.alert('Error', 'Failed to process the selected image. Please try again.');
+        
+        if (!asset.base64) {
+          throw new Error('Failed to get image data');
         }
+        
+        // Create data URI from base64
+        const dataUri = `data:image/jpeg;base64,${asset.base64}`;
+        handleFieldChange(setPicture, dataUri);
       }
     } catch (error) {
       console.error('Error picking image:', error);
@@ -900,20 +916,36 @@ export default function EditMealScreen() {
           <Text style={[styles.cardTitle, { color: theme.text }]}>Ingredients</Text>
         </View>
         
+        {/* Example hint */}
+        <View style={[styles.exampleHint, { backgroundColor: theme.background, borderColor: theme.border }]}>
+          <Ionicons name="information-circle-outline" size={16} color={theme.primary} />
+          <Text style={[styles.exampleText, { color: theme.textSecondary }]}>
+            Example: <Text style={{ fontWeight: '600' }}>corn, 1, cup</Text>
+          </Text>
+        </View>
+        
+        {/* Ingredient headers */}
+        <View style={styles.ingredientHeaders}>
+          <Text style={[styles.ingredientHeaderText, { color: theme.textSecondary, flex: 2 }]}>Name</Text>
+          <Text style={[styles.ingredientHeaderText, { color: theme.textSecondary, flex: 1 }]}>Qty</Text>
+          <Text style={[styles.ingredientHeaderText, { color: theme.textSecondary, flex: 1.2 }]}>Measurement</Text>
+          <View style={{ width: 32 }} />
+        </View>
+        
         {ingredients.map((ingredient, idx) => (
           <View key={idx} style={styles.ingredientRow}>
             <TextInput
               style={[styles.ingredientInput, styles.ingredientName, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
               value={ingredient.name}
               onChangeText={text => updateIngredient(idx, "name", text)}
-              placeholder="Ingredient name"
+              placeholder="e.g. corn"
               placeholderTextColor={theme.placeholder}
             />
             <TextInput
               style={[styles.ingredientInput, styles.ingredientQuantity, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
               value={ingredient.quantity}
               onChangeText={text => updateIngredient(idx, "quantity", text)}
-              placeholder="Qty"
+              placeholder="1"
               placeholderTextColor={theme.placeholder}
               keyboardType="numeric"
             />
@@ -921,15 +953,17 @@ export default function EditMealScreen() {
               style={[styles.ingredientInput, styles.ingredientUnit, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
               value={ingredient.unit}
               onChangeText={text => updateIngredient(idx, "unit", text)}
-              placeholder="Unit"
+              placeholder="cup"
               placeholderTextColor={theme.placeholder}
             />
-            <TouchableOpacity 
-              style={styles.removeButton}
-              onPress={() => removeIngredient(idx)}
-            >
-              <Ionicons name="close-circle" size={24} color={theme.danger} />
-            </TouchableOpacity>
+            {ingredients.length > 1 && (
+              <TouchableOpacity 
+                style={styles.removeButton}
+                onPress={() => removeIngredient(idx)}
+              >
+                <Ionicons name="close-circle" size={24} color={theme.danger} />
+              </TouchableOpacity>
+            )}
           </View>
         ))}
         
@@ -938,7 +972,7 @@ export default function EditMealScreen() {
           onPress={addIngredient}
         >
           <Ionicons name="add-circle" size={20} color={theme.primary} />
-          <Text style={[styles.addButtonText, { color: theme.primary }]}>Add Ingredient</Text>
+          <Text style={[styles.addButtonText, { color: theme.primary }]}>Add Another Ingredient</Text>
         </TouchableOpacity>
 
         {/* Optional cleanup button if there are empty ingredients */}
@@ -1013,7 +1047,7 @@ export default function EditMealScreen() {
           
           <View style={styles.toggleContainer}>
             <Text style={[styles.toggleLabel, { color: theme.text }, useAIMacros && styles.activeToggleLabel]}>
-              AI Calculated
+              Edamam Calculated
             </Text>
             <Switch
               value={!useAIMacros}
@@ -1070,7 +1104,7 @@ export default function EditMealScreen() {
                 {updatingMacros ? (
                   <ActivityIndicator color="#fff" size="small" />
                 ) : (
-                  <Text style={styles.aiUpdateButtonText}>Update AI Nutrition</Text>
+                  <Text style={styles.aiUpdateButtonText}>Calculate Nutrition with Edamam</Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -1892,5 +1926,31 @@ const styles = StyleSheet.create({
   optionDescription: {
     fontSize: 13,
     opacity: 0.7,
+  },
+
+  // New ingredient styles
+  exampleHint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    marginBottom: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  exampleText: {
+    fontSize: 14,
+    marginLeft: 8,
+    flex: 1,
+  },
+  ingredientHeaders: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+    marginBottom: 8,
+  },
+  ingredientHeaderText: {
+    fontSize: 12,
+    fontWeight: '600',
+    textAlign: 'center',
   },
 });
