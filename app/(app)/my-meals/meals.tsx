@@ -190,11 +190,6 @@ const MyMeals: React.FC<MyMealsProps> = ({ onCreateMeal}) => {
     router.push("../AI/AICreateMeal");
   }, [router, closeCreateMealModal]);
 
-  const navigateToImageCreate = useCallback(() => {
-    closeCreateMealModal();
-    router.push("./image-create");
-  }, [router, closeCreateMealModal]);
-
   const navigateToURLCreate = useCallback(() => {
     closeCreateMealModal();
     router.push("./url-create");
@@ -343,25 +338,39 @@ const MyMeals: React.FC<MyMealsProps> = ({ onCreateMeal}) => {
     try {
       setError(null);
       
-      // Restore filters from AsyncStorage
+      // Restore filters from AsyncStorage - optimized for navigation speed
       const user = await supabase.auth.getUser();
       const userId = user.data?.user?.id;
       if (!userId) {
         throw new Error("Authentication required. Please log in again.");
       }
 
-      const [savedFilters, savedSearchQuery, savedDietary, savedAi, savedCuisine] = await Promise.all([
+      // Parallel AsyncStorage reads with timeout for faster navigation
+      const storagePromises = [
         AsyncStorage.getItem(`filters_MyMeals_${userId}`),
         AsyncStorage.getItem(`searchQuery_MyMeals_${userId}`),
         AsyncStorage.getItem(`dietaryRestrictionFilter_MyMeals_${userId}`),
         AsyncStorage.getItem(`aiFilter_MyMeals_${userId}`),
         AsyncStorage.getItem(`cuisineFilter_MyMeals_${userId}`)
+      ];
+
+      // Race condition: Don't wait more than 200ms for filter restoration
+      const storageResults = await Promise.race([
+        Promise.all(storagePromises),
+        new Promise<string[]>(resolve => setTimeout(() => resolve(['', '', '', '', '']), 200))
       ]);
 
+      const [savedFilters, savedSearchQuery, savedDietary, savedAi, savedCuisine] = storageResults;
+
+      // Apply restored filters quickly
       if (savedFilters) {
-        const parsedFilters = JSON.parse(savedFilters);
-        setFilters(parsedFilters);
-        setTempFilters(parsedFilters);
+        try {
+          const parsedFilters = JSON.parse(savedFilters);
+          setFilters(parsedFilters);
+          setTempFilters(parsedFilters);
+        } catch (parseError) {
+          console.warn('Filter parsing failed, using defaults');
+        }
       }
       if (savedSearchQuery) setSearchQuery(savedSearchQuery);
       if (savedDietary !== null) setDietaryRestrictionFilter(savedDietary);
@@ -380,10 +389,10 @@ const MyMeals: React.FC<MyMealsProps> = ({ onCreateMeal}) => {
   }, []);
 
   useEffect(() => {
-    // Defer heavy operations to improve navigation speed
+    // Optimize navigation speed by deferring heavy operations
     const timer = setTimeout(() => {
       restoreFiltersAndFetchMeals();
-    }, 100);
+    }, 50); // Reduced from 100ms to 50ms
     
     return () => clearTimeout(timer);
   }, [restoreFiltersAndFetchMeals]);
@@ -395,35 +404,6 @@ const MyMeals: React.FC<MyMealsProps> = ({ onCreateMeal}) => {
     filterModalOpacity.setValue(0);
     filterModalTranslateY.setValue(300);
   }, [modalOpacity, modalScale, filterModalOpacity, filterModalTranslateY]);
-
-useEffect(() => {
-  const restoreFiltersAndFetchMeals = async () => {
-    // Restore filters from AsyncStorage
-    const user = await supabase.auth.getUser();
-    const userId = user.data?.user?.id;
-    if (!userId) return;
-
-    const savedFilters = await AsyncStorage.getItem(`filters_MyMeals_${userId}`);
-    const savedSearchQuery = await AsyncStorage.getItem(`searchQuery_MyMeals_${userId}`);
-    const savedDietary = await AsyncStorage.getItem(`dietaryRestrictionFilter_MyMeals_${userId}`);
-    const savedAi = await AsyncStorage.getItem(`aiFilter_MyMeals_${userId}`);
-    const savedCuisine = await AsyncStorage.getItem(`cuisineFilter_MyMeals_${userId}`);
-
-    if (savedFilters) {
-      const parsedFilters = JSON.parse(savedFilters);
-      setFilters(parsedFilters);
-      setTempFilters(parsedFilters);
-    }
-    if (savedSearchQuery) setSearchQuery(savedSearchQuery);
-    if (savedDietary !== null) setDietaryRestrictionFilter(savedDietary);
-    if (savedAi !== null) setAiFilter(savedAi);
-    if (savedCuisine !== null) setCuisineFilter(savedCuisine);
-
-    setFiltersLoaded(true);
-  };
-
-  restoreFiltersAndFetchMeals();
-}, []);
 
   const fetchMyMeals = useCallback(async (isRefresh = false, loadMore = false) => {
     if (!filtersLoaded) return;

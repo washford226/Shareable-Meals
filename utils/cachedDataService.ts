@@ -19,7 +19,7 @@ class CachedDataServiceImpl implements CachedDataService {
   private inFlightRequests = new Map<string, Promise<any>>();
 
   /**
-   * Helper method to deduplicate requests
+   * Helper method to deduplicate requests - optimized for navigation speed
    */
   private async deduplicateRequest<T>(key: string, requestFn: () => Promise<T>): Promise<T> {
     // Check if request is already in flight
@@ -28,13 +28,22 @@ class CachedDataServiceImpl implements CachedDataService {
       return this.inFlightRequests.get(key) as Promise<T>;
     }
 
-    // Start new request and track it
+    // Start new request and track it with auto-cleanup
     const requestPromise = requestFn().finally(() => {
-      // Clean up completed request
+      // Clean up completed request immediately to avoid memory leaks
       this.inFlightRequests.delete(key);
     });
 
     this.inFlightRequests.set(key, requestPromise);
+    
+    // Auto-cleanup after timeout to prevent memory leaks
+    setTimeout(() => {
+      if (this.inFlightRequests.has(key)) {
+        this.inFlightRequests.delete(key);
+        console.warn(`🧹 Auto-cleaned stale request: ${key}`);
+      }
+    }, 30000); // 30 second cleanup
+
     return requestPromise;
   }
   
@@ -98,56 +107,64 @@ class CachedDataServiceImpl implements CachedDataService {
   }
 
   /**
-   * Get user meals with SQLite caching
+   * Get user meals with SQLite caching - optimized for navigation speed
    */
   async getUserMeals(userId: string, forceRefresh: boolean = false): Promise<any[]> {
     const cacheKey = `user-meals-${userId}-${forceRefresh}`;
     
     return this.deduplicateRequest(cacheKey, async () => {
       try {
-      // Try cache first unless force refresh
-      if (!forceRefresh) {
-        const cached = await sqliteCache.getCachedMeals(userId);
-        if (cached) {
-          console.log(`📱 Using cached meals (${cached.length} meals)`);
-          return cached;
-        }
-      }
-
-      console.log('🌐 Fetching meals from Supabase');
-      
-      // Create AbortController for timeout handling
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
-      
-      try {
-        // Fetch from Supabase with pagination for better performance
-        const { data, error } = await supabase
-          .from('meals')
-          .select('*')
-          .eq('user_id', userId)
-          .eq('visibility', true)
-          .order('created_at', { ascending: false })
-          .limit(100) // Limit to most recent 100 meals
-          .abortSignal(controller.signal);
-
-        clearTimeout(timeoutId);
-
-        if (error) {
-          throw new Error(`Failed to fetch meals: ${error.message}`);
+        // Try cache first unless force refresh - use non-blocking approach
+        if (!forceRefresh) {
+          // Use Promise to avoid blocking the UI thread
+          const cachePromise = sqliteCache.getCachedMeals(userId);
+          const cached = await Promise.race([
+            cachePromise,
+            new Promise<any[]>(resolve => setTimeout(() => resolve([]), 50)) // 50ms timeout for cache check
+          ]);
+          
+          if (cached && cached.length > 0) {
+            console.log(`📱 Using cached meals (${cached.length} meals)`);
+            return cached;
+          }
         }
 
-        const meals = data || [];
+        console.log('🌐 Fetching meals from Supabase');
         
-        if (meals.length > 0) {
-          // Cache the results
-          await sqliteCache.cacheMeals(meals, userId);
-          console.log(`💾 Cached ${meals.length} meals`);
-        }
+        // Create AbortController for timeout handling
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 8000); // Reduced timeout from 10s to 8s
+        
+        try {
+          // Fetch from Supabase with pagination for better performance
+          const { data, error } = await supabase
+            .from('meals')
+            .select('*')
+            .eq('user_id', userId)
+            .eq('visibility', true)
+            .order('created_at', { ascending: false })
+            .limit(100) // Limit to most recent 100 meals
+            .abortSignal(controller.signal);
 
-        return meals;
-      } catch (innerError) {
-        clearTimeout(timeoutId);
+          clearTimeout(timeoutId);
+
+          if (error) {
+            throw new Error(`Failed to fetch meals: ${error.message}`);
+          }
+
+          const meals = data || [];
+          
+          if (meals.length > 0) {
+            // Cache the results asynchronously to avoid blocking
+            sqliteCache.cacheMeals(meals, userId).catch(err => 
+              console.warn('Cache storage failed (non-blocking):', err)
+            );
+            console.log(`💾 Caching ${meals.length} meals in background`);
+          }
+
+          return meals;
+        } catch (innerError) {
+          clearTimeout(timeoutId);
         throw innerError;
       }
     } catch (error) {
@@ -177,76 +194,84 @@ class CachedDataServiceImpl implements CachedDataService {
       console.log(`📱 Trying cached data for week...`);
       try {
 
-      // Try cache first unless force refresh
-      if (!forceRefresh) {
-        const cached = await sqliteCache.getCachedMealPlan(userId, startDate, endDate);
-        if (cached) {
-          console.log(`📱 Using cached meal plan (${cached.length} entries)`);
-          return cached;
-        }
-      }
-
-      console.log('🌐 Fetching meal plan from Supabase');
-      
-      // Create AbortController for timeout handling
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout for meal plan
-      
-      try {
-        // Fetch from Supabase with joined meal data
-        const { data, error } = await supabase
-          .from('meal_plan')
-          .select(`
-            *,
-            meals (
-              id,
-              name,
-              description,
-              calories,
-              protein,
-              carbohydrates,
-              fat,
-              instructions,
-              recipeLink,
-              created_by_ai,
-              created_by,
-              favorite,
-              dietary_restrictions,
-              servings,
-              cuisine,
-              picture,
-              visibility,
-              created_at
-            )
-          `)
-          .eq('user_id', userId)
-          .gte('date', startDate)
-          .lte('date', endDate)
-          .order('date')
-          .order('meal_type')
-          .abortSignal(controller.signal);
-
-        clearTimeout(timeoutId);
-
-        if (error) {
-          throw new Error(`Failed to fetch meal plan: ${error.message}`);
+        // Try cache first unless force refresh - optimized for navigation speed
+        if (!forceRefresh) {
+          // Non-blocking cache check with timeout
+          const cachePromise = sqliteCache.getCachedMealPlan(userId, startDate, endDate);
+          const cached = await Promise.race([
+            cachePromise,
+            new Promise<any[]>(resolve => setTimeout(() => resolve([]), 100)) // 100ms timeout for cache check
+          ]);
+          
+          if (cached && cached.length > 0) {
+            console.log(`📱 Using cached meal plan (${cached.length} entries)`);
+            return cached;
+          }
         }
 
-        const mealPlan = data || [];
+        console.log('🌐 Fetching meal plan from Supabase');
         
-        if (mealPlan.length > 0) {
-          // Cache the results
-          await sqliteCache.cacheMealPlan(mealPlan, userId, startDate, endDate);
-          console.log(`💾 Cached meal plan (${mealPlan.length} entries)`);
-        }
+        // Create AbortController for timeout handling
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 12000); // Reduced timeout from 15s to 12s
+        
+        try {
+          // Fetch from Supabase with joined meal data
+          const { data, error } = await supabase
+            .from('meal_plan')
+            .select(`
+              *,
+              meals (
+                id,
+                name,
+                description,
+                calories,
+                protein,
+                carbohydrates,
+                fat,
+                instructions,
+                recipeLink,
+                created_by_ai,
+                created_by,
+                favorite,
+                dietary_restrictions,
+                servings,
+                cuisine,
+                picture,
+                visibility,
+                created_at
+              )
+            `)
+            .eq('user_id', userId)
+            .gte('date', startDate)
+            .lte('date', endDate)
+            .order('date')
+            .order('meal_type')
+            .abortSignal(controller.signal);
 
-        return mealPlan;
-      } catch (innerError) {
-        clearTimeout(timeoutId);
-        throw innerError;
-      }
-    } catch (error) {
-      console.error('Error in getMealPlanForWeek:', error);
+          clearTimeout(timeoutId);
+
+          if (error) {
+            throw new Error(`Failed to fetch meal plan: ${error.message}`);
+          }
+
+          const mealPlan = data || [];
+          
+          if (mealPlan.length > 0) {
+            // Cache the results asynchronously to avoid blocking navigation
+            sqliteCache.cacheMealPlan(mealPlan, userId, startDate, endDate).catch(err => 
+              console.warn('Meal plan cache storage failed (non-blocking):', err)
+            );
+            console.log(`💾 Caching meal plan (${mealPlan.length} entries) in background`);
+          }
+
+          return mealPlan;
+        } catch (innerError) {
+          clearTimeout(timeoutId);
+          throw innerError;
+        }
+      } catch (error) {
+        console.error('Error in getMealPlanForWeek:', error);
       
       // Fallback to cache if available
       const startDate = format(startOfWeek(date, { weekStartsOn: 0 }), 'yyyy-MM-dd');
@@ -434,7 +459,7 @@ class CachedDataServiceImpl implements CachedDataService {
         fat: macroMeal.fat || 0,
         picture: null,
         meal_type: "Scanned",
-        userName: "Edamam Food Scanner",
+        userName: "OpenAI Food Scanner",
         visibility: false,
         averageRating: 0,
         reviewCount: 0,

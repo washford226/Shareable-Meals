@@ -9,8 +9,11 @@ import {
   ActivityIndicator,
   Alert,
   RefreshControl,
+  Platform,
 } from "react-native";
 import { useRouter } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
+import * as Haptics from 'expo-haptics';
 import { supabase } from "utils/supabase";
 import { useTheme } from "../../../context/ThemeContext";
 import { 
@@ -565,10 +568,27 @@ const AICreateMeal = () => {
         {/* Back Button */}
         <TouchableOpacity
           style={[styles.backButton, { backgroundColor: theme.card, borderColor: theme.border }]}
-          onPress={() => router.push("/(app)/my-meals/meals")}
+          onPress={() => {
+            // Add haptic feedback for better responsiveness
+            if (Platform.OS === 'ios') {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            } else {
+              Haptics.selectionAsync();
+            }
+            router.push("/(app)/my-meals/meals");
+          }}
           disabled={loading || saving}
+          activeOpacity={0.7}
         >
-          <Text style={[styles.backButtonText, { color: theme.textSecondary }]}>← Back</Text>
+          <Ionicons 
+            name="arrow-back" 
+            size={20} 
+            color={theme.textSecondary} 
+            style={styles.backIcon}
+          />
+          <Text style={[styles.backButtonText, { color: theme.textSecondary }]}>
+            Back
+          </Text>
         </TouchableOpacity>
 
         <View style={styles.headerContainer}>
@@ -1039,14 +1059,30 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   backButton: {
-    marginBottom: 20,
+    marginTop: 40, // Moved down slightly for better positioning
+    marginBottom: 10,
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 10,
     borderRadius: 12,
     borderWidth: 1,
     alignSelf: "flex-start",
     flexDirection: 'row',
     alignItems: 'center',
+    // Enhanced shadow for better visual feedback
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 2,
+      },
+    }),
+  },
+  backIcon: {
+    marginRight: 8,
   },
   backButtonText: {
     fontSize: 16,

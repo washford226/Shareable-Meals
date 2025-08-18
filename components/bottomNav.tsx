@@ -1,13 +1,15 @@
 import React, { memo, useCallback, useState } from "react";
-import { View, TouchableOpacity, Text, StyleSheet, Platform, ActivityIndicator } from "react-native";
+import { View, TouchableOpacity, Text, StyleSheet, Platform, ActivityIndicator, Animated } from "react-native";
 import { router, usePathname } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "context/ThemeContext";
+import * as Haptics from 'expo-haptics';
 
 const BottomNav = memo(() => {
   const { theme } = useTheme();
   const pathname = usePathname();
   const [navigatingTo, setNavigatingTo] = useState<string | null>(null);
+  const [pressedItem, setPressedItem] = useState<string | null>(null);
 
   const navItems = [
     {
@@ -44,18 +46,65 @@ const BottomNav = memo(() => {
     },
   ];
 
+  // Animation values for visual feedback
+  const scaleAnimations = navItems.reduce((acc, item) => {
+    acc[item.id] = new Animated.Value(1);
+    return acc;
+  }, {} as Record<string, Animated.Value>);
+
   const handleNavPress = useCallback((route: string, id: string) => {
     // Prevent double navigation
     if (navigatingTo === id) return;
     
+    // Haptic feedback for better user experience
+    if (Platform.OS === 'ios') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    } else {
+      // Android selection feedback
+      Haptics.selectionAsync();
+    }
+    
+    // Visual feedback animation
+    const scaleAnim = scaleAnimations[id];
+    if (scaleAnim) {
+      Animated.sequence([
+        Animated.timing(scaleAnim, {
+          toValue: 0.85,
+          duration: 100,
+          useNativeDriver: true,
+        }),
+        Animated.timing(scaleAnim, {
+          toValue: 1,
+          duration: 150,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }
+    
     setNavigatingTo(id);
+    setPressedItem(id);
     
     // Navigate immediately without waiting
     router.push(route as any);
     
     // Clear loading state quickly for visual feedback
-    setTimeout(() => setNavigatingTo(null), 200);
-  }, [navigatingTo]);
+    setTimeout(() => {
+      setNavigatingTo(null);
+      setPressedItem(null);
+    }, 300);
+  }, [navigatingTo, scaleAnimations]);
+
+  const handlePressIn = useCallback((id: string) => {
+    setPressedItem(id);
+    // Light haptic feedback on press start
+    if (Platform.OS === 'ios') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+  }, []);
+
+  const handlePressOut = useCallback(() => {
+    setPressedItem(null);
+  }, []);
 
   return (
     <View style={[styles.nav, { 
@@ -63,43 +112,56 @@ const BottomNav = memo(() => {
       borderTopColor: theme.border 
     }]}>
       {navItems.map((item) => (
-        <TouchableOpacity
+        <Animated.View
           key={item.id}
-          onPress={() => handleNavPress(item.route, item.id)}
           style={[
-            styles.navItem,
-            item.isActive && [styles.activeNavItem, { backgroundColor: `${theme.primary}15` }]
+            { transform: [{ scale: scaleAnimations[item.id] }] }
           ]}
-          activeOpacity={0.7}
-          disabled={navigatingTo === item.id}
         >
-          <View style={[
-            styles.iconContainer,
-            item.isActive && [styles.activeIconContainer, { backgroundColor: theme.primary }]
-          ]}>
-            {navigatingTo === item.id ? (
-              <ActivityIndicator size={20} color={theme.primary} />
-            ) : (
-              <Ionicons
-                name={item.isActive ? item.activeIcon as any : item.icon as any}
-                size={item.isActive ? 20 : 18}
-                color={item.isActive ? theme.buttonText : theme.subtext}
-              />
+          <TouchableOpacity
+            onPress={() => handleNavPress(item.route, item.id)}
+            onPressIn={() => handlePressIn(item.id)}
+            onPressOut={handlePressOut}
+            style={[
+              styles.navItem,
+              item.isActive && [styles.activeNavItem, { backgroundColor: `${theme.primary}15` }],
+              pressedItem === item.id && [styles.pressedNavItem, { backgroundColor: `${theme.primary}25` }]
+            ]}
+            activeOpacity={0.8}
+            disabled={navigatingTo === item.id}
+          >
+            <View style={[
+              styles.iconContainer,
+              item.isActive && [styles.activeIconContainer, { backgroundColor: theme.primary }],
+              pressedItem === item.id && [styles.pressedIconContainer, { backgroundColor: theme.primary }]
+            ]}>
+              {navigatingTo === item.id ? (
+                <ActivityIndicator size={20} color={theme.primary} />
+              ) : (
+                <Ionicons
+                  name={item.isActive ? item.activeIcon as any : item.icon as any}
+                  size={item.isActive ? 20 : 18}
+                  color={item.isActive ? theme.buttonText : theme.subtext}
+                />
+              )}
+            </View>
+            <Text style={[
+              styles.navLabel,
+              { 
+                color: item.isActive ? theme.primary : theme.subtext,
+                fontWeight: item.isActive ? '600' : '500'
+              }
+            ]}>
+              {item.label}
+            </Text>
+            {item.isActive && (
+              <View style={[styles.activeIndicator, { backgroundColor: theme.primary }]} />
             )}
-          </View>
-          <Text style={[
-            styles.navLabel,
-            { 
-              color: item.isActive ? theme.primary : theme.subtext,
-              fontWeight: item.isActive ? '600' : '500'
-            }
-          ]}>
-            {item.label}
-          </Text>
-          {item.isActive && (
-            <View style={[styles.activeIndicator, { backgroundColor: theme.primary }]} />
-          )}
-        </TouchableOpacity>
+            {pressedItem === item.id && !item.isActive && (
+              <View style={[styles.pressIndicator, { backgroundColor: `${theme.primary}60` }]} />
+            )}
+          </TouchableOpacity>
+        </Animated.View>
       ))}
     </View>
   );
@@ -145,6 +207,10 @@ const styles = StyleSheet.create({
   activeNavItem: {
     borderRadius: 12,
   },
+  pressedNavItem: {
+    borderRadius: 12,
+    transform: [{ scale: 0.98 }],
+  },
   iconContainer: {
     width: 32,
     height: 32,
@@ -169,6 +235,22 @@ const styles = StyleSheet.create({
       },
     }),
   },
+  pressedIconContainer: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.15,
+        shadowRadius: 2,
+      },
+      android: {
+        elevation: 2,
+      },
+    }),
+  },
   navLabel: {
     fontSize: 11,
     textAlign: 'center',
@@ -182,5 +264,14 @@ const styles = StyleSheet.create({
     width: 24,
     height: 3,
     borderRadius: 2,
+  },
+  pressIndicator: {
+    position: 'absolute',
+    top: 2,
+    left: '50%',
+    marginLeft: -8,
+    width: 16,
+    height: 2,
+    borderRadius: 1,
   },
 });

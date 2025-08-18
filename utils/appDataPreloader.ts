@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
 import { cachedDataService } from './cachedDataService';
+import { cachePreloader } from './cachePreloader';
 import { supabase } from './supabase';
 
 class AppDataPreloader {
@@ -27,6 +28,9 @@ class AppDataPreloader {
       
       console.log('🚀 Starting app data preload...');
 
+      // Initialize cache in background first (critical for navigation speed)
+      cachePreloader.startBackgroundInitialization();
+
       // Get current user
       const { data: userData, error: userError } = await supabase.auth.getUser();
       if (userError || !userData?.user) {
@@ -36,6 +40,9 @@ class AppDataPreloader {
 
       const userId = userData.user.id;
       const today = new Date();
+
+      // Warm up user-specific cache
+      cachePreloader.warmupUserCache(userId);
 
       // Preload all critical data in parallel
       await Promise.all([

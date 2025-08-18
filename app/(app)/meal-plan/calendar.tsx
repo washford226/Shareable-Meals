@@ -25,7 +25,6 @@ import * as FileSystem from 'expo-file-system';
 import { Ionicons } from '@expo/vector-icons';
 import { 
   analyzeImageNutrition, 
-  convertImageNutritionToMeal, 
   formatImageNutritionDisplay,
   validateImageNutritionData,
   ImageNutritionData 
@@ -211,7 +210,7 @@ const MealPlanCalendar: React.FC = () => {
         fat: macroMeal.fat || 0,
         picture: null, // Macro meals don't have pictures
         meal_type: "Scanned", // Special type for scanned meals
-        userName: "Edamam Food Scanner",
+        userName: "OpenAI Food Scanner",
         visibility: false,
         averageRating: 0,
         reviewCount: 0,
@@ -529,14 +528,83 @@ const MealPlanCalendar: React.FC = () => {
     }
   };
 
+  // Delete macro meal function
+  const deleteMacroMeal = async (meal: Meal) => {
+    try {
+      if (!meal.isMacroMeal || typeof meal.id !== 'string' || !meal.id.startsWith('macro_')) {
+        Alert.alert("Error", "Invalid meal type for deletion.");
+        return;
+      }
+
+      // Get current user ID
+      const userId = await getCurrentUserId();
+      if (!userId) {
+        Alert.alert("Error", "You are not logged in. Please log in to continue.");
+        return;
+      }
+
+      // Extract the original macro meal ID
+      const macroMealId = meal.id.replace('macro_', '');
+      
+      // Delete from macro_meals table in Supabase
+      const { error } = await supabase
+        .from('macro_meals')
+        .delete()
+        .eq('id', macroMealId)
+        .eq('user_id', userId); // Ensure user can only delete their own meals
+
+      if (error) {
+        console.error('Error deleting macro meal:', error);
+        Alert.alert("Error", "Failed to delete the AI-scanned meal. Please try again.");
+        return;
+      }
+
+      // Clear cache to ensure fresh data
+      await cachedDataService.invalidateMealPlanCache(userId);
+
+      // Refresh the meals for the current date from cache/database
+      const mealDate = meal.created_at ? format(new Date(meal.created_at), 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd');
+      const updatedMeals = await fetchMealsForDate(mealDate);
+      setMeals(prevMeals => ({
+        ...prevMeals,
+        [mealDate]: updatedMeals
+      }));
+
+      Alert.alert("Success", "AI-scanned meal deleted successfully.");
+    } catch (error) {
+      console.error('Error in deleteMacroMeal:', error);
+      Alert.alert("Error", "An unexpected error occurred while deleting the meal.");
+    }
+  };
+
   const handleMealSelect = (meal: Meal) => {
     try {
-      // Skip navigation for macro meals since they don't have detailed views
+      // Show enhanced dialog for macro meals with delete option
       if (meal.isMacroMeal) {
         Alert.alert(
-          "Scanned Meal", 
-          `This is an AI-scanned meal.\n\nName: ${meal.name}\nCalories: ${meal.calories}\nProtein: ${meal.protein}g\nCarbs: ${meal.carbohydrates}g\nFat: ${meal.fat}g`,
-          [{ text: 'OK' }]
+          "AI-Scanned Meal", 
+          `Name: ${meal.name}\nCalories: ${meal.calories}\nProtein: ${meal.protein}g\nCarbs: ${meal.carbohydrates}g\nFat: ${meal.fat}g\n\nScanned using OpenAI Food Vision`,
+          [
+            {
+              text: 'Delete',
+              style: 'destructive',
+              onPress: () => {
+                Alert.alert(
+                  'Confirm Delete',
+                  'Are you sure you want to delete this AI-scanned meal? This action cannot be undone.',
+                  [
+                    { text: 'Cancel', style: 'cancel' },
+                    { 
+                      text: 'Delete', 
+                      style: 'destructive',
+                      onPress: () => deleteMacroMeal(meal)
+                    }
+                  ]
+                );
+              }
+            },
+            { text: 'OK', style: 'cancel' }
+          ]
         );
         return;
       }
@@ -630,10 +698,10 @@ const MealPlanCalendar: React.FC = () => {
     setSelectedScanDate(dateKey);
     
     try {
-      console.log(`Analyzing meal image with Edamam Food Vision - Size: ${Math.round(base64Image.length * 0.75 / 1024)} KB`);
+      console.log(`Analyzing meal image with OpenAI GPT-4 Vision - Size: ${Math.round(base64Image.length * 0.75 / 1024)} KB`);
 
-      // Use the new Edamam Food Vision API
-      const result = await analyzeImageNutrition(base64Image, false);
+      // Use the OpenAI GPT-4 Vision API via Meal_Scanner Edge Function
+      const result = await analyzeImageNutrition(base64Image, false, dateKey);
       
       if ('error' in result) {
         throw new Error(result.details);
@@ -643,38 +711,35 @@ const MealPlanCalendar: React.FC = () => {
         throw new Error('Could not detect valid nutrition information from this image. Please try a different image with clearer food items.');
       }
 
-      // Save the meal to macro_meals table (for backward compatibility with existing nutrition screens)
+      // Save the meal to macro_meals table (OpenAI provides simpler nutrition data)
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
         throw new Error('Not authenticated');
       }
 
-      const { error: insertError } = await supabase
-        .from('macro_meals')
-        .insert([{
-          user_id: user.id,
-          meal_name: result.nutrition.foodLabel,
-          calories: result.nutrition.calories,
-          protein: result.nutrition.protein,
-          carbs: result.nutrition.carbohydrates,
-          fat: result.nutrition.fat,
-          created_at: `${dateKey}T12:00:00.000Z`, // Set to noon of the selected date
-          ingredients: result.nutrition.ingredients.join(', '),
-          diet_labels: result.nutrition.dietLabels.join(', '),
-          health_labels: result.nutrition.healthLabels.join(', '),
-          cautions: result.nutrition.cautions.join(', ')
-        }]);
-
-      if (insertError) {
-        console.error('Error saving meal to database:', insertError);
-        throw new Error('Failed to save meal data');
-      }
+      // The meal is automatically saved by the Meal_Scanner Edge Function
+      // No need to insert again, just set the UI data and refresh
         
       setScannedMealData(result.nutrition);
       setMealScanModalVisible(true);
+      
+      // Get user ID for cache invalidation
+      const userId = await getCurrentUserId();
+      if (userId) {
+        // Clear cache to ensure fresh data is loaded
+        await cachedDataService.invalidateMealPlanCache(userId);
+      }
+      
       // Refresh the meals for this date to show the new macro meal
-      await fetchMealsForDate(dateKey);
-      console.log(`Successfully analyzed meal nutrition with Edamam:`, result.nutrition);
+      const updatedMeals = await fetchMealsForDate(dateKey);
+      
+      // Update local state to immediately show the new meal
+      setMeals(prevMeals => ({
+        ...prevMeals,
+        [dateKey]: updatedMeals
+      }));
+      
+      console.log(`Successfully analyzed meal nutrition with OpenAI GPT-4 Vision:`, result.nutrition);
       
     } catch (error) {
       console.error('Error scanning meal image:', error);
@@ -711,33 +776,48 @@ const MealPlanCalendar: React.FC = () => {
         </View>
       )}
 
-      {/* Compact Header */}
+      {/* Enhanced Header with Better Button Design */}
       <View style={[styles.headerContainer, { backgroundColor: theme.card, shadowColor: theme.shadow }]}>
         <View style={styles.headerButtons}>
+          {/* Grocery List Button */}
           <TouchableOpacity
-            style={[styles.headerButton, styles.groceryButton, { 
+            style={[styles.enhancedButton, styles.groceryButton, { 
               backgroundColor: theme.successLight, 
               borderColor: theme.success 
             }]}
             onPress={() => router.push("./grocery-list")}
+            activeOpacity={0.8}
           >
-            <Text style={[styles.headerButtonIcon, { color: theme.success }]}>🛒</Text>
-            <Text style={[styles.headerButtonText, { color: theme.success }]}>Grocery List</Text>
+            <View style={[styles.buttonIconContainer, { backgroundColor: theme.success }]}>
+              <Ionicons name="basket" size={22} color={theme.buttonText} />
+            </View>
+            <View style={styles.buttonTextContainer}>
+              <Text style={[styles.buttonTitle, { color: theme.success }]}>Grocery List</Text>
+            </View>
           </TouchableOpacity>
+
+          {/* Pantry Button */}
           <TouchableOpacity
-            style={[styles.headerButton, styles.pantryButton, { 
+            style={[styles.enhancedButton, styles.pantryButton, { 
               backgroundColor: theme.primaryLight, 
               borderColor: theme.primary 
             }]}
             onPress={() => router.push("/pantry/pantry")}
+            activeOpacity={0.8}
           >
-            <Text style={[styles.headerButtonIcon, { color: theme.primary }]}>🏠</Text>
-            <Text style={[styles.headerButtonText, { color: theme.primary }]}>Pantry</Text>
+            <View style={[styles.buttonIconContainer, { backgroundColor: theme.primary }]}>
+              <Ionicons name="home" size={22} color={theme.buttonText} />
+            </View>
+            <View style={styles.buttonTextContainer}>
+              <Text style={[styles.buttonTitle, { color: theme.primary }]}>My Pantry</Text>
+            </View>
           </TouchableOpacity>
+
+          {/* AI Food Scanner Button */}
           <TouchableOpacity
             style={[
-              styles.headerButton, 
-              styles.mealScanButton, 
+              styles.enhancedButton, 
+              styles.scannerButton, 
               { 
                 backgroundColor: scanningMeal ? theme.warningLight : theme.warningLight, 
                 borderColor: scanningMeal ? theme.warning : theme.warning,
@@ -745,52 +825,30 @@ const MealPlanCalendar: React.FC = () => {
               }
             ]}
             onPress={() => {
-              // Show enhanced modal to select date for meal scan
-              Alert.alert(
-                "📸 Edamam Food Scanner",
-                "Scan a meal photo to automatically detect nutrition data using Edamam Food Vision!",
-                [
-                  { 
-                    text: "📅 Today", 
-                    onPress: () => openCameraForMealScan(format(today, 'yyyy-MM-dd')),
-                    style: "default"
-                  },
-                  { 
-                    text: "📋 Select Date", 
-                    onPress: () => {
-                      // For now, just use today - could enhance later with date picker
-                      openCameraForMealScan(format(today, 'yyyy-MM-dd'));
-                    },
-                    style: "default"
-                  },
-                  { text: "Cancel", style: "cancel" }
-                ]
-              );
+              // Directly open camera for today's date
+              openCameraForMealScan(format(today, 'yyyy-MM-dd'));
             }}
             disabled={scanningMeal}
+            activeOpacity={0.8}
           >
-            <View style={styles.scanButtonWrapper}>
-              {scanningMeal ? (
-                <>
-                  <ActivityIndicator size="small" color={theme.warning} />
-                  <Text style={[styles.scanButtonProcessing, { color: theme.warning }]}>
-                    Analyzing...
-                  </Text>
-                </>
-              ) : (
-                <>
-                  <View style={[styles.scanIconContainer, { backgroundColor: theme.warning }]}>
-                    <Ionicons name="camera" size={18} color={theme.buttonText} />
-                    <Ionicons name="sparkles" size={12} color={theme.buttonText} style={styles.aiSparkle} />
-                  </View>
-                  <View style={styles.scanButtonContent}>
-                    <Text style={[styles.headerButtonText, { color: theme.warning, fontSize: 15 }]}>
-                      Edamam Food Scanner
-                    </Text>
-                  </View>
-                </>
-              )}
-            </View>
+            {scanningMeal ? (
+              <View style={styles.scanningContainer}>
+                <ActivityIndicator size="small" color={theme.warning} />
+                <Text style={[styles.scanningText, { color: theme.warning }]}>
+                  Analyzing...
+                </Text>
+              </View>
+            ) : (
+              <>
+                <View style={[styles.scannerIconContainer, { backgroundColor: theme.warning }]}>
+                  <Ionicons name="camera" size={20} color={theme.buttonText} />
+                  <Ionicons name="sparkles" size={14} color={theme.buttonText} style={styles.aiSparkle} />
+                </View>
+                <View style={styles.buttonTextContainer}>
+                  <Text style={[styles.buttonTitle, { color: theme.warning }]}>AI Food Scanner</Text>
+                </View>
+              </>
+            )}
           </TouchableOpacity>
         </View>
       </View>
@@ -907,7 +965,7 @@ const MealPlanCalendar: React.FC = () => {
                             </View>
                           </View>
 
-                          {/* Edamam Food Scanner Badge for macro meals */}
+                          {/* OpenAI Food Scanner Badge for macro meals */}
                           {meal.isMacroMeal && (
                             <View style={[styles.aiScannerBadge, { backgroundColor: theme.aiAccent }]}>
                               <View style={styles.aiScannerBadgeContent}>
@@ -1095,7 +1153,7 @@ const MealPlanCalendar: React.FC = () => {
                 <Ionicons name="leaf" size={24} color={theme.buttonText} />
               </View>
               <Text style={[styles.modalTitle, { color: theme.text }]}>
-                📸 Edamam Food Analysis Complete!
+                📸 OpenAI Food Analysis Complete!
               </Text>
               <Text style={[styles.scanModalSubtitle, { color: theme.textSecondary }]}>
                 Your meal has been analyzed and nutrition data saved
@@ -1154,13 +1212,13 @@ const MealPlanCalendar: React.FC = () => {
                   </Text>
                 </View>
                 
-                {/* Edamam Attribution */}
-                <View style={[styles.edamamAttribution, { backgroundColor: theme.cardSecondary, borderColor: theme.border }]}>
+                {/* OpenAI Attribution */}
+                <View style={[styles.openaiAttribution, { backgroundColor: theme.cardSecondary, borderColor: theme.border }]}>
                   <Text style={[styles.attributionText, { color: theme.textSecondary }]}>
                     Nutrition analysis powered by
                   </Text>
-                  <View style={styles.edamamLogoContainer}>
-                    <Text style={[styles.edamamLogoText, { color: theme.success }]}>EDAMAM</Text>
+                  <View style={styles.openaiLogoContainer}>
+                    <Text style={[styles.openaiLogoText, { color: theme.primary }]}>OpenAI GPT-4</Text>
                   </View>
                 </View>
               </ScrollView>
@@ -1208,8 +1266,8 @@ const MealPlanCalendar: React.FC = () => {
 const styles = StyleSheet.create({
   outerContainer: { 
     flex: 1,
-    paddingTop: 20, // Add top padding to avoid status bar overlap
-    paddingBottom: 80, // Add bottom padding to avoid navigation overlap
+    paddingTop: 20, // Reduced from 20 to save space
+    paddingBottom: 80, // Reduced from 100 - let bottom nav handle its own spacing
   },
   errorBanner: {
     flexDirection: "row",
@@ -1247,8 +1305,8 @@ const styles = StyleSheet.create({
   },
   headerContainer: {
     paddingHorizontal: 16,
-    paddingVertical: 8, // Reduced from 12 to 8
-    marginBottom: 4,
+    paddingTop: 12, // Reduced from 20
+    paddingBottom: 8, // Added small bottom padding
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 8,
@@ -1257,8 +1315,84 @@ const styles = StyleSheet.create({
   headerButtons: {
     flexDirection: "row",
     justifyContent: "space-between",
-    gap: 12,
+    gap: 8, // Reduced gap to accommodate bigger buttons
   },
+  // Enhanced button styles
+  enhancedButton: {
+    flex: 1,
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12, // Reduced from 16 to make buttons more compact
+    paddingHorizontal: 10, // Reduced from 12
+    borderRadius: 12,
+    borderWidth: 2,
+    minHeight: 75, // Reduced from 88 to save space
+    marginHorizontal: 2, // Reduced from 3
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  buttonIconContainer: {
+    width: 36, // Reduced from 40 to make more compact
+    height: 36,
+    borderRadius: 8, // Reduced from 10
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 6, // Reduced from 8
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  buttonTextContainer: {
+    alignItems: 'center',
+    justifyContent: 'center', // Added to ensure vertical centering
+    flex: 0, // Changed from 1 to 0 to prevent stretching
+    minHeight: 20, // Reduced minimum height
+  },
+  buttonTitle: {
+    fontSize: 13, // Slightly smaller for better fit
+    fontWeight: '700',
+    textAlign: 'center',
+    lineHeight: 15, // Adjusted line height
+  },
+  buttonSubtext: {
+    fontSize: 10.5, // Slightly smaller to fit better
+    fontWeight: '500',
+    textAlign: 'center',
+    opacity: 0.8,
+    lineHeight: 13,
+  },
+  // Scanner specific styles - make consistent with other buttons
+  scannerButton: {
+    position: 'relative',
+  },
+  scannerIconContainer: {
+    width: 36, // Match other buttons
+    height: 36,
+    borderRadius: 8, // Match other buttons
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 6, // Match other buttons
+    position: 'relative',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  scanningContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+  },
+  scanningText: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginTop: 8,
+  },
+  // Legacy styles (keeping for compatibility)
   headerButton: {
     flex: 1,
     flexDirection: 'row',
@@ -1308,14 +1442,15 @@ mealScanButtonText: {
   fontWeight: "bold",
 },
   nutritionBlock: {
-    position: "absolute", // Make the block absolute
-    bottom: 0, // Anchor it to the bottom of the container
-    left: 0, // Align it to the left
-    right: 0, // Align it to the right
-    padding: 10, // Reduced from 12 to 10
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    padding: 8, // Reduced from 10 to make more compact
     borderRadius: 8,
     borderWidth: 1,
     borderColor: "#ccc",
+    minHeight: 75, // Added minimum height for consistency
   },
   nutritionRow: {
     flexDirection: "row", // Arrange columns horizontally
@@ -1341,7 +1476,7 @@ mealScanButtonText: {
     marginBottom: 8, // Add spacing between the title and the nutrition rows
   },
   nutritionHeader: {
-    marginBottom: 16,
+    marginBottom: 8, // Reduced from 16
     alignItems: 'center',
   },
   nutritionSubtitle: {
@@ -1411,15 +1546,15 @@ mealScanButtonText: {
   },
   scrollView: { 
     flex: 1,
-    maxHeight: SCREEN_HEIGHT * 0.78, // Limit the height to prevent overlap
+    maxHeight: SCREEN_HEIGHT * 0.84, // Increased from 0.78 to use more screen space
   },
   scrollViewContent: {
     alignItems: 'flex-start',
   },
   container: { 
     flexDirection: "row", 
-    padding: 16,
-    alignItems: 'flex-start', // Prevent vertical centering
+    padding: 12, // Reduced from 16
+    alignItems: 'flex-start',
   },
   mealPicture: {
     width: 150,
@@ -1447,8 +1582,8 @@ mealScanButtonText: {
     marginRight: 16,
     padding: 0,
     borderWidth: 2,
-    borderRadius: 20,
-    height: SCREEN_HEIGHT * 0.725,
+    borderRadius: 16, // Reduced from 20 for a more modern look
+    height: SCREEN_HEIGHT * 0.7, // Increased from 0.7 to use more available space
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,
     shadowRadius: 12,
@@ -1461,24 +1596,25 @@ mealScanButtonText: {
     elevation: 8,
   },
   dateHeader: {
-    padding: 16,
-    borderTopLeftRadius: 18,
-    borderTopRightRadius: 18,
+    padding: 12, // Reduced from 16 to give more space to meals
+    borderTopLeftRadius: 14, // Reduced to match dayContainer
+    borderTopRightRadius: 14,
     alignItems: 'center',
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(0,0,0,0.1)',
+    minHeight: 70, // Added minimum height to ensure consistency
   },
   dateHeaderContent: {
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 4, // Reduced from 8
   },
   dayName: {
-    fontSize: 18,
+    fontSize: 16, // Reduced from 18 to be more compact
     fontWeight: '700',
-    marginBottom: 4,
+    marginBottom: 2, // Reduced from 4
   },
   dateNumber: {
-    fontSize: 16,
+    fontSize: 14, // Reduced from 16
     fontWeight: '600',
   },
   todayBadge: {
@@ -1503,15 +1639,15 @@ mealScanButtonText: {
   },
   mealsContainer: { 
     flex: 1,
-    paddingHorizontal: 16,
-    paddingTop: 8,
+    paddingHorizontal: 12, // Reduced from 16
+    paddingTop: 6, // Reduced from 8
   },
   mealsScrollContent: {
-    paddingBottom: 95, // Increased from 85 to 95 to account for larger container
+    paddingBottom: 85, // Reduced from 95 to account for smaller nutrition block
   },
   mealCard: {
-    marginBottom: 12,
-    borderRadius: 16,
+    marginBottom: 8, // Reduced from 12 to fit more meals
+    borderRadius: 12, // Reduced from 16 for consistency
     borderWidth: 2,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -1549,7 +1685,7 @@ mealScanButtonText: {
     textTransform: 'uppercase',
   },
   mealImageContainer: {
-    height: 120,
+    height: 100, // Reduced from 120 to save space while keeping meals visible
     width: '100%',
   },
   mealImage: {
@@ -1567,17 +1703,17 @@ mealScanButtonText: {
     fontSize: 32,
   },
   mealInfo: {
-    padding: 12,
+    padding: 10, // Reduced from 12 for more compact layout
   },
   mealName: {
-    fontSize: 16,
+    fontSize: 15, // Reduced from 16 for better space utilization
     fontWeight: '700',
-    marginBottom: 4,
+    marginBottom: 3, // Reduced from 4
   },
   mealDescription: {
-    fontSize: 14,
-    lineHeight: 20,
-    marginBottom: 8,
+    fontSize: 13, // Reduced from 14
+    lineHeight: 18, // Reduced from 20
+    marginBottom: 6, // Reduced from 8
   },
   nutritionPreview: {
     marginTop: 4,
@@ -1911,7 +2047,7 @@ mealScanButtonText: {
     shadowRadius: 8,
     elevation: 4,
   },
-  edamamAttribution: {
+  openaiAttribution: {
     alignItems: 'center',
     padding: 12,
     borderRadius: 8,
@@ -1924,12 +2060,12 @@ mealScanButtonText: {
     fontStyle: 'italic',
     textAlign: 'center',
   },
-  edamamLogoContainer: {
+  openaiLogoContainer: {
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 4,
   },
-  edamamLogoText: {
+  openaiLogoText: {
     fontSize: 14,
     fontWeight: 'bold',
     letterSpacing: 1,

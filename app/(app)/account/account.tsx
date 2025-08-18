@@ -8,7 +8,8 @@ import {
   Switch, 
   StyleSheet, 
   ActivityIndicator,
-  ScrollView 
+  ScrollView,
+  Linking
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../../context/ThemeContext';
@@ -402,6 +403,32 @@ const AccountScreen: React.FC = () => {
               </Text>
             </View>
             <Ionicons name="chevron-forward" size={16} color={theme.subtext} />
+          </TouchableOpacity>
+
+          {/* Support */}
+          <TouchableOpacity
+            style={styles.actionItem}
+            onPress={async () => {
+              try {
+                const supported = await Linking.canOpenURL('https://www.shareablemeals.com/support');
+                if (supported) {
+                  await Linking.openURL('https://www.shareablemeals.com/support');
+                } else {
+                  Alert.alert('Error', 'Unable to open support page. Please check your internet connection.');
+                }
+              } catch (error) {
+                console.error('Error opening support URL:', error);
+                Alert.alert('Error', 'Unable to open support page. Please try again.');
+              }
+            }}
+          >
+            <View style={styles.actionItemLeft}>
+              <Ionicons name="help-circle" size={16} color={theme.primary} />
+              <Text style={[styles.actionItemLabel, { color: theme.text }]}>
+                Support
+              </Text>
+            </View>
+            <Ionicons name="open-outline" size={16} color={theme.subtext} />
           </TouchableOpacity>
 
           {/* Admin Panel - Only show for admins */}

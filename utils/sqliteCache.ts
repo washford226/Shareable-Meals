@@ -466,38 +466,49 @@ class SQLiteCache {
   }
 
   async getCachedMeals(userId: string): Promise<Meal[] | null> {
-    await this.initialize();
+    // Non-blocking initialization check
+    if (!this.isInitialized) {
+      // If not initialized, start initialization but don't block
+      this.initialize().catch(err => console.warn('Cache init failed:', err));
+      return null; // Return immediately to avoid blocking navigation
+    }
+
     const now = Date.now();
 
-    const results = await this.db?.getAllAsync<any>(`
-      SELECT * FROM meals_cache 
-      WHERE user_id = ? AND expires_at > ?
-      ORDER BY created_at DESC
-    `, [userId, now]);
+    try {
+      const results = await this.db?.getAllAsync<any>(`
+        SELECT * FROM meals_cache 
+        WHERE user_id = ? AND expires_at > ?
+        ORDER BY created_at DESC
+      `, [userId, now]);
 
-    if (!results || results.length === 0) return null;
+      if (!results || results.length === 0) return null;
 
-    return results.map(result => ({
-      id: result.id,
-      user_id: result.user_id,
-      name: result.name,
-      description: result.description,
-      calories: result.calories,
-      protein: result.protein,
-      carbohydrates: result.carbohydrates,
-      fat: result.fat,
-      instructions: result.instructions,
-      recipeLink: result.recipeLink,
-      created_by_ai: result.created_by_ai === 1,
-      created_by: result.created_by,
-      favorite: result.favorite === 1,
-      dietary_restrictions: result.dietary_restrictions,
-      servings: result.servings,
-      cuisine: result.cuisine,
-      picture: result.picture,
-      visibility: result.visibility === 1,
-      created_at: result.created_at,
-    }));
+      return results.map(result => ({
+        id: result.id,
+        user_id: result.user_id,
+        name: result.name,
+        description: result.description,
+        calories: result.calories,
+        protein: result.protein,
+        carbohydrates: result.carbohydrates,
+        fat: result.fat,
+        instructions: result.instructions,
+        recipeLink: result.recipeLink,
+        created_by_ai: result.created_by_ai === 1,
+        created_by: result.created_by,
+        favorite: result.favorite === 1,
+        dietary_restrictions: result.dietary_restrictions,
+        servings: result.servings,
+        cuisine: result.cuisine,
+        picture: result.picture,
+        visibility: result.visibility === 1,
+        created_at: result.created_at,
+      }));
+    } catch (error) {
+      console.warn('Cache read failed (non-blocking):', error);
+      return null; // Fail gracefully to avoid blocking navigation
+    }
   }
 
   // Meal Plan Methods
@@ -536,25 +547,36 @@ class SQLiteCache {
   }
 
   async getCachedMealPlan(userId: string, startDate: string, endDate: string): Promise<MealPlan[] | null> {
-    await this.initialize();
+    // Non-blocking initialization check
+    if (!this.isInitialized) {
+      // If not initialized, start initialization but don't block
+      this.initialize().catch(err => console.warn('Cache init failed:', err));
+      return null; // Return immediately to avoid blocking navigation
+    }
+
     const now = Date.now();
 
-    const results = await this.db?.getAllAsync<any>(`
-      SELECT * FROM meal_plan_cache 
-      WHERE user_id = ? AND date >= ? AND date <= ? AND expires_at > ?
-      ORDER BY date, meal_type
-    `, [userId, startDate, endDate, now]);
+    try {
+      const results = await this.db?.getAllAsync<any>(`
+        SELECT * FROM meal_plan_cache 
+        WHERE user_id = ? AND date >= ? AND date <= ? AND expires_at > ?
+        ORDER BY date, meal_type
+      `, [userId, startDate, endDate, now]);
 
-    if (!results || results.length === 0) return null;
+      if (!results || results.length === 0) return null;
 
-    return results.map(result => ({
-      meal_plan_id: result.meal_plan_id,
-      meal_id: result.meal_id,
-      user_id: result.user_id,
-      date: result.date,
-      meal_type: result.meal_type,
-      meal: result.meal_data ? JSON.parse(result.meal_data) : undefined,
-    }));
+      return results.map(result => ({
+        meal_plan_id: result.meal_plan_id,
+        meal_id: result.meal_id,
+        user_id: result.user_id,
+        date: result.date,
+        meal_type: result.meal_type,
+        meal: result.meal_data ? JSON.parse(result.meal_data) : undefined,
+      }));
+    } catch (error) {
+      console.warn('Meal plan cache read failed (non-blocking):', error);
+      return null; // Fail gracefully to avoid blocking navigation
+    }
   }
 
   // Macro Meals Methods
