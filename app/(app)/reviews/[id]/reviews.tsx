@@ -351,6 +351,11 @@ const ViewReviews = () => {
         <FlatList
           data={reviews}
           keyExtractor={(item) => item.review_id}
+          removeClippedSubviews={true}
+          maxToRenderPerBatch={8}
+          updateCellsBatchingPeriod={50}
+          initialNumToRender={8}
+          windowSize={8}
           renderItem={({ item }) => (
             <View style={[styles.reviewCard, { backgroundColor: theme.card }]}>
               <View style={styles.reviewHeader}>

@@ -489,6 +489,11 @@ const AdminReportsScreen: React.FC = () => {
         renderItem={renderReportItem}
         keyExtractor={(item) => item.report_id.toString()}
         contentContainerStyle={styles.listContainer}
+        removeClippedSubviews={true}
+        maxToRenderPerBatch={8}
+        updateCellsBatchingPeriod={50}
+        initialNumToRender={8}
+        windowSize={8}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}

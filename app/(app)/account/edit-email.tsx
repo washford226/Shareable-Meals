@@ -415,6 +415,9 @@ const EditProfile = () => {
           />
         }
         showsVerticalScrollIndicator={false}
+        removeClippedSubviews={true}
+        keyboardShouldPersistTaps="handled"
+        scrollEventThrottle={16}
       >
         {/* Basic Information Card */}
         <View style={[styles.basicInfoCard, { backgroundColor: theme.card }]}>

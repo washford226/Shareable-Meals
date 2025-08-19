@@ -808,36 +808,16 @@ const applyFilters = useCallback(async () => {
           data={filteredMeals}
           keyExtractor={(item) => String(item.id)}
           numColumns={2}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={handleRefresh}
-              colors={[theme.primary]}
-              tintColor={theme.primary}
-            />
-          }
-          onEndReached={loadMoreMeals}
-          onEndReachedThreshold={0.3}
-          ListFooterComponent={() => (
-            loadingMore ? (
-              <View style={styles.loadingMoreContainer}>
-                <ActivityIndicator size="small" color={theme.primary} />
-                <Text style={[styles.loadingMoreText, { color: theme.subtext }]}>
-                  Loading more meals...
-                </Text>
-              </View>
-            ) : !hasMoreMeals && filteredMeals.length > 0 ? (
-              <View style={styles.endOfListContainer}>
-                <Text style={[styles.endOfListText, { color: theme.subtext }]}>
-                  You&apos;ve reached the end of your meals!
-                </Text>
-              </View>
-            ) : null
-          )}
+          removeClippedSubviews={true}
+          maxToRenderPerBatch={10}
+          updateCellsBatchingPeriod={50}
+          initialNumToRender={10}
+          windowSize={10}
           renderItem={({ item }) => (
             <TouchableOpacity
               style={[styles.mealItem, { backgroundColor: theme.card, borderColor: theme.border }]}
               onPress={() => onMealSelect(item)}
+              activeOpacity={0.7}
             >
               {/* Favorite Star */}
               <TouchableOpacity
@@ -872,7 +852,8 @@ const applyFilters = useCallback(async () => {
                       ? item.picture.slice(2).match(/.{2}/g)?.map((hex: string) => String.fromCharCode(parseInt(hex, 16))).join('') || ''
                       : item.picture
                   }} 
-                  style={styles.mealPicture} 
+                  style={styles.mealPicture}
+                  resizeMode="cover"
                 />
               ) : (
                 <View style={[styles.mealPicturePlaceholder, { backgroundColor: theme.cardSecondary }]}>
@@ -917,6 +898,32 @@ const applyFilters = useCallback(async () => {
                 </View>
               </View>
             </TouchableOpacity>
+          )}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              colors={[theme.primary]}
+              tintColor={theme.primary}
+            />
+          }
+          onEndReached={loadMoreMeals}
+          onEndReachedThreshold={0.3}
+          ListFooterComponent={() => (
+            loadingMore ? (
+              <View style={styles.loadingMoreContainer}>
+                <ActivityIndicator size="small" color={theme.primary} />
+                <Text style={[styles.loadingMoreText, { color: theme.subtext }]}>
+                  Loading more meals...
+                </Text>
+              </View>
+            ) : !hasMoreMeals && filteredMeals.length > 0 ? (
+              <View style={styles.endOfListContainer}>
+                <Text style={[styles.endOfListText, { color: theme.subtext }]}>
+                  You&apos;ve reached the end of your meals!
+                </Text>
+              </View>
+            ) : null
           )}
           contentContainerStyle={styles.mealsGrid}
         />

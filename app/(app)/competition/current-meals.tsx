@@ -902,6 +902,11 @@ const CurrentMeals = () => {
           data={meals}
           keyExtractor={(item) => item.meal_id.toString()}
           numColumns={2}
+          removeClippedSubviews={true}
+          maxToRenderPerBatch={10}
+          updateCellsBatchingPeriod={50}
+          initialNumToRender={10}
+          windowSize={10}
           onEndReached={loadMoreMeals}
           onEndReachedThreshold={0.3}
           ListFooterComponent={() => (
@@ -1100,6 +1105,11 @@ const CurrentMeals = () => {
       <FlatList
         data={winners}
         keyExtractor={(item) => item.winner_id.toString()}
+        removeClippedSubviews={true}
+        maxToRenderPerBatch={8}
+        updateCellsBatchingPeriod={50}
+        initialNumToRender={8}
+        windowSize={8}
         onEndReached={loadMoreWinners}
         onEndReachedThreshold={0.3}
         ListFooterComponent={() => (

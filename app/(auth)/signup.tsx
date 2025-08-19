@@ -298,6 +298,8 @@ const SignUpScreen: React.FC = () => {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
+        removeClippedSubviews={true}
+        scrollEventThrottle={16}
       >
         {/* Header Section */}
         <View style={styles.headerSection}>
@@ -726,7 +728,12 @@ const SignUpScreen: React.FC = () => {
               </TouchableOpacity>
             </View>
             
-            <ScrollView style={styles.modalScrollView} showsVerticalScrollIndicator={false}>
+            <ScrollView 
+              style={styles.modalScrollView} 
+              showsVerticalScrollIndicator={false}
+              removeClippedSubviews={true}
+              keyboardShouldPersistTaps="handled"
+            >
               {dietaryOptions.map((option, index) => (
                 <TouchableOpacity
                   key={index}

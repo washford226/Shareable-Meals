@@ -588,6 +588,9 @@ const GroceryListScreen = () => {
                 tintColor={theme.primary}
               />
             }
+            showsVerticalScrollIndicator={false}
+            removeClippedSubviews={true}
+            scrollEventThrottle={16}
           >
             <View style={[styles.itemsHeader, { backgroundColor: theme.card, borderColor: theme.border }]}>
               <Ionicons name="receipt-outline" size={20} color={theme.primary} />

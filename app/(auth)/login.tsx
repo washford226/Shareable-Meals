@@ -121,6 +121,8 @@ const LoginScreen = () => {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
+        removeClippedSubviews={true}
+        scrollEventThrottle={16}
       >
         {/* Logo Section */}
         <View style={styles.logoSection}>

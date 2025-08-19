@@ -448,6 +448,11 @@ const PantryScreen = () => {
       <FlatList
         data={pantryItems.filter(item => item.pantry_id && typeof item.pantry_id === 'number')}
         keyExtractor={(item, index) => item.pantry_id ? item.pantry_id.toString() : `pantry-item-${index}`}
+        removeClippedSubviews={true}
+        maxToRenderPerBatch={10}
+        updateCellsBatchingPeriod={50}
+        initialNumToRender={10}
+        windowSize={10}
         renderItem={({ item }) => {
           const expirationStatus = getExpirationStatus(item.expiration_date);
           const isDeleting = deletingId === item.pantry_id;

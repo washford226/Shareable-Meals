@@ -515,6 +515,11 @@ const OtherMeals: React.FC = () => {
         data={filteredMeals}
         keyExtractor={(item) => item.id.toString()}
         numColumns={2}
+        removeClippedSubviews={true}
+        maxToRenderPerBatch={10}
+        updateCellsBatchingPeriod={50}
+        initialNumToRender={10}
+        windowSize={10}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -660,7 +665,12 @@ const OtherMeals: React.FC = () => {
       <Modal visible={isFilterModalVisible} transparent animationType="slide">
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContainer, { backgroundColor: theme.card, shadowColor: theme.shadow }]}>
-            <ScrollView style={styles.modalScrollView} showsVerticalScrollIndicator={false}>
+            <ScrollView 
+              style={styles.modalScrollView} 
+              showsVerticalScrollIndicator={false}
+              removeClippedSubviews={true}
+              keyboardShouldPersistTaps="handled"
+            >
               {/* Modal Header */}
               <View style={styles.modalHeader}>
                 <View style={styles.modalHeaderContent}>
@@ -878,7 +888,12 @@ const OtherMeals: React.FC = () => {
               </TouchableOpacity>
             </View>
             
-            <ScrollView style={styles.optionsList} showsVerticalScrollIndicator={false}>
+            <ScrollView 
+              style={styles.optionsList} 
+              showsVerticalScrollIndicator={false}
+              removeClippedSubviews={true}
+              keyboardShouldPersistTaps="handled"
+            >
               {dietaryFilterOptionsEnhanced.map((option) => (
                 <TouchableOpacity
                   key={option.value}
@@ -938,7 +953,12 @@ const OtherMeals: React.FC = () => {
               </TouchableOpacity>
             </View>
             
-            <ScrollView style={styles.optionsList} showsVerticalScrollIndicator={false}>
+            <ScrollView 
+              style={styles.optionsList} 
+              showsVerticalScrollIndicator={false}
+              removeClippedSubviews={true}
+              keyboardShouldPersistTaps="handled"
+            >
               {cuisineFilterOptionsEnhanced.map((option) => (
                 <TouchableOpacity
                   key={option.value}

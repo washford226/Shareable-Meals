@@ -146,7 +146,13 @@ const CreateReview = () => {
         <View style={styles.headerActions} />
       </View>
 
-      <ScrollView style={styles.scrollContainer} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        style={styles.scrollContainer} 
+        showsVerticalScrollIndicator={false}
+        removeClippedSubviews={true}
+        keyboardShouldPersistTaps="handled"
+        scrollEventThrottle={16}
+      >
         {/* Error Banner */}
         {error && (
           <View style={[styles.errorBanner, { 

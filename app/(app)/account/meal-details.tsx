@@ -426,6 +426,9 @@ const AdminMealDetailsScreen: React.FC = () => {
             tintColor={theme.primary}
           />
         }
+        showsVerticalScrollIndicator={false}
+        removeClippedSubviews={true}
+        scrollEventThrottle={16}
       >
         {/* Status Card */}
         {(meal.forever_invis || !meal.visibility) && (

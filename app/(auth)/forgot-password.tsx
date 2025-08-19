@@ -97,6 +97,8 @@ const ForgotPasswordScreen = () => {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
+        removeClippedSubviews={true}
+        scrollEventThrottle={16}
       >
         {/* Header Section */}
         <View style={styles.headerSection}>

@@ -374,6 +374,10 @@ const CreateMealScreen = () => {
             tintColor={theme.primary}
           />
         }
+        showsVerticalScrollIndicator={false}
+        removeClippedSubviews={true}
+        keyboardShouldPersistTaps="handled"
+        scrollEventThrottle={16}
       >
       {error && (
         <View style={[styles.errorBanner, { backgroundColor: theme.card, borderColor: theme.danger }]}>
@@ -802,7 +806,12 @@ const CreateMealScreen = () => {
             </TouchableOpacity>
           </View>
           
-          <ScrollView style={styles.optionsList} showsVerticalScrollIndicator={false}>
+          <ScrollView 
+            style={styles.optionsList} 
+            showsVerticalScrollIndicator={false}
+            removeClippedSubviews={true}
+            keyboardShouldPersistTaps="handled"
+          >
             {dietaryCreateOptionsEnhanced.map((option) => (
               <TouchableOpacity
                 key={option.value}
@@ -855,7 +864,12 @@ const CreateMealScreen = () => {
             </TouchableOpacity>
           </View>
           
-          <ScrollView style={styles.optionsList} showsVerticalScrollIndicator={false}>
+          <ScrollView 
+            style={styles.optionsList} 
+            showsVerticalScrollIndicator={false}
+            removeClippedSubviews={true}
+            keyboardShouldPersistTaps="handled"
+          >
             {cuisineOptionsEnhanced.map((option) => (
               <TouchableOpacity
                 key={option.value}

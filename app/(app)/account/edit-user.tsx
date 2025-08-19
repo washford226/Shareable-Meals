@@ -386,6 +386,9 @@ const EditUserScreen: React.FC = () => {
           />
         }
         showsVerticalScrollIndicator={false}
+        removeClippedSubviews={true}
+        keyboardShouldPersistTaps="handled"
+        scrollEventThrottle={16}
       >
         {/* Profile Picture Card */}
         <View style={[styles.profileCard, { backgroundColor: theme.card }]}>
@@ -692,7 +695,12 @@ const EditUserScreen: React.FC = () => {
               </TouchableOpacity>
             </View>
             
-            <ScrollView style={styles.optionsList} showsVerticalScrollIndicator={false}>
+            <ScrollView 
+              style={styles.optionsList} 
+              showsVerticalScrollIndicator={false}
+              removeClippedSubviews={true}
+              keyboardShouldPersistTaps="handled"
+            >
               {dietaryOptionsEnhanced.map((option) => (
                 <TouchableOpacity
                   key={option.value}

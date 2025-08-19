@@ -152,7 +152,13 @@ const AddPantryItem = () => {
   }, [food, quantity, unit, expirationDate]);
 
   return (
-    <ScrollView style={[styles.container, { backgroundColor: theme.background }]}>
+    <ScrollView 
+      style={[styles.container, { backgroundColor: theme.background }]}
+      showsVerticalScrollIndicator={false}
+      removeClippedSubviews={true}
+      keyboardShouldPersistTaps="handled"
+      scrollEventThrottle={16}
+    >
       {/* Enhanced Error Banner */}
       {error && (
         <View style={[styles.errorBanner, { 
