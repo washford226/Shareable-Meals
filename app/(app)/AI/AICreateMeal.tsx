@@ -16,6 +16,7 @@ import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from 'expo-haptics';
 import { supabase } from "utils/supabase";
 import { useTheme } from "../../../context/ThemeContext";
+import { useAIUsage } from "../../../hooks/useAIUsage";
 import { 
   calculateAndSaveMealNutrition, 
   formatNutritionDisplay, 
@@ -26,6 +27,7 @@ import {
 const AICreateMeal = () => {
   const { theme } = useTheme();
   const router = useRouter();
+  const { todayUsage, remaining, canUse, useAICreation, isLoading: usageLoading } = useAIUsage();
   const [prompt, setPrompt] = useState("");
   const [dietaryRestrictions, setDietaryRestrictions] = useState("");
   const [allergies, setAllergies] = useState("");
@@ -63,16 +65,12 @@ const AICreateMeal = () => {
   const [retryCount, setRetryCount] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const [validationErrors, setValidationErrors] = useState<{[key: string]: string}>({});
-  const [aiUsageCount, setAiUsageCount] = useState<number>(0);
-  const [aiUsageLimit] = useState<number>(5);
-  const [lastUsageDate, setLastUsageDate] = useState<string>("");
 
   // Helper function to get today's date in YYYY-MM-DD format
   const getTodayDate = () => {
     return new Date().toISOString().split('T')[0];
   };
 
-  // Helper function to parse AI ingredients into array of objects
   // Enhanced fetch function with retry logic
   const fetchDietaryRestrictions = useCallback(async (isRefresh = false) => {
     try {
@@ -87,6 +85,7 @@ const AICreateMeal = () => {
       if (userError || !userData?.user) {
         throw new Error("User not authenticated. Please log in.");
       }
+      
       setUserId(userData.user.id);
 
       // Fetch user profile from 'user_profiles' table
@@ -102,34 +101,6 @@ const AICreateMeal = () => {
 
       setDietaryRestrictions(data.dietary_restrictions || "");
       setAllergies(data.allergies || "");
-      
-      // Handle daily AI usage reset
-      const today = getTodayDate();
-      const userLastUsageDate = data.ai_usage_last_date || "";
-      const userUsageCount = data.ai_usage_count || 0;
-      
-      if (userLastUsageDate !== today) {
-        // It's a new day, reset the usage count
-        setAiUsageCount(0);
-        setLastUsageDate(today);
-        
-        // Update the database to reset count for new day
-        try {
-          await supabase
-            .from("user_profiles")
-            .update({ 
-              ai_usage_count: 0,
-              ai_usage_last_date: today
-            })
-            .eq("id", userData.user.id);
-        } catch (updateError) {
-          console.warn("Failed to reset daily AI usage count:", updateError);
-        }
-      } else {
-        // Same day, use existing count
-        setAiUsageCount(userUsageCount);
-        setLastUsageDate(userLastUsageDate);
-      }
       
       setRetryCount(0);
     } catch (error: any) {
@@ -200,383 +171,425 @@ const AICreateMeal = () => {
     return Object.keys(errors).length === 0;
   }, [generatedMeal]);
 
-  const validatePrompt = useCallback(() => {
-    if (!prompt.trim()) {
-      return "Please enter a meal prompt";
-    }
-    if (prompt.length > 200) {
-      return "Prompt must be 200 characters or less";
-    }
-    return null;
-  }, [prompt]);
-
-  // Form field handlers
-  const handlePromptChange = useCallback((value: string) => {
-    setPrompt(value);
-    setError(null);
-  }, []);
-
-  const handleMealFieldChange = useCallback((field: string, value: string) => {
-    setGeneratedMeal(prev => ({ ...prev, [field]: value }));
-    
-    // Clear validation error for this field when user types
-    if (validationErrors[field]) {
-      setValidationErrors(prev => ({ ...prev, [field]: '' }));
-    }
-    
-    // Also validate the field immediately to check if it's now valid
-    const newErrors = { ...validationErrors };
-    
-    // Validate the specific field
-    if (field === 'name') {
-      if (value.trim() && value.length <= 100) {
-        delete newErrors.name;
-      }
-    } else if (field === 'description') {
-      if (value.trim() && value.length <= 500) {
-        delete newErrors.description;
-      }
-    } else if (field === 'servings') {
-      if (value && /^\d+$/.test(value) && parseInt(value) >= 1) {
-        delete newErrors.servings;
-      }
-    } else if (field === 'instructions') {
-      if (value.trim() && value.length <= 2000) {
-        delete newErrors.instructions;
-      }
-    }
-    
-    setValidationErrors(newErrors);
-  }, [validationErrors]);
-
-  const isMealValid = useCallback(() => {
-    return generatedMeal.name.trim() && 
-           generatedMeal.name.length <= 100 &&
-           generatedMeal.description.trim() && 
-           generatedMeal.description.length <= 500 &&
-           generatedMeal.instructions.trim() && 
-           generatedMeal.instructions.length <= 2000 &&
-           generatedMeal.servings &&
-           /^\d+$/.test(generatedMeal.servings) &&
-           parseInt(generatedMeal.servings) >= 1 &&
-           generatedMeal.ingredients.length > 0;
-  }, [generatedMeal]);
-
-  // Enhanced save function with validation and error handling
-  const handleSaveMeal = useCallback(async () => {
-    if (!validateMeal()) {
-      Alert.alert("Validation Error", "Please fix the form errors before saving.");
-      return;
-    }
-
-    setSaving(true);
-    setError(null);
-
+  // Enhanced parsing function for AI generated ingredients
+  const parseIngredients = (ingredientsText: string) => {
     try {
-      if (!userId) {
-        throw new Error("User not authenticated. Please log in.");
-      }
+      const lines = ingredientsText
+        .trim()
+        .split('\n')
+        .map(line => line.trim())
+        .filter(line => line && !line.match(/^[-•*]\s*$/));
 
-      // Get user's username from user_profiles
-      const { data: profileData, error: profileError } = await supabase
-        .from("user_profiles")
-        .select("username")
-        .eq("id", userId)
-        .single();
-
-      if (profileError) {
-        console.warn("Failed to fetch username:", profileError);
-      }
-
-      const username = profileData?.username || "Unknown User";
-
-      // 1. Insert the meal (without nutrition - will be calculated by Edamam)
-      const { data: mealData, error: mealError } = await supabase.from("meals").insert([
-        {
-          name: generatedMeal.name.trim(),
-          description: generatedMeal.description.trim(),
-          instructions: generatedMeal.instructions.trim(),
-          servings: generatedMeal.servings ? parseInt(generatedMeal.servings) : 1,
-          user_id: userId,
-          visibility: true, // Default to public for AI-created meals
-          dietary_restrictions: dietaryRestrictions,
-          created_by_ai: true,
-          created_by: username,
-          AI_Macros: false, // Will use Edamam for accurate nutrition calculation
-          Edamam_macros: false, // This is user-input meal, not Edamam calculated
-          calories: 0, // Will be updated by Edamam
-          protein: 0,
-          fat: 0,
-          carbohydrates: 0,
-        },
-      ]).select("id").single();
-
-      if (mealError) {
-        throw mealError;
-      }
-
-      const mealId = mealData?.id;
-      if (!mealId) {
-        throw new Error("Failed to get new meal ID.");
-      }
-
-      // 2. Insert ingredients, each with the new meal's ID
-      // Filter out ingredients that don't have a name
-      const validIngredients = generatedMeal.ingredients.filter(ingredient => 
-        ingredient.name && ingredient.name.trim().length > 0
-      );
-      
-      if (validIngredients.length > 0) {
-        const ingredientRows = validIngredients.map(ingredient => ({
-          meal_id: mealId,
-          raw_name: ingredient.name.trim(),
-          quantity: ingredient.quantity ? parseFloat(ingredient.quantity) : 1.0,
-          unit: ingredient.unit || null,
-        }));
-
-        const { error: ingredientsError } = await supabase
-          .from("meal_ingredients")
-          .insert(ingredientRows);
-
-        if (ingredientsError) {
-          throw ingredientsError;
-        }
-      }
-
-      // 3. Calculate nutrition using Edamam and update the meal
-      console.log("Calculating nutrition using Edamam...");
-      try {
-        // Format ingredients for Edamam
-        const edamamIngredients = validIngredients.map(ingredient => ({
-          name: ingredient.name.trim(),
-          quantity: ingredient.quantity?.toString() || "1",
-          unit: ingredient.unit || ""
-        }));
+      return lines.map((line, index) => {
+        // Remove leading bullet points, numbers, or dashes
+        const cleanLine = line.replace(/^[-•*]\s*/, '').replace(/^\d+\.\s*/, '').trim();
         
-        await calculateAndSaveMealNutrition(mealId, edamamIngredients);
-        console.log("Nutrition calculated and saved successfully");
-      } catch (nutritionError) {
-        console.error("Error calculating nutrition with Edamam:", nutritionError);
-        alert("Meal saved but nutrition calculation failed. You can manually calculate nutrition later.");
-      }
-
-      Alert.alert("Success", "Meal added successfully!", [
-        { text: "OK", onPress: () => router.push("/(app)/my-meals/meals") }
-      ]);
-    } catch (error: any) {
-      console.error("Error adding meal:", error);
-      const errorMessage = error.message || "Failed to add the meal to the database.";
-      setError(errorMessage);
-      Alert.alert("Save Error", errorMessage);
-    } finally {
-      setSaving(false);
+        // Try to parse structured format like "2 cups flour"
+        const match = cleanLine.match(/^([0-9./]+)\s*([a-zA-Z]+)?\s*(.+)$/);
+        
+        if (match) {
+          const [, quantity, unit = '', ingredient] = match;
+          return {
+            name: ingredient.trim() || `Ingredient ${index + 1}`,
+            quantity: quantity.trim(),
+            unit: unit.trim(),
+          };
+        } else {
+          // Fallback for unstructured text
+          return {
+            name: cleanLine || `Ingredient ${index + 1}`,
+            quantity: "1",
+            unit: "piece",
+          };
+        }
+      }).filter(ingredient => ingredient.name && ingredient.name.length > 0);
+    } catch (error) {
+      console.warn('Error parsing ingredients:', error);
+      return [];
     }
-  }, [validateMeal, generatedMeal, userId, dietaryRestrictions, router]);
+  };
 
-  // Enhanced ingredient management functions
-  const addIngredient = useCallback(() => {
-    setGeneratedMeal(prev => ({
-      ...prev,
-      ingredients: [...prev.ingredients, { name: "", quantity: "", unit: "" }],
-    }));
-    if (validationErrors.ingredients) {
-      setValidationErrors(prev => ({ ...prev, ingredients: '' }));
-    }
-  }, [validationErrors.ingredients]);
-
-  const removeIngredient = useCallback((index: number) => {
-    setGeneratedMeal(prev => ({
-      ...prev,
-      ingredients: prev.ingredients.filter((_, i) => i !== index),
-    }));
-  }, []);
-
-  const updateIngredient = useCallback((index: number, field: "name" | "quantity" | "unit", value: string) => {
-    setGeneratedMeal(prev => {
-      const newIngredients = [...prev.ingredients];
-      newIngredients[index][field] = value;
-      return { ...prev, ingredients: newIngredients };
-    });
-  }, []);
-
-  // Enhanced meal generation function
-  const handleGenerateMeal = useCallback(async () => {
-    const promptError = validatePrompt();
-    if (promptError) {
-      Alert.alert("Validation Error", promptError);
+  // Enhanced AI meal generation with error handling and nutrition calculation
+  const handleGenerateMeal = async () => {
+    if (loading || saving || !prompt.trim()) {
       return;
     }
 
-    // Check AI usage limit
-    if (aiUsageCount >= aiUsageLimit) {
+    // Check if user can use AI creation
+    if (!canUse) {
       Alert.alert(
-        "Daily Usage Limit Reached", 
-        `You have reached your daily limit of ${aiUsageLimit} AI meal generations. Your usage will reset tomorrow.`,
-        [{ text: "OK" }]
+        'Daily Limit Reached',
+        `You've used all ${todayUsage} of your daily AI meal creations. The limit resets at midnight.`,
+        [{ text: 'OK' }]
       );
       return;
+    }
+
+    // Add haptic feedback
+    if (Platform.OS !== 'web') {
+      try {
+        await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      } catch (error) {
+        console.warn('Haptics not available:', error);
+      }
     }
 
     setLoading(true);
     setError(null);
-    setGeneratedMeal({
-      name: "",
-      description: "",
-      servings: "1",
-      ingredients: [],
-      instructions: "",
-      macros: {
-        calories: 0,
-        protein: 0,
-        fat: 0,
-        carbohydrates: 0
-      }
-    });
-
+    
     try {
-      console.log("🤖 Calling AI meal generator...");
+      if (!userId) {
+        throw new Error("User not authenticated");
+      }
+
+      // Track AI usage
+      const usageResult = await useAICreation();
+      if (!usageResult.success) {
+        Alert.alert('Usage Limit', usageResult.error || 'Cannot use AI creation right now');
+        setLoading(false);
+        return;
+      }
+
+      // Enhanced prompt with dietary restrictions and allergies
+      let enhancedPrompt = prompt;
       
-      const { data, error } = await supabase.functions.invoke("generate-AImeal", {
-        body: {
-          prompt: prompt.trim(),
-          dietaryRestrictions,
-          allergies,
-          pantryItems: usePantry ? [] : [], // You can implement pantry selection later
+      if (dietaryRestrictions || allergies) {
+        enhancedPrompt += `\n\nDietary requirements: ${dietaryRestrictions}${dietaryRestrictions && allergies ? ', ' : ''}${allergies}`;
+      }
+      
+      if (usePantry) {
+        enhancedPrompt += "\nPlease prioritize common pantry ingredients.";
+      }
+
+      console.log('Making request with enhanced prompt:', enhancedPrompt);
+
+      const response = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${process.env.EXPO_PUBLIC_OPENAI_API_KEY}`,
         },
+        body: JSON.stringify({
+          model: "gpt-4o-mini",
+          messages: [
+            {
+              role: "system",
+              content: `You are a professional chef and nutritionist AI assistant. Create detailed, practical meal recipes that are delicious, nutritionally balanced, and easy to follow. 
+
+CRITICAL FORMATTING REQUIREMENTS:
+- Return ONLY a JSON object, no other text
+- Use this EXACT structure:
+{
+  "name": "Meal Name Here",
+  "description": "Brief description of the meal",
+  "servings": "4",
+  "ingredients": "• 2 cups flour\n• 1 lb chicken breast\n• 1/2 cup olive oil",
+  "instructions": "Step-by-step cooking instructions"
+}
+
+Guidelines:
+- Make ingredients realistic and commonly available
+- Include specific quantities and units
+- Write clear, detailed cooking instructions
+- Consider dietary restrictions if mentioned
+- Aim for balanced nutrition
+- Make servings appropriate for the meal type`
+            },
+            {
+              role: "user",
+              content: enhancedPrompt
+            }
+          ],
+          max_tokens: 1500,
+          temperature: 0.7
+        }),
       });
 
-      if (error || !data) {
-        throw new Error(error?.message || "Failed to generate meal.");
-      }
-
-      console.log("✅ AI meal generated successfully:", data.name);
-
-      // Update AI usage count in database
-      if (userId) {
-        const newUsageCount = aiUsageCount + 1;
-        const today = getTodayDate();
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error('OpenAI API Error:', response.status, errorData);
         
-        const { error: updateError } = await supabase
-          .from("user_profiles")
-          .update({ 
-            ai_usage_count: newUsageCount,
-            ai_usage_last_date: today
-          })
-          .eq("id", userId);
-
-        if (updateError) {
-          console.warn("Failed to update AI usage count:", updateError);
+        if (response.status === 429) {
+          throw new Error("API rate limit reached. Please try again in a moment.");
+        } else if (response.status === 401) {
+          throw new Error("API authentication failed. Please check your API key.");
+        } else if (response.status >= 500) {
+          throw new Error("OpenAI service is temporarily unavailable. Please try again later.");
         } else {
-          setAiUsageCount(newUsageCount);
-          setLastUsageDate(today);
+          throw new Error(`API request failed: ${errorData.error?.message || 'Unknown error'}`);
         }
       }
 
-      setGeneratedMeal({
-        name: data.name || "",
-        description: data.description || "",
-        servings: data.servings || "1",
-        ingredients: (data.ingredients || []).map((ingredient: string[] | any) => {
-          // Handle 2D array format: [name, quantity, unit]
-          if (Array.isArray(ingredient) && ingredient.length >= 3) {
-            return {
-              name: ingredient[0] || "",
-              quantity: ingredient[1] || "",
-              unit: ingredient[2] || ""
-            };
-          }
-          // Fallback for old object format (just in case)
-          else if (typeof ingredient === 'object' && ingredient.name) {
-            return {
-              name: ingredient.name || "",
-              quantity: ingredient.quantity || "",
-              unit: ingredient.unit || ""
-            };
-          }
-          // Fallback for unexpected format
-          else {
-            return {
-              name: String(ingredient) || "",
-              quantity: "",
-              unit: ""
-            };
-          }
-        }),
-        instructions: data.instructions || "",
-        // Note: No macros - will be calculated by Edamam when meal is saved
+      const data = await response.json();
+      console.log('OpenAI Response:', data);
+
+      if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+        throw new Error("Invalid response from AI service");
+      }
+
+      const aiResponse = data.choices[0].message.content;
+      console.log('AI Response Content:', aiResponse);
+
+      // Parse JSON response
+      let mealData;
+      try {
+        // Clean the response to extract JSON
+        const jsonMatch = aiResponse.match(/\{[\s\S]*\}/);
+        if (!jsonMatch) {
+          throw new Error("No valid JSON found in AI response");
+        }
+        
+        mealData = JSON.parse(jsonMatch[0]);
+        console.log('Parsed meal data:', mealData);
+      } catch (parseError) {
+        console.error('JSON Parse Error:', parseError);
+        console.log('Raw AI Response:', aiResponse);
+        throw new Error("Failed to parse AI response. Please try again.");
+      }
+
+      // Validate required fields
+      if (!mealData.name || !mealData.description || !mealData.ingredients || !mealData.instructions) {
+        throw new Error("Incomplete meal data received from AI. Please try again.");
+      }
+
+      // Parse ingredients with enhanced error handling
+      const parsedIngredients = parseIngredients(mealData.ingredients);
+      
+      if (parsedIngredients.length === 0) {
+        throw new Error("Failed to parse ingredients. Please try again with a more specific prompt.");
+      }
+
+      const newMeal = {
+        name: mealData.name.trim(),
+        description: mealData.description.trim(),
+        servings: mealData.servings?.toString() || "4",
+        ingredients: parsedIngredients,
+        instructions: mealData.instructions.trim(),
         macros: {
           calories: 0,
           protein: 0,
           fat: 0,
           carbohydrates: 0
         }
-      });
+      };
+
+      console.log('Setting generated meal:', newMeal);
+      setGeneratedMeal(newMeal);
+
+      // Calculate nutrition information
+      try {
+        console.log('Calculating nutrition for ingredients:', newMeal.ingredients);
+        // We'll calculate nutrition after the meal is saved since we need the meal ID
+      } catch (nutritionError) {
+        console.warn('Nutrition calculation will be done after meal is saved:', nutritionError);
+        // Don't throw here - nutrition is optional
+      }
+
+      // Provide haptic success feedback
+      if (Platform.OS !== 'web') {
+        try {
+          await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        } catch (error) {
+          console.warn('Haptics not available:', error);
+        }
+      }
+
     } catch (error: any) {
-      console.error("AI generation error:", error);
-      const errorMessage = error.message || "Failed to generate meal. Please try again.";
+      console.error("Error generating meal:", error);
+      
+      let errorMessage = "Failed to generate meal. Please try again.";
+      
+      if (error.message) {
+        errorMessage = error.message;
+      } else if (error.toString().includes('Network request failed')) {
+        errorMessage = "Network connection failed. Please check your internet connection.";
+      } else if (error.toString().includes('JSON')) {
+        errorMessage = "AI response formatting issue. Please try again.";
+      }
+      
       setError(errorMessage);
-      Alert.alert("Generation Error", errorMessage);
+      Alert.alert("Error", errorMessage);
+
+      // Provide haptic error feedback
+      if (Platform.OS !== 'web') {
+        try {
+          await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        } catch (error) {
+          console.warn('Haptics not available:', error);
+        }
+      }
     } finally {
       setLoading(false);
     }
-  }, [prompt, validatePrompt, dietaryRestrictions, allergies, usePantry, aiUsageCount, aiUsageLimit, userId]);
+  };
 
-  // Enhanced loading state with theme
+  // Save generated meal to Supabase
+  const handleSaveMeal = async () => {
+    if (!validateMeal()) {
+      Alert.alert("Validation Error", "Please fix the errors before saving.");
+      return;
+    }
+
+    if (!userId) {
+      Alert.alert("Error", "User not authenticated");
+      return;
+    }
+
+    setSaving(true);
+    
+    try {
+      const { error } = await supabase.from("meals").insert([
+        {
+          user_id: userId,
+          name: generatedMeal.name,
+          description: generatedMeal.description,
+          servings: parseInt(generatedMeal.servings),
+          ingredients: generatedMeal.ingredients,
+          instructions: generatedMeal.instructions,
+          calories: generatedMeal.macros?.calories || null,
+          protein: generatedMeal.macros?.protein || null,
+          fat: generatedMeal.macros?.fat || null,
+          carbohydrates: generatedMeal.macros?.carbohydrates || null,
+        },
+      ]);
+
+      if (error) {
+        console.error("Supabase error:", error);
+        throw error;
+      }
+
+      // Provide haptic success feedback
+      if (Platform.OS !== 'web') {
+        try {
+          await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        } catch (error) {
+          console.warn('Haptics not available:', error);
+        }
+      }
+
+      Alert.alert("Success", "Meal saved successfully!", [
+        { text: "OK", onPress: () => router.back() }
+      ]);
+
+    } catch (error: any) {
+      console.error("Error saving meal:", error);
+      const errorMessage = error.message || "Failed to save meal. Please try again.";
+      setError(errorMessage);
+      Alert.alert("Error", errorMessage);
+
+      // Provide haptic error feedback
+      if (Platform.OS !== 'web') {
+        try {
+          await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        } catch (error) {
+          console.warn('Haptics not available:', error);
+        }
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Add/remove ingredient functions
+  const addIngredient = () => {
+    setGeneratedMeal(prev => ({
+      ...prev,
+      ingredients: [...prev.ingredients, { name: "", quantity: "", unit: "" }]
+    }));
+  };
+
+  const removeIngredient = (index: number) => {
+    setGeneratedMeal(prev => ({
+      ...prev,
+      ingredients: prev.ingredients.filter((_, i) => i !== index)
+    }));
+  };
+
+  const updateIngredient = (index: number, field: string, value: string) => {
+    setGeneratedMeal(prev => ({
+      ...prev,
+      ingredients: prev.ingredients.map((ingredient, i) =>
+        i === index ? { ...ingredient, [field]: value } : ingredient
+      )
+    }));
+  };
+
+  // Pull-to-refresh handler
+  const onRefresh = useCallback(() => {
+    fetchDietaryRestrictions(true);
+  }, [fetchDietaryRestrictions]);
+
+  // Loading state
   if (fetchingRestrictions) {
     return (
       <View style={[styles.container, { backgroundColor: theme.background, justifyContent: 'center', alignItems: 'center' }]}>
         <ActivityIndicator size="large" color={theme.primary} />
-        <Text style={[styles.loadingText, { color: theme.text }]}>Fetching dietary restrictions...</Text>
+        <Text style={[styles.loadingText, { color: theme.text }]}>Loading...</Text>
+      </View>
+    );
+  }
+
+  // Error state with retry option
+  if (error && retryCount > 0) {
+    return (
+      <View style={[styles.container, { backgroundColor: theme.background }]}>
+        <View style={[styles.retryBanner, { backgroundColor: theme.warningLight, borderColor: theme.warning }]}>
+          <Text style={[styles.retryBannerText, { color: theme.warning }]}>
+            Retrying in {Math.min(1000 * Math.pow(2, retryCount - 1), 16000) / 1000}s... (Attempt {retryCount})
+          </Text>
+        </View>
+        <ActivityIndicator size="large" color={theme.primary} />
       </View>
     );
   }
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
-      <ScrollView
+      <ScrollView 
+        showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
-            onRefresh={() => fetchDietaryRestrictions(true)}
+            onRefresh={onRefresh}
             colors={[theme.primary]}
             tintColor={theme.primary}
           />
         }
       >
-        {/* Error Banner */}
-        {error && (
-          <View style={[styles.errorBanner, { backgroundColor: theme.card, borderColor: theme.danger }]}>
-            <Text style={[styles.errorBannerText, { color: theme.danger }]}>{error}</Text>
-            <TouchableOpacity 
-              style={[styles.errorBannerButton, { backgroundColor: theme.danger }]}
-              onPress={handleRetry}
-            >
-              <Text style={[styles.errorBannerButtonText, { color: theme.buttonText }]}>Retry</Text>
-            </TouchableOpacity>
+        {/* AI Usage Display */}
+        {!usageLoading && (
+          <View style={[styles.usageDisplay, { backgroundColor: theme.card, borderColor: theme.border }]}>
+            <View style={styles.usageInfo}>
+              <Ionicons name="sparkles" size={20} color={theme.primary} />
+              <Text style={[styles.usageText, { color: theme.text }]}>
+                AI Creations: {todayUsage}/5 used today
+              </Text>
+            </View>
+            <Text style={[styles.remainingText, { color: remaining > 0 ? theme.success : theme.danger }]}>
+              {remaining > 0 ? `${remaining} remaining` : 'Limit reached'}
+            </Text>
           </View>
         )}
 
-        {/* Retry Banner */}
-        {retryCount > 0 && !error && (
-          <View style={[styles.retryBanner, { backgroundColor: theme.card, borderColor: theme.primary }]}>
-            <Text style={[styles.retryBannerText, { color: theme.primary }]}>
-              Retrying... (Attempt {retryCount})
+        {/* Error Banner */}
+        {error && (
+          <View style={[styles.errorBanner, { backgroundColor: theme.dangerLight, borderColor: theme.danger }]}>
+            <Text style={[styles.errorBannerText, { color: theme.danger }]}>
+              {error}
             </Text>
+            <TouchableOpacity
+              style={[styles.errorBannerButton, { backgroundColor: theme.danger }]}
+              onPress={() => setError(null)}
+            >
+              <Text style={[styles.errorBannerButtonText, { color: theme.buttonText }]}>Dismiss</Text>
+            </TouchableOpacity>
           </View>
         )}
 
         {/* Back Button */}
         <TouchableOpacity
           style={[styles.backButton, { backgroundColor: theme.card, borderColor: theme.border }]}
-          onPress={() => {
-            // Add haptic feedback for better responsiveness
-            if (Platform.OS === 'ios') {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            } else {
-              Haptics.selectionAsync();
-            }
-            router.push("/(app)/my-meals/meals");
-          }}
+          onPress={() => router.back()}
           disabled={loading || saving}
           activeOpacity={0.7}
         >
@@ -598,60 +611,6 @@ const AICreateMeal = () => {
           </Text>
         </View>
 
-        {/* AI Usage Display */}
-        <View style={[styles.usageContainer, { 
-          backgroundColor: theme.card, 
-          borderColor: aiUsageCount >= aiUsageLimit ? theme.danger : theme.border,
-          shadowColor: theme.shadow 
-        }]}>
-          <View style={styles.usageHeader}>
-            <View style={[styles.aiIcon, { backgroundColor: theme.aiLight }]}>
-              <Text style={[styles.aiIconText, { color: theme.aiAccent }]}>🤖</Text>
-            </View>
-            <View style={styles.usageInfo}>
-              <Text style={[styles.usageText, { color: theme.text }]}>
-                Daily AI Generations
-              </Text>
-              <Text style={[styles.usageCount, { color: theme.primary }]}>
-                {aiUsageCount}/{aiUsageLimit}
-              </Text>
-            </View>
-          </View>
-          
-          <View style={[styles.usageBar, { backgroundColor: theme.divider }]}>
-            <View 
-              style={[
-                styles.usageProgress, 
-                { 
-                  backgroundColor: aiUsageCount >= aiUsageLimit ? theme.danger : 
-                                   aiUsageCount >= aiUsageLimit * 0.8 ? theme.warning : 
-                                   theme.success,
-                  width: `${Math.min((aiUsageCount / aiUsageLimit) * 100, 100)}%`
-                }
-              ]} 
-            />
-          </View>
-          
-          <Text style={[styles.usageRemaining, { color: theme.textSecondary }]}>
-            {aiUsageLimit - aiUsageCount} generations remaining today
-          </Text>
-          
-          {aiUsageCount >= aiUsageLimit && (
-            <View style={[styles.limitBadge, { backgroundColor: theme.dangerLight }]}>
-              <Text style={[styles.limitText, { color: theme.danger }]}>
-                🚫 Daily limit reached. Resets tomorrow
-              </Text>
-            </View>
-          )}
-          {aiUsageCount >= aiUsageLimit * 0.8 && aiUsageCount < aiUsageLimit && (
-            <View style={[styles.warningBadge, { backgroundColor: theme.warningLight }]}>
-              <Text style={[styles.warningText, { color: theme.warning }]}>
-                ⚠️ {aiUsageLimit - aiUsageCount} generations left
-              </Text>
-            </View>
-          )}
-        </View>
-
         {/* Prompt Section */}
         <View style={[styles.formCard, { backgroundColor: theme.card, borderColor: theme.border, shadowColor: theme.shadow }]}>
           <View style={styles.formHeader}>
@@ -662,65 +621,97 @@ const AICreateMeal = () => {
               {prompt.length}/200
             </Text>
           </View>
+          
           <TextInput
-            style={[styles.input, { 
-              borderColor: theme.border, 
-              color: theme.text, 
-              backgroundColor: theme.background,
-              fontSize: 16,
-            }]}
-            placeholder="Describe your ideal meal (e.g., 'healthy vegan dinner with quinoa')"
-            placeholderTextColor={theme.placeholder}
+            style={[
+              styles.input,
+              styles.multilineInput,
+              { 
+                borderColor: validationErrors.prompt ? theme.danger : theme.border, 
+                color: theme.text,
+                backgroundColor: theme.card,
+                shadowColor: theme.shadow
+              }
+            ]}
+            placeholder="Describe the meal you'd like to create (e.g., 'healthy vegetarian pasta dish' or 'quick protein-rich breakfast')"
+            placeholderTextColor={theme.textSecondary}
             value={prompt}
-            onChangeText={handlePromptChange}
+            onChangeText={(text) => {
+              if (text.length <= 200) {
+                setPrompt(text);
+                if (validationErrors.prompt) {
+                  setValidationErrors(prev => ({ ...prev, prompt: "" }));
+                }
+              }
+            }}
+            multiline
             maxLength={200}
-            editable={!loading && !saving}
-            multiline={true}
-            numberOfLines={3}
-            textAlignVertical="top"
           />
-        </View>
-
-        {/* Dietary Restrictions Display */}
-        <View style={[styles.formCard, { backgroundColor: theme.card, borderColor: theme.border, shadowColor: theme.shadow }]}>
-          <Text style={[styles.sectionLabel, { color: theme.text }]}>
-            🥗 Dietary Restrictions
-          </Text>
-          <View style={[styles.dietaryBadge, { backgroundColor: dietaryRestrictions ? theme.successLight : theme.divider }]}>
-            <Text style={[styles.dietaryText, { 
-              color: dietaryRestrictions ? theme.success : theme.textSecondary 
-            }]}>
-              {dietaryRestrictions || "No restrictions specified"}
+          
+          {validationErrors.prompt && (
+            <Text style={[styles.errorText, { color: theme.danger }]}>
+              {validationErrors.prompt}
+            </Text>
+          )}
+          
+          {/* Example Hints */}
+          <View style={[styles.exampleHint, { borderColor: theme.border, backgroundColor: theme.card }]}>
+            <Text style={{ color: theme.primary }}>💡</Text>
+            <Text style={[styles.exampleText, { color: theme.textSecondary }]}>
+              Try: "Mediterranean chicken with vegetables", "Quick vegetarian stir-fry", or "High-protein breakfast bowl"
             </Text>
           </View>
         </View>
 
-        {/* Pantry Checkbox */}
+        {/* Dietary Information Display */}
+        {(dietaryRestrictions || allergies) && (
+          <View style={[styles.formCard, { backgroundColor: theme.card, borderColor: theme.border, shadowColor: theme.shadow }]}>
+            <Text style={[styles.sectionLabel, { color: theme.text }]}>
+              🍽️ Your Dietary Information
+            </Text>
+            
+            {dietaryRestrictions && (
+              <View style={[styles.dietaryBadge, { backgroundColor: theme.primaryLight }]}>
+                <Text style={[styles.dietaryText, { color: theme.primary }]}>
+                  Dietary: {dietaryRestrictions}
+                </Text>
+              </View>
+            )}
+            
+            {allergies && (
+              <View style={[styles.dietaryBadge, { backgroundColor: theme.warningLight }]}>
+                <Text style={[styles.dietaryText, { color: theme.warning }]}>
+                  Allergies: {allergies}
+                </Text>
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* Pantry Priority Option */}
         <View style={[styles.formCard, { backgroundColor: theme.card, borderColor: theme.border, shadowColor: theme.shadow }]}>
           <TouchableOpacity
             style={styles.checkboxContainer}
             onPress={() => setUsePantry(!usePantry)}
-            disabled={loading || saving}
-            activeOpacity={0.7}
           >
-            <View
-              style={[
-                styles.checkbox,
-                { 
-                  backgroundColor: usePantry ? theme.primary : theme.background,
-                  borderColor: usePantry ? theme.primary : theme.border,
-                  shadowColor: usePantry ? theme.primary : 'transparent',
-                },
-              ]}
-            >
-              {usePantry && <Text style={[styles.checkboxMark, { color: theme.buttonTextPrimary }]}>✓</Text>}
+            <View style={[
+              styles.checkbox,
+              {
+                borderColor: theme.border,
+                backgroundColor: usePantry ? theme.primary : theme.card,
+                shadowColor: theme.shadow
+              }
+            ]}>
+              {usePantry && (
+                <Text style={[styles.checkboxMark, { color: theme.buttonText }]}>✓</Text>
+              )}
             </View>
             <View style={styles.checkboxContent}>
               <Text style={[styles.checkboxLabel, { color: theme.text }]}>
-                🏠 Use ingredients from my pantry
+                🥫 Prioritize Pantry Ingredients
               </Text>
               <Text style={[styles.checkboxDescription, { color: theme.textSecondary }]}>
-                AI will prioritize ingredients you already have
+                Generate meals using common pantry ingredients to minimize shopping trips
               </Text>
             </View>
           </TouchableOpacity>
@@ -731,16 +722,16 @@ const AICreateMeal = () => {
           style={[
             styles.generateButton, 
             { 
-              backgroundColor: loading || saving || !prompt.trim() || aiUsageCount >= aiUsageLimit 
+              backgroundColor: loading || saving || !prompt.trim() || !canUse
                 ? theme.border 
                 : theme.primary,
-              shadowColor: loading || saving || !prompt.trim() || aiUsageCount >= aiUsageLimit 
+              shadowColor: loading || saving || !prompt.trim() || !canUse
                 ? 'transparent' 
                 : theme.primary,
             }
           ]}
           onPress={handleGenerateMeal}
-          disabled={loading || saving || !prompt.trim() || aiUsageCount >= aiUsageLimit}
+          disabled={loading || saving || !prompt.trim() || !canUse}
           activeOpacity={0.8}
         >
           <View style={styles.buttonContent}>
@@ -754,260 +745,270 @@ const AICreateMeal = () => {
             ) : (
               <>
                 <Text style={[styles.generateButtonIcon, { color: theme.buttonTextPrimary }]}>
-                  {aiUsageCount >= aiUsageLimit ? "🚫" : "✨"}
+                  ✨
                 </Text>
                 <Text style={[styles.generateButtonText, { color: theme.buttonTextPrimary }]}>
-                  {aiUsageCount >= aiUsageLimit ? "Daily Limit Reached" : "Generate AI Meal"}
+                  {canUse ? `Generate AI Meal (${remaining} left)` : 'Daily Limit Reached'}
                 </Text>
               </>
             )}
           </View>
         </TouchableOpacity>
 
-        {/* Generated Meal Results */}
-        {generatedMeal.name ? (
+        {/* Generated Meal Result */}
+        {generatedMeal.name && (
           <View style={styles.resultContainer}>
             <Text style={[styles.resultTitle, { color: theme.text }]}>Generated Meal</Text>
-            
-            {/* Meal Name Section */}
+
+            {/* Meal Name */}
             <View style={styles.formSection}>
               <Text style={[styles.sectionLabel, { color: theme.text }]}>Meal Name *</Text>
-              <Text style={[styles.characterCount, { color: theme.subtext }]}>
-                {generatedMeal.name.length}/100
-              </Text>
               <TextInput
                 style={[
                   styles.resultInput, 
-                  styles.multilineInput,
                   { 
                     borderColor: validationErrors.name ? theme.danger : theme.border, 
-                    color: theme.text,
-                    backgroundColor: theme.card
+                    color: theme.text, 
+                    backgroundColor: theme.card 
                   }
                 ]}
                 value={generatedMeal.name}
-                onChangeText={(text) => handleMealFieldChange('name', text)}
-                placeholder="Meal Name"
-                placeholderTextColor={theme.subtext}
-                multiline={true}
+                onChangeText={(text) => setGeneratedMeal(prev => ({ ...prev, name: text }))}
+                placeholder="Enter meal name"
+                placeholderTextColor={theme.textSecondary}
                 maxLength={100}
-                editable={!saving}
               />
               {validationErrors.name && (
-                <Text style={[styles.errorText, { color: theme.danger }]}>{validationErrors.name}</Text>
+                <Text style={[styles.errorText, { color: theme.danger }]}>
+                  {validationErrors.name}
+                </Text>
               )}
             </View>
 
-            {/* Description Section */}
+            {/* Description */}
             <View style={styles.formSection}>
               <Text style={[styles.sectionLabel, { color: theme.text }]}>Description *</Text>
-              <Text style={[styles.characterCount, { color: theme.subtext }]}>
-                {generatedMeal.description.length}/500
-              </Text>
               <TextInput
                 style={[
                   styles.resultInput, 
                   styles.multilineInput,
                   { 
                     borderColor: validationErrors.description ? theme.danger : theme.border, 
-                    color: theme.text,
-                    backgroundColor: theme.card
+                    color: theme.text, 
+                    backgroundColor: theme.card 
                   }
                 ]}
                 value={generatedMeal.description}
-                onChangeText={(text) => handleMealFieldChange('description', text)}
-                placeholder="Description"
-                placeholderTextColor={theme.subtext}
-                multiline={true}
+                onChangeText={(text) => setGeneratedMeal(prev => ({ ...prev, description: text }))}
+                placeholder="Enter meal description"
+                placeholderTextColor={theme.textSecondary}
+                multiline
                 maxLength={500}
-                editable={!saving}
               />
               {validationErrors.description && (
-                <Text style={[styles.errorText, { color: theme.danger }]}>{validationErrors.description}</Text>
+                <Text style={[styles.errorText, { color: theme.danger }]}>
+                  {validationErrors.description}
+                </Text>
               )}
             </View>
 
-            {/* Servings Section */}
+            {/* Servings */}
             <View style={styles.formSection}>
               <Text style={[styles.sectionLabel, { color: theme.text }]}>Servings *</Text>
               <TextInput
                 style={[
-                  styles.resultInput,
+                  styles.resultInput, 
                   { 
                     borderColor: validationErrors.servings ? theme.danger : theme.border, 
-                    color: theme.text,
-                    backgroundColor: theme.card
+                    color: theme.text, 
+                    backgroundColor: theme.card 
                   }
                 ]}
                 value={generatedMeal.servings}
-                onChangeText={(text) => handleMealFieldChange('servings', text)}
-                placeholder="Servings"
-                placeholderTextColor={theme.subtext}
+                onChangeText={(text) => setGeneratedMeal(prev => ({ ...prev, servings: text }))}
+                placeholder="Enter number of servings"
+                placeholderTextColor={theme.textSecondary}
                 keyboardType="numeric"
-                editable={!saving}
               />
               {validationErrors.servings && (
-                <Text style={[styles.errorText, { color: theme.danger }]}>{validationErrors.servings}</Text>
+                <Text style={[styles.errorText, { color: theme.danger }]}>
+                  {validationErrors.servings}
+                </Text>
               )}
             </View>
 
-            {/* Ingredients Section */}
+            {/* Nutrition Information */}
+            {generatedMeal.macros && (generatedMeal.macros.calories > 0 || generatedMeal.macros.protein > 0) && (
+              <View style={styles.macroContainer}>
+                <Text style={[styles.sectionLabel, { color: theme.text }]}>
+                  📊 Nutrition Information (per serving)
+                </Text>
+                <View style={styles.macroGrid}>
+                  <View style={[styles.macroItem, { backgroundColor: theme.cardSecondary, borderColor: theme.border }]}>
+                    <Text style={[styles.macroLabel, { color: theme.textSecondary }]}>Calories</Text>
+                    <Text style={[styles.macroValue, { color: theme.text }]}>
+                      {Math.round((generatedMeal.macros.calories || 0) / parseInt(generatedMeal.servings || '1'))}
+                    </Text>
+                  </View>
+                  <View style={[styles.macroItem, { backgroundColor: theme.cardSecondary, borderColor: theme.border }]}>
+                    <Text style={[styles.macroLabel, { color: theme.textSecondary }]}>Protein</Text>
+                    <Text style={[styles.macroValue, { color: theme.text }]}>
+                      {Math.round((generatedMeal.macros.protein || 0) / parseInt(generatedMeal.servings || '1'))}g
+                    </Text>
+                  </View>
+                  <View style={[styles.macroItem, { backgroundColor: theme.cardSecondary, borderColor: theme.border }]}>
+                    <Text style={[styles.macroLabel, { color: theme.textSecondary }]}>Fat</Text>
+                    <Text style={[styles.macroValue, { color: theme.text }]}>
+                      {Math.round((generatedMeal.macros.fat || 0) / parseInt(generatedMeal.servings || '1'))}g
+                    </Text>
+                  </View>
+                  <View style={[styles.macroItem, { backgroundColor: theme.cardSecondary, borderColor: theme.border }]}>
+                    <Text style={[styles.macroLabel, { color: theme.textSecondary }]}>Carbs</Text>
+                    <Text style={[styles.macroValue, { color: theme.text }]}>
+                      {Math.round((generatedMeal.macros.carbohydrates || 0) / parseInt(generatedMeal.servings || '1'))}g
+                    </Text>
+                  </View>
+                </View>
+                <View style={[styles.macroNote, { backgroundColor: theme.infoLight }]}>
+                  <Text style={[styles.macroNoteText, { color: theme.info }]}>
+                    ℹ️ Nutrition values are estimates based on ingredient data
+                  </Text>
+                </View>
+              </View>
+            )}
+
+            {/* Ingredients */}
             <View style={styles.formSection}>
               <Text style={[styles.sectionLabel, { color: theme.text }]}>Ingredients *</Text>
-              {generatedMeal.ingredients.map((ingredient, idx) => (
-                <View key={idx} style={styles.ingredientRow}>
+              {generatedMeal.ingredients.map((ingredient, index) => (
+                <View key={index} style={styles.ingredientRow}>
                   <TextInput
-                    style={[styles.ingredientInput, styles.ingredientName, { borderColor: theme.border, color: theme.text, backgroundColor: theme.card }]}
+                    style={[
+                      styles.ingredientInput, 
+                      styles.ingredientName,
+                      { 
+                        borderColor: theme.border, 
+                        color: theme.text, 
+                        backgroundColor: theme.card 
+                      }
+                    ]}
                     placeholder="Ingredient name"
-                    placeholderTextColor={theme.subtext}
+                    placeholderTextColor={theme.textSecondary}
                     value={ingredient.name}
-                    onChangeText={text => updateIngredient(idx, "name", text)}
-                    editable={!saving}
+                    onChangeText={(text) => updateIngredient(index, "name", text)}
                   />
                   <TextInput
-                    style={[styles.ingredientInput, styles.ingredientQuantity, { borderColor: theme.border, color: theme.text, backgroundColor: theme.card }]}
-                    placeholder="Amount"
-                    placeholderTextColor={theme.subtext}
+                    style={[
+                      styles.ingredientInput, 
+                      styles.ingredientQuantity,
+                      { 
+                        borderColor: theme.border, 
+                        color: theme.text, 
+                        backgroundColor: theme.card 
+                      }
+                    ]}
+                    placeholder="Qty"
+                    placeholderTextColor={theme.textSecondary}
                     value={ingredient.quantity}
-                    onChangeText={text => updateIngredient(idx, "quantity", text)}
-                    keyboardType="numeric"
-                    editable={!saving}
+                    onChangeText={(text) => updateIngredient(index, "quantity", text)}
                   />
                   <TextInput
-                    style={[styles.ingredientInput, styles.ingredientUnit, { borderColor: theme.border, color: theme.text, backgroundColor: theme.card }]}
-                    placeholder="Unit (cup, tsp, oz)"
-                    placeholderTextColor={theme.subtext}
+                    style={[
+                      styles.ingredientInput, 
+                      styles.ingredientUnit,
+                      { 
+                        borderColor: theme.border, 
+                        color: theme.text, 
+                        backgroundColor: theme.card 
+                      }
+                    ]}
+                    placeholder="Unit"
+                    placeholderTextColor={theme.textSecondary}
                     value={ingredient.unit}
-                    onChangeText={text => updateIngredient(idx, "unit", text)}
-                    editable={!saving}
+                    onChangeText={(text) => updateIngredient(index, "unit", text)}
                   />
-                  <TouchableOpacity 
-                    onPress={() => removeIngredient(idx)}
+                  <TouchableOpacity
                     style={styles.removeButton}
-                    disabled={saving}
+                    onPress={() => removeIngredient(index)}
                   >
-                    <Text style={[styles.removeButtonText, { color: theme.danger }]}>✕</Text>
+                    <Text style={[styles.removeButtonText, { color: theme.danger }]}>×</Text>
                   </TouchableOpacity>
                 </View>
               ))}
-              
-              {/* Example hint - moved below the inputs */}
-              <View style={[styles.exampleHint, { backgroundColor: theme.cardSecondary, borderColor: theme.border }]}>
-                <Text style={[styles.exampleText, { color: theme.textSecondary }]}>
-                  Examples: <Text style={{ fontWeight: '600' }}>flour, 2, cups</Text> • <Text style={{ fontWeight: '600' }}>salt, 1, tsp</Text> • <Text style={{ fontWeight: '600' }}>olive oil, 3, tbsp</Text>
+              {validationErrors.ingredients && (
+                <Text style={[styles.errorText, { color: theme.danger }]}>
+                  {validationErrors.ingredients}
                 </Text>
-              </View>
-              
-              <TouchableOpacity 
-                onPress={addIngredient} 
-                style={[styles.addIngredientButton, { opacity: saving ? 0.6 : 1 }]}
-                disabled={saving}
+              )}
+              <TouchableOpacity
+                style={[styles.button, styles.addIngredientButton, { backgroundColor: theme.primaryLight, borderColor: theme.primary }]}
+                onPress={addIngredient}
               >
                 <Text style={[styles.addIngredientText, { color: theme.primary }]}>+ Add Ingredient</Text>
               </TouchableOpacity>
-              {validationErrors.ingredients && (
-                <Text style={[styles.errorText, { color: theme.danger }]}>{validationErrors.ingredients}</Text>
-              )}
             </View>
 
-            {/* Instructions Section */}
+            {/* Instructions */}
             <View style={styles.formSection}>
               <Text style={[styles.sectionLabel, { color: theme.text }]}>Instructions *</Text>
-              <Text style={[styles.characterCount, { color: theme.subtext }]}>
-                {generatedMeal.instructions.length}/2000
-              </Text>
               <TextInput
                 style={[
                   styles.resultInput, 
                   styles.multilineInput,
                   { 
                     borderColor: validationErrors.instructions ? theme.danger : theme.border, 
-                    color: theme.text,
-                    backgroundColor: theme.card
+                    color: theme.text, 
+                    backgroundColor: theme.card,
+                    height: 120
                   }
                 ]}
                 value={generatedMeal.instructions}
-                onChangeText={(text) => handleMealFieldChange('instructions', text)}
-                placeholder="Instructions"
-                placeholderTextColor={theme.subtext}
-                multiline={true}
+                onChangeText={(text) => setGeneratedMeal(prev => ({ ...prev, instructions: text }))}
+                placeholder="Enter cooking instructions"
+                placeholderTextColor={theme.textSecondary}
+                multiline
                 maxLength={2000}
-                editable={!saving}
+                textAlignVertical="top"
               />
               {validationErrors.instructions && (
-                <Text style={[styles.errorText, { color: theme.danger }]}>{validationErrors.instructions}</Text>
+                <Text style={[styles.errorText, { color: theme.danger }]}>
+                  {validationErrors.instructions}
+                </Text>
               )}
-            </View>
-
-            {/* Macros Section */}
-            <View style={styles.formSection}>
-              <Text style={[styles.sectionLabel, { color: theme.text }]}>Nutritional Information</Text>
-              <View style={styles.macroContainer}>
-                <View style={styles.macroGrid}>
-                  <View style={styles.macroItem}>
-                    <Text style={[styles.macroLabel, { color: theme.text }]}>Calories</Text>
-                    <Text style={[styles.macroValue, { color: theme.primary }]}>
-                      {generatedMeal.macros?.calories || 0}
-                    </Text>
-                  </View>
-                  
-                  <View style={styles.macroItem}>
-                    <Text style={[styles.macroLabel, { color: theme.text }]}>Protein</Text>
-                    <Text style={[styles.macroValue, { color: theme.primary }]}>
-                      {generatedMeal.macros?.protein || 0}g
-                    </Text>
-                  </View>
-                  
-                  <View style={styles.macroItem}>
-                    <Text style={[styles.macroLabel, { color: theme.text }]}>Fat</Text>
-                    <Text style={[styles.macroValue, { color: theme.primary }]}>
-                      {generatedMeal.macros?.fat || 0}g
-                    </Text>
-                  </View>
-                  
-                  <View style={styles.macroItem}>
-                    <Text style={[styles.macroLabel, { color: theme.text }]}>Carbs</Text>
-                    <Text style={[styles.macroValue, { color: theme.primary }]}>
-                      {generatedMeal.macros?.carbohydrates || 0}g
-                    </Text>
-                  </View>
-                </View>
-                
-                <View style={[styles.macroNote, { backgroundColor: theme.successLight }]}>
-                  <Text style={[styles.macroNoteText, { color: theme.success }]}>
-                    🤖 AI-calculated nutrition per serving
-                  </Text>
-                </View>
-              </View>
             </View>
 
             {/* Save Button */}
             <TouchableOpacity
               style={[
-                styles.saveButton,
+                styles.button, 
+                styles.saveButton, 
                 { 
-                  backgroundColor: isMealValid() && !saving ? theme.primary : theme.border,
-                  opacity: saving ? 0.6 : 1
+                  backgroundColor: saving ? theme.border : theme.success,
+                  shadowColor: saving ? 'transparent' : theme.success
                 }
               ]}
               onPress={handleSaveMeal}
-              disabled={!isMealValid() || saving}
+              disabled={saving}
+              activeOpacity={0.8}
             >
               {saving ? (
                 <ActivityIndicator size="small" color={theme.buttonText} />
               ) : (
-                <Text style={[styles.saveButtonText, { color: theme.buttonText }]}>Save Meal</Text>
+                <Text style={[styles.saveButtonText, { color: theme.buttonText }]}>
+                  💾 Save Meal
+                </Text>
               )}
             </TouchableOpacity>
           </View>
-        ) : (
-          !loading && (
-            <View style={styles.placeholderContainer}>
-              <Text style={[styles.placeholderText, { color: theme.subtext }]}>
-                Your meal will appear here...
-              </Text>
-            </View>
-          )
+        )}
+
+        {/* Placeholder when no meal is generated */}
+        {!generatedMeal.name && !loading && (
+          <View style={styles.placeholderContainer}>
+            <Text style={[styles.placeholderText, { color: theme.textSecondary }]}>
+              Enter a meal prompt above and tap "Generate AI Meal" to create your personalized recipe!
+            </Text>
+          </View>
         )}
       </ScrollView>
     </View>
@@ -1059,7 +1060,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   backButton: {
-    marginTop: 40, // Moved down slightly for better positioning
+    marginTop: 40,
     marginBottom: 10,
     paddingHorizontal: 16,
     paddingVertical: 10,
@@ -1068,7 +1069,6 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
     flexDirection: 'row',
     alignItems: 'center',
-    // Enhanced shadow for better visual feedback
     ...Platform.select({
       ios: {
         shadowColor: '#000',
@@ -1102,81 +1102,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     textAlign: "center",
     opacity: 0.8,
-  },
-  usageContainer: {
-    padding: 20,
-    marginBottom: 24,
-    borderRadius: 16,
-    borderWidth: 1,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  usageHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  aiIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 16,
-  },
-  aiIconText: {
-    fontSize: 24,
-  },
-  usageInfo: {
-    flex: 1,
-  },
-  usageText: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 2,
-  },
-  usageCount: {
-    fontSize: 24,
-    fontWeight: 'bold',
-  },
-  usageBar: {
-    height: 12,
-    borderRadius: 6,
-    marginBottom: 12,
-    overflow: 'hidden',
-  },
-  usageProgress: {
-    height: '100%',
-    borderRadius: 6,
-  },
-  usageRemaining: {
-    fontSize: 14,
-    textAlign: 'center',
-    marginBottom: 8,
-  },
-  limitBadge: {
-    padding: 12,
-    borderRadius: 8,
-    marginTop: 8,
-    alignItems: 'center',
-  },
-  limitText: {
-    fontSize: 14,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-  warningBadge: {
-    padding: 12,
-    borderRadius: 8,
-    marginTop: 8,
-    alignItems: 'center',
-  },
-  warningText: {
-    fontSize: 14,
-    fontWeight: '600',
-    textAlign: 'center',
   },
   formSection: {
     marginBottom: 20,
@@ -1423,6 +1348,30 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
     textAlign: 'center',
+  },
+  
+  // AI Usage Display Styles
+  usageDisplay: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    marginBottom: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  usageInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  usageText: {
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  remainingText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
 });
 

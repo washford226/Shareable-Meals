@@ -31,6 +31,15 @@ const SCANNER_DAILY_LIMIT = 3;
  * Check if user can use scanner and track usage
  */
 export const checkScannerUsage = async (): Promise<ScannerUsageResult> => {
+  // In development mode, always allow scanner usage
+  if (__DEV__) {
+    return {
+      canUse: true,
+      remainingUses: 999,
+      message: undefined
+    };
+  }
+
   try {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
@@ -90,6 +99,11 @@ export const checkScannerUsage = async (): Promise<ScannerUsageResult> => {
  * Increment scanner usage count
  */
 export const incrementScannerUsage = async (): Promise<boolean> => {
+  // In development mode, don't actually track usage (just return success)
+  if (__DEV__) {
+    return true;
+  }
+
   try {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
@@ -148,6 +162,15 @@ export const incrementScannerUsage = async (): Promise<boolean> => {
  * Get current scanner usage for display
  */
 export const getScannerUsageStatus = async (): Promise<{ used: number; remaining: number; total: number } | null> => {
+  // In development mode, return unlimited usage
+  if (__DEV__) {
+    return {
+      used: 0,
+      remaining: 999,
+      total: 999
+    };
+  }
+
   try {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {

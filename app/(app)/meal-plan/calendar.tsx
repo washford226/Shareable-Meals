@@ -29,7 +29,13 @@ import {
   validateImageNutritionData,
   ImageNutritionData 
 } from '../../../utils/edamamImageUtils';
-import { responsiveFontSizes } from '../../../utils/responsiveUtils';
+import { responsiveFontSizes, getCalendarDayHeight, getCalendarDateContainerHeight, getCalendarNutritionHeight, getCalendarMealAreaHeight, getDeviceCategory, getBottomNavHeight } from '../../../utils/responsiveUtils';
+
+// Device category helpers (global to be used in styles)
+const deviceCategory = getDeviceCategory();
+const isSmallDevice = deviceCategory === 'extraSmall' || deviceCategory === 'small';
+const isMediumDevice = deviceCategory === 'medium';
+const isLargeDevice = deviceCategory === 'large' || deviceCategory === 'extraLarge' || deviceCategory === 'tablet';
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
 const SCREEN_HEIGHT = Dimensions.get("window").height;
@@ -919,10 +925,10 @@ const MealPlanCalendar: React.FC = () => {
                         <Text style={[styles.todayText, { color: theme.buttonTextPrimary }]}>Today</Text>
                       </View>
                     )}
+                    <Text style={[styles.optionsHint, { color: theme.textSecondary }]}>
+                      Tap for options
+                    </Text>
                   </View>
-                  <Text style={[styles.optionsHint, { color: theme.textSecondary }]}>
-                    Tap for options
-                  </Text>
                 </TouchableOpacity>
                 <View style={styles.mealsContainer}>
                   <ScrollView contentContainerStyle={styles.mealsScrollContent}>
@@ -1052,7 +1058,11 @@ const MealPlanCalendar: React.FC = () => {
                         </View>
                         <View style={styles.nutritionRow}>
                           <View style={[styles.nutritionColumn, styles.caloriesColumn]}>
-                            <Text style={[styles.nutritionValue, { color: theme.primary, fontSize: responsiveFontSizes.h4, fontWeight: '800' }]}>
+                            <Text style={[styles.nutritionValue, { 
+                              color: theme.primary, 
+                              fontSize: isSmallDevice ? responsiveFontSizes.caption : responsiveFontSizes.h4, 
+                              fontWeight: '800' 
+                            }]}>
                               {totals.calories}
                             </Text>
                             <Text style={[styles.nutritionLabel, { color: theme.textSecondary }]}>calories</Text>
@@ -1267,7 +1277,7 @@ const styles = StyleSheet.create({
   outerContainer: { 
     flex: 1,
     paddingTop: 20, // Reduced from 20 to save space
-    paddingBottom: 80, // Reduced from 100 - let bottom nav handle its own spacing
+    // Remove paddingBottom to allow content to extend to nav bar
   },
   errorBanner: {
     flexDirection: "row",
@@ -1305,8 +1315,8 @@ const styles = StyleSheet.create({
   },
   headerContainer: {
     paddingHorizontal: 16,
-    paddingTop: 12, // Reduced from 20
-    paddingBottom: 8, // Added small bottom padding
+    paddingTop: isSmallDevice ? 8 : 12, // Much smaller top padding on small devices
+    paddingBottom: isSmallDevice ? 4 : 8, // Smaller bottom padding on small devices
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 8,
@@ -1323,24 +1333,24 @@ const styles = StyleSheet.create({
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 12, // Reduced from 16 to make buttons more compact
-    paddingHorizontal: 10, // Reduced from 12
-    borderRadius: 12,
+    paddingVertical: isSmallDevice ? 8 : 12, // Smaller on small devices
+    paddingHorizontal: isSmallDevice ? 6 : 10, // Smaller horizontal padding
+    borderRadius: isSmallDevice ? 8 : 12, // Smaller border radius
     borderWidth: 2,
-    minHeight: 75, // Reduced from 88 to save space
-    marginHorizontal: 2, // Reduced from 3
+    minHeight: isSmallDevice ? 60 : 75, // Much smaller on small devices
+    marginHorizontal: 2,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
   },
   buttonIconContainer: {
-    width: 36, // Reduced from 40 to make more compact
-    height: 36,
-    borderRadius: 8, // Reduced from 10
+    width: isSmallDevice ? 28 : 36, // Much smaller icon container on SE
+    height: isSmallDevice ? 28 : 36,
+    borderRadius: isSmallDevice ? 6 : 8,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 6, // Reduced from 8
+    marginBottom: isSmallDevice ? 4 : 6, // Less margin on SE
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,
     shadowRadius: 4,
@@ -1353,10 +1363,10 @@ const styles = StyleSheet.create({
     minHeight: 20, // Reduced minimum height
   },
   buttonTitle: {
-    fontSize: 13, // Slightly smaller for better fit
+    fontSize: isSmallDevice ? 11 : 13, // Even smaller on SE
     fontWeight: '700',
     textAlign: 'center',
-    lineHeight: 15, // Adjusted line height
+    lineHeight: isSmallDevice ? 12 : 15,
   },
   buttonSubtext: {
     fontSize: 10.5, // Slightly smaller to fit better
@@ -1370,12 +1380,12 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   scannerIconContainer: {
-    width: 36, // Match other buttons
-    height: 36,
-    borderRadius: 8, // Match other buttons
+    width: isSmallDevice ? 28 : 36, // Match other buttons
+    height: isSmallDevice ? 28 : 36,
+    borderRadius: isSmallDevice ? 6 : 8, // Match other buttons
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 6, // Match other buttons
+    marginBottom: isSmallDevice ? 4 : 6, // Match other buttons
     position: 'relative',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,
@@ -1446,11 +1456,12 @@ mealScanButtonText: {
     bottom: 0,
     left: 0,
     right: 0,
-    padding: 8, // Reduced from 10 to make more compact
-    borderRadius: 8,
+    height: getCalendarNutritionHeight(),
+    padding: isSmallDevice ? 4 : 6, // Slightly more padding for readability
+    borderRadius: isSmallDevice ? 6 : 8,
     borderWidth: 1,
     borderColor: "#ccc",
-    minHeight: 75, // Added minimum height for consistency
+    justifyContent: 'center', // Center content vertically
   },
   nutritionRow: {
     flexDirection: "row", // Arrange columns horizontally
@@ -1463,67 +1474,68 @@ mealScanButtonText: {
   nutritionLabel: {
     fontSize: responsiveFontSizes.nutritionLabel,
     fontWeight: "bold",
-    marginBottom: 4, // Add spacing between the label and the value
+    marginBottom: isSmallDevice ? 3 : 4, // Balanced margin
   },
   nutritionValue: {
     fontSize: responsiveFontSizes.nutritionValue,
     fontWeight: "bold",
   },
   nutritionTitle: {
-    fontSize: responsiveFontSizes.h5,
+    fontSize: isSmallDevice ? responsiveFontSizes.caption : responsiveFontSizes.bodyMedium, // A bit smaller on SE
     fontWeight: "bold",
     textAlign: "center",
-    marginBottom: 8, // Add spacing between the title and the nutrition rows
+    marginBottom: isSmallDevice ? 3 : 6, // Slightly more margin for readability
   },
   nutritionHeader: {
-    marginBottom: 8, // Reduced from 16
+    marginBottom: isSmallDevice ? 3 : 6, // Slightly more margin for readability
     alignItems: 'center',
   },
   nutritionSubtitle: {
-    fontSize: 12,
-    marginTop: 2,
+    fontSize: isSmallDevice ? 8 : 12, // A bit smaller on SE
+    marginTop: 1,
     textAlign: 'center',
   },
   caloriesColumn: {
-    flex: 2,
+    flex: 1.5, // Reduced from 2 to give more space to macros
     alignItems: 'center',
-    paddingRight: 16,
+    paddingRight: isSmallDevice ? 8 : 12, // Reduced padding
   },
   nutritionDivider: {
     width: 1,
     backgroundColor: '#e5e7eb',
-    marginHorizontal: 16,
+    marginHorizontal: isSmallDevice ? 8 : 12, // Reduced margin to shift left
     alignSelf: 'stretch',
   },
   macrosContainer: {
-    flex: 3,
+    flex: 3.5, // Increased from 3 to give more space to macros
     flexDirection: 'row',
     justifyContent: 'space-around',
+    paddingHorizontal: isSmallDevice ? 2 : 6, // Reduced padding
   },
   macroItem: {
     alignItems: 'center',
     flex: 1,
   },
   macroValue: {
-    fontSize: 14,
+    fontSize: responsiveFontSizes.bodyMedium,
     fontWeight: '700',
     marginBottom: 2,
   },
   macroLabel: {
-    fontSize: 11,
+    fontSize: responsiveFontSizes.caption,
     fontWeight: '500',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   emptyNutritionContainer: {
-    marginTop: 12,
-    paddingTop: 12,
+    marginTop: isSmallDevice ? 8 : 12,
+    paddingTop: isSmallDevice ? 8 : 12,
     borderTopWidth: 1,
     borderTopColor: '#f3f4f6',
     alignItems: 'center',
   },
   emptyNutritionText: {
-    fontSize: 13,
+    fontSize: responsiveFontSizes.caption,
     fontStyle: 'italic',
   },
   createMealButtonContainer: { 
@@ -1553,7 +1565,8 @@ mealScanButtonText: {
   },
   container: { 
     flexDirection: "row", 
-    padding: 12, // Reduced from 16
+    paddingHorizontal: 12, // Keep horizontal padding but remove vertical padding
+    paddingVertical: 0, // Remove all vertical padding
     alignItems: 'flex-start',
   },
   mealPicture: {
@@ -1581,13 +1594,13 @@ mealScanButtonText: {
     width: SCREEN_WIDTH * 0.95,
     marginRight: 16,
     padding: 0,
-    borderWidth: 2,
-    borderRadius: 16, // Reduced from 20 for a more modern look
-    height: SCREEN_HEIGHT * 0.7, // Increased from 0.7 to use more available space
-    shadowOffset: { width: 0, height: 4 },
+    borderWidth: isSmallDevice ? 1 : 2,
+    borderRadius: isSmallDevice ? 12 : 16,
+    height: getCalendarDayHeight(),
+    shadowOffset: { width: 0, height: isSmallDevice ? 2 : 4 },
     shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 5,
+    shadowRadius: isSmallDevice ? 8 : 12,
+    elevation: isSmallDevice ? 3 : 5,
     overflow: 'hidden',
   },
   todayContainer: {
@@ -1596,25 +1609,26 @@ mealScanButtonText: {
     elevation: 8,
   },
   dateHeader: {
-    padding: 12, // Reduced from 16 to give more space to meals
-    borderTopLeftRadius: 14, // Reduced to match dayContainer
-    borderTopRightRadius: 14,
+    padding: isSmallDevice ? 5 : 8, // Slightly more padding for readability
+    borderTopLeftRadius: isSmallDevice ? 10 : 14,
+    borderTopRightRadius: isSmallDevice ? 10 : 14,
     alignItems: 'center',
+    justifyContent: 'center', // Center content vertically
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(0,0,0,0.1)',
-    minHeight: 70, // Added minimum height to ensure consistency
+    height: getCalendarDateContainerHeight(), // Use height instead of minHeight to enforce size
   },
   dateHeaderContent: {
     alignItems: 'center',
-    marginBottom: 4, // Reduced from 8
+    marginBottom: isSmallDevice ? 2 : 3, // Balanced margin for readability
   },
   dayName: {
-    fontSize: 16, // Reduced from 18 to be more compact
+    fontSize: isSmallDevice ? responsiveFontSizes.bodySmall : responsiveFontSizes.h5, // A bit smaller on SE
     fontWeight: '700',
-    marginBottom: 2, // Reduced from 4
+    marginBottom: isSmallDevice ? 1 : 2, // Small margin back
   },
   dateNumber: {
-    fontSize: 14, // Reduced from 16
+    fontSize: isSmallDevice ? responsiveFontSizes.caption : responsiveFontSizes.bodyMedium, // A bit smaller on SE
     fontWeight: '600',
   },
   todayBadge: {
@@ -1628,8 +1642,9 @@ mealScanButtonText: {
     fontWeight: 'bold',
   },
   optionsHint: {
-    fontSize: 12,
+    fontSize: isSmallDevice ? 7 : 11, // A bit smaller on SE
     fontStyle: 'italic',
+    marginTop: 1, // Small margin
   },
   dateLabel: { 
     fontSize: 16, 
@@ -1639,15 +1654,16 @@ mealScanButtonText: {
   },
   mealsContainer: { 
     flex: 1,
-    paddingHorizontal: 12, // Reduced from 16
-    paddingTop: 6, // Reduced from 8
+    paddingHorizontal: isSmallDevice ? 8 : 12,
+    paddingTop: isSmallDevice ? 4 : 6,
+    height: getCalendarMealAreaHeight(),
   },
   mealsScrollContent: {
     paddingBottom: 85, // Reduced from 95 to account for smaller nutrition block
   },
   mealCard: {
-    marginBottom: 8, // Reduced from 12 to fit more meals
-    borderRadius: 12, // Reduced from 16 for consistency
+    marginBottom: isSmallDevice ? 4 : 8,
+    borderRadius: isSmallDevice ? 8 : 12,
     borderWidth: 2,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -1660,11 +1676,11 @@ mealScanButtonText: {
   },
   mealTypeBadge: {
     position: 'absolute',
-    top: 12,
-    right: 12,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
+    top: isSmallDevice ? 8 : 12,
+    right: isSmallDevice ? 8 : 12,
+    paddingHorizontal: isSmallDevice ? 6 : 8,
+    paddingVertical: isSmallDevice ? 3 : 4,
+    borderRadius: isSmallDevice ? 8 : 12,
     zIndex: 1,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -1677,15 +1693,15 @@ mealScanButtonText: {
     gap: 4,
   },
   mealTypeIcon: {
-    fontSize: 10,
+    fontSize: responsiveFontSizes.caption,
   },
   mealTypeBadgeText: {
-    fontSize: 10,
+    fontSize: responsiveFontSizes.caption,
     fontWeight: 'bold',
     textTransform: 'uppercase',
   },
   mealImageContainer: {
-    height: 100, // Reduced from 120 to save space while keeping meals visible
+    height: isSmallDevice ? 80 : 100,
     width: '100%',
   },
   mealImage: {
@@ -1703,41 +1719,41 @@ mealScanButtonText: {
     fontSize: 32,
   },
   mealInfo: {
-    padding: 10, // Reduced from 12 for more compact layout
+    padding: isSmallDevice ? 8 : 10,
   },
   mealName: {
-    fontSize: 15, // Reduced from 16 for better space utilization
+    fontSize: responsiveFontSizes.body,
     fontWeight: '700',
-    marginBottom: 3, // Reduced from 4
+    marginBottom: isSmallDevice ? 2 : 3,
   },
   mealDescription: {
-    fontSize: 13, // Reduced from 14
-    lineHeight: 18, // Reduced from 20
-    marginBottom: 6, // Reduced from 8
+    fontSize: responsiveFontSizes.bodyMedium,
+    lineHeight: isSmallDevice ? 16 : 18,
+    marginBottom: isSmallDevice ? 4 : 6,
   },
   nutritionPreview: {
-    marginTop: 4,
+    marginTop: isSmallDevice ? 2 : 4,
   },
   nutritionPreviewText: {
-    fontSize: 12,
+    fontSize: responsiveFontSizes.caption,
     fontWeight: '500',
   },
   emptyMealsContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 40,
+    paddingVertical: isSmallDevice ? 30 : 40,
   },
   emptyMealsIcon: {
-    fontSize: 48,
-    marginBottom: 12,
+    fontSize: responsiveFontSizes.h2,
+    marginBottom: isSmallDevice ? 8 : 12,
   },
   emptyMealsText: {
-    fontSize: 16,
+    fontSize: responsiveFontSizes.body,
     fontWeight: '600',
     marginBottom: 4,
   },
   emptyMealsSubtext: {
-    fontSize: 14,
+    fontSize: responsiveFontSizes.bodyMedium,
     textAlign: 'center',
   },
   mealButton: { 

@@ -23,7 +23,7 @@
         "foregroundImage": "./assets/images/Logo_Light_Square_512.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.anonymous.MealPlanApp"
+      "package": "com.williamashford.shareablemeals"
     },
     "web": {
       "bundler": "metro",

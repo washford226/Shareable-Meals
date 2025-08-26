@@ -17,7 +17,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as FileSystem from 'expo-file-system';
 import { Ionicons } from '@expo/vector-icons';
-import { checkScannerUsage, incrementScannerUsage, getScannerUsageStatus } from '../../../utils/aiUsageUtils';
+
 
 const PantryScreen = () => {
   const { theme } = useTheme();
@@ -42,7 +42,6 @@ const PantryScreen = () => {
   const [scanModalVisible, setScanModalVisible] = useState(false);
   const [scanningItems, setScanningItems] = useState(false);
   const [detectedItems, setDetectedItems] = useState<string[]>([]);
-  const [scannerUsage, setScannerUsage] = useState<{ used: number; remaining: number; total: number } | null>(null);
 
   // Fetch pantry items from Supabase
   const fetchPantryItems = useCallback(async (showLoading = true) => {
@@ -164,12 +163,6 @@ const PantryScreen = () => {
     return 'fresh';
   }, []);
 
-  // Load scanner usage status
-  const loadScannerUsage = useCallback(async () => {
-    const usage = await getScannerUsageStatus();
-    setScannerUsage(usage);
-  }, []);
-
   // Camera functionality for pantry scanning
   const resizeAndEncode = async (uri: string): Promise<string> => {
     try {
@@ -212,17 +205,6 @@ const PantryScreen = () => {
   };
 
   const openCameraForPantryScan = async () => {
-    // Check usage limit first
-    const usageCheck = await checkScannerUsage();
-    if (!usageCheck.canUse) {
-      Alert.alert(
-        'Scanner Limit Reached',
-        usageCheck.message || 'You have reached your daily scanner limit.',
-        [{ text: 'OK' }]
-      );
-      return;
-    }
-
     const hasPermission = await requestCameraPermissions();
     if (!hasPermission) return;
 
@@ -290,11 +272,6 @@ const PantryScreen = () => {
       const result = await response.json();
       
       if (result.success && result.added) {
-        // Increment usage count on successful scan
-        await incrementScannerUsage();
-        // Update local usage display
-        await loadScannerUsage();
-        
         setDetectedItems(result.added);
         setScanModalVisible(true);
         // Refresh the pantry list to show new items
@@ -317,7 +294,6 @@ const PantryScreen = () => {
 
   useEffect(() => {
     fetchPantryItems();
-    loadScannerUsage();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -434,15 +410,6 @@ const PantryScreen = () => {
             </Text>
           </View>
         </View>
-        
-        {scannerUsage && (
-          <View style={[styles.usageIndicator, { backgroundColor: theme.background, borderColor: theme.border }]}>
-            <Ionicons name="camera" size={16} color={theme.primary} />
-            <Text style={[styles.usageIndicatorText, { color: theme.text }]}>
-              {scannerUsage.remaining}/{scannerUsage.total} scans left
-            </Text>
-          </View>
-        )}
       </View>
       
       <FlatList
@@ -647,11 +614,11 @@ const PantryScreen = () => {
               backgroundColor: scanningItems ? theme.successLight : theme.success,
               borderColor: theme.success,
               borderWidth: 2,
-              opacity: scanningItems || (scannerUsage?.remaining === 0) ? 0.7 : 1
+              opacity: scanningItems ? 0.7 : 1
             }
           ]}
           onPress={openCameraForPantryScan}
-          disabled={scanningItems || (scannerUsage?.remaining === 0)}
+          disabled={scanningItems}
           activeOpacity={0.8}
         >
           <View style={styles.scanButtonWrapper}>
@@ -672,18 +639,6 @@ const PantryScreen = () => {
                   <Text style={[styles.scanButtonText, { color: theme.buttonTextPrimary, fontSize: 15 }]}>
                     AI Scanner
                   </Text>
-                  {scannerUsage && (
-                    <View style={[styles.usageContainer, { backgroundColor: theme.buttonTextPrimary }]}>
-                      <Text style={[styles.usageText, { color: theme.success }]}>
-                        {scannerUsage.remaining}/{scannerUsage.total} left
-                      </Text>
-                    </View>
-                  )}
-                  {scannerUsage?.remaining === 0 && (
-                    <Text style={[styles.limitReachedText, { color: theme.danger }]}>
-                      Daily limit reached
-                    </Text>
-                  )}
                 </View>
               </>
             )}
@@ -909,20 +864,6 @@ const styles = StyleSheet.create({
   headerTextContainer: {
     flex: 1,
   },
-  usageIndicator: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-    borderWidth: 1,
-    gap: 6,
-  },
-  usageIndicatorText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
   
   // Enhanced Item Styles
   itemContainer: {
@@ -1133,12 +1074,6 @@ const styles = StyleSheet.create({
   scanButtonContent: {
     alignItems: 'center',
   },
-  usageText: {
-    fontSize: 12,
-    fontWeight: '500',
-    marginTop: 2,
-    opacity: 0.9,
-  },
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
@@ -1237,17 +1172,6 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: -2,
     right: -2,
-  },
-  usageContainer: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 8,
-    marginTop: 2,
-  },
-  limitReachedText: {
-    fontSize: 9,
-    fontWeight: '600',
-    marginTop: 2,
   },
   // Enhanced modal styles
   enhancedModalContainer: {

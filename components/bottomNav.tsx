@@ -3,7 +3,12 @@ import { View, TouchableOpacity, Text, StyleSheet, Platform, ActivityIndicator, 
 import { router, usePathname } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "context/ThemeContext";
+import { getBottomNavHeight, getBottomNavIconSize, getBottomNavFontSize, getDeviceCategory } from "../utils/responsiveUtils";
 import * as Haptics from 'expo-haptics';
+
+// Device category helper
+const deviceCategory = getDeviceCategory();
+const isSmallDevice = deviceCategory === 'extraSmall' || deviceCategory === 'small';
 
 const BottomNav = memo(() => {
   const { theme } = useTheme();
@@ -136,11 +141,11 @@ const BottomNav = memo(() => {
               pressedItem === item.id && [styles.pressedIconContainer, { backgroundColor: theme.primary }]
             ]}>
               {navigatingTo === item.id ? (
-                <ActivityIndicator size={20} color={theme.primary} />
+                <ActivityIndicator size={getBottomNavIconSize()} color={theme.primary} />
               ) : (
                 <Ionicons
                   name={item.isActive ? item.activeIcon as any : item.icon as any}
-                  size={item.isActive ? 20 : 18}
+                  size={getBottomNavIconSize()}
                   color={item.isActive ? theme.buttonText : theme.subtext}
                 />
               )}
@@ -179,8 +184,11 @@ const styles = StyleSheet.create({
     right: 0,
     flexDirection: "row",
     justifyContent: "space-around",
-    paddingVertical: Platform.OS === 'ios' ? 20 : 12,
-    paddingBottom: Platform.OS === 'ios' ? 34 : 12, // Safe area for iOS
+    height: getBottomNavHeight(),
+    paddingVertical: isSmallDevice ? 6 : 12, // Reduced vertical padding for SE
+    paddingBottom: Platform.OS === 'ios' 
+      ? (isSmallDevice ? 16 : 24) // Reduced bottom padding for SE
+      : (isSmallDevice ? 6 : 12), // Reduced for Android SE too
     borderTopWidth: 1,
     zIndex: 999,
     ...Platform.select({
@@ -199,7 +207,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     flex: 1,
-    paddingVertical: 8,
+    paddingVertical: isSmallDevice ? 8 : 12, // Reduced back to 8 for SE
     paddingHorizontal: 4,
     borderRadius: 12,
     position: 'relative',
@@ -252,9 +260,10 @@ const styles = StyleSheet.create({
     }),
   },
   navLabel: {
-    fontSize: 11,
+    fontSize: isSmallDevice ? 10 : getBottomNavFontSize(), // Reduced back to 10 for SE
     textAlign: 'center',
-    marginTop: 2,
+    marginTop: isSmallDevice ? 2 : 3, // Reduced margin for SE
+    fontWeight: '600',
   },
   activeIndicator: {
     position: 'absolute',

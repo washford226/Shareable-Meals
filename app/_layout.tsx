@@ -1,10 +1,11 @@
-// app/_layout.tsx
 import "../polyfills"; // Import polyfills first
 import React from "react";
 import { Stack } from "expo-router";
 import { View, Platform, StatusBar } from "react-native";
 import { ThemeProvider, useTheme } from "../context/ThemeContext";
 import { useDataPreloader } from "../utils/appDataPreloader";
+import AppAccessGuard from "../components/AppAccessGuard";
+import DevToggle from "../components/DevToggle";
 
 function AppContent() {
   const { theme } = useTheme();
@@ -26,10 +27,13 @@ function AppContent() {
           // Performance optimizations for faster navigation
           animation: 'slide_from_right',
           animationDuration: 200, // Faster transitions (default is 350ms)
-          gestureEnabled: true,
+          gestureEnabled: false, // Disable swipe to go back
           gestureDirection: 'horizontal',
+          presentation: 'card',
         }} 
       />
+      {/* Development Toggle - only shows in __DEV__ mode */}
+      <DevToggle />
     </View>
   );
 }
@@ -40,7 +44,9 @@ export default function Layout() {
 
   return (
     <ThemeProvider>
-      <AppContent />
+      <AppAccessGuard>
+        <AppContent />
+      </AppAccessGuard>
     </ThemeProvider>
   );
 }

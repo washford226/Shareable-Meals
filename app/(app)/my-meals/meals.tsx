@@ -24,12 +24,13 @@ import { useRouter } from "expo-router";  // Import Expo Router hook
 import BottomNav from "components/bottomNav";
 import { supabase } from "utils/supabase";
 import { cachedDataService } from "utils/cachedDataService";
+import { isSmallScreen, responsiveFontSizes } from "../../../utils/responsiveUtils";
 
 interface MyMealsProps {
   onCreateMeal: () => void;
 }
 
-const MyMeals: React.FC<MyMealsProps> = ({ onCreateMeal}) => {
+const MyMeals: React.FC<MyMealsProps> = React.memo(({ onCreateMeal}) => {
   const [meals, setMeals] = useState<Meal[]>([]);
   const [filteredMeals, setFilteredMeals] = useState<Meal[]>([]);
   const [filteredMealsReady, setFilteredMealsReady] = useState<boolean>(false);
@@ -62,6 +63,8 @@ const MyMeals: React.FC<MyMealsProps> = ({ onCreateMeal}) => {
   const [favoriteLoading, setFavoriteLoading] = useState<{ [key: string]: boolean }>({});
   const [showDietaryModal, setShowDietaryModal] = useState(false);
   const [showCuisineModal, setShowCuisineModal] = useState(false);
+  const [isFilterModalLoading, setIsFilterModalLoading] = useState(false);
+  const [isFilterButtonLoading, setIsFilterButtonLoading] = useState(false);
   
   // Pagination state
   const [currentPage, setCurrentPage] = useState<number>(0);
@@ -139,27 +142,33 @@ const MyMeals: React.FC<MyMealsProps> = ({ onCreateMeal}) => {
 
   // Fast filter modal handlers
   const openFilterModal = useCallback(() => {
+    setIsFilterButtonLoading(true);
+    setIsFilterModalLoading(true);
+    
+    // Pre-set temp filters immediately to avoid delay
     setTempAiFilter(aiFilter);
     setTempDietaryRestrictionFilter(dietaryRestrictionFilter);
     setTempCuisineFilter(cuisineFilter);
-    setIsFilterModalVisible(true);
     
-    // Start animation immediately after state update
-    requestAnimationFrame(() => {
-      Animated.parallel([
-        Animated.timing(filterModalOpacity, {
-          toValue: 1,
-          duration: 250, // Smooth backdrop fade
-          useNativeDriver: true,
-        }),
-        Animated.spring(filterModalTranslateY, {
-          toValue: 0,
-          tension: 200, // Smooth slide up
-          friction: 8,
-          useNativeDriver: true,
-        }),
-      ]).start();
-    });
+    // Use immediate modal visibility with pre-animated state
+    setIsFilterModalVisible(true);
+    setIsFilterModalLoading(false);
+    setIsFilterButtonLoading(false);
+    
+    // Start animation immediately - no requestAnimationFrame delay
+    Animated.parallel([
+      Animated.timing(filterModalOpacity, {
+        toValue: 1,
+        duration: 150, // Faster animation
+        useNativeDriver: true,
+      }),
+      Animated.spring(filterModalTranslateY, {
+        toValue: 0,
+        tension: 300, // Faster spring
+        friction: 10,
+        useNativeDriver: true,
+      }),
+    ]).start();
   }, [aiFilter, dietaryRestrictionFilter, cuisineFilter, filterModalOpacity, filterModalTranslateY]);
 
   const closeFilterModal = useCallback(() => {
@@ -177,6 +186,8 @@ const MyMeals: React.FC<MyMealsProps> = ({ onCreateMeal}) => {
       }),
     ]).start(() => {
       setIsFilterModalVisible(false);
+      setIsFilterButtonLoading(false);
+      setIsFilterModalLoading(false);
     });
   }, [filterModalOpacity, filterModalTranslateY]);
 
@@ -587,6 +598,7 @@ const MyMeals: React.FC<MyMealsProps> = ({ onCreateMeal}) => {
   const clearFilters = useCallback(async () => {
     try {
       setError(null);
+      setIsFilterModalLoading(true);
       
       const defaultFilters = [
         { type: "calories", greaterThan: "", lessThan: "" },
@@ -595,6 +607,7 @@ const MyMeals: React.FC<MyMealsProps> = ({ onCreateMeal}) => {
         { type: "carbohydrates", greaterThan: "", lessThan: "" },
       ];
       
+      // Clear immediately for UI responsiveness
       setFilters(defaultFilters);
       setTempFilters(defaultFilters);
       setAiFilter("");
@@ -605,30 +618,36 @@ const MyMeals: React.FC<MyMealsProps> = ({ onCreateMeal}) => {
       setTempCuisineFilter("");
       setSearchQuery("");
 
-      // Use Supabase to get the user ID
+      // Close modal immediately
+      closeFilterModal();
+      
+      // Save to storage in background
       const userId = await getCurrentUserId();
       if (userId) {
-        await Promise.all([
+        Promise.all([
           AsyncStorage.removeItem(`filters_MyMeals_${userId}`),
           AsyncStorage.removeItem(`searchQuery_MyMeals_${userId}`),
           AsyncStorage.removeItem(`dietaryRestrictionFilter_MyMeals_${userId}`),
           AsyncStorage.removeItem(`aiFilter_MyMeals_${userId}`),
           AsyncStorage.removeItem(`cuisineFilter_MyMeals_${userId}`)
-        ]);
+        ]).catch(error => console.warn('Failed to clear storage:', error));
       }
       
-      setIsFilterModalVisible(false);
     } catch (error: any) {
       console.error("Error clearing filters:", error);
       const errorMessage = error.message || "Failed to clear filters";
       setError(errorMessage);
       Alert.alert("Error", errorMessage);
+    } finally {
+      setIsFilterModalLoading(false);
+      setIsFilterButtonLoading(false);
     }
-  }, [getCurrentUserId]);
+  }, [getCurrentUserId, closeFilterModal]);
 
 const applyFilters = useCallback(async () => {
   try {
     setError(null);
+    setIsFilterModalLoading(true);
     
     const isValid = tempFilters.every(
       (filter) =>
@@ -638,6 +657,7 @@ const applyFilters = useCallback(async () => {
 
     if (!isValid) {
       Alert.alert("Invalid Filters", "Please enter valid numeric values for the filters.");
+      setIsFilterModalLoading(false);
       return;
     }
 
@@ -646,30 +666,42 @@ const applyFilters = useCallback(async () => {
       throw new Error("Authentication required. Please log in again.");
     }
 
+    // Apply immediately for UI responsiveness
     setFilters(tempFilters);
     setDietaryRestrictionFilter(tempDietaryRestrictionFilter);
     setAiFilter(tempAiFilter);
     setCuisineFilter(tempCuisineFilter);
 
-    await Promise.all([
+    // Close modal immediately
+    closeFilterModal();
+
+    // Save to storage in background
+    Promise.all([
       AsyncStorage.setItem(`filters_MyMeals_${userId}`, JSON.stringify(tempFilters)),
       AsyncStorage.setItem(`aiFilter_MyMeals_${userId}`, tempAiFilter),
       AsyncStorage.setItem(`dietaryRestrictionFilter_MyMeals_${userId}`, tempDietaryRestrictionFilter),
       AsyncStorage.setItem(`cuisineFilter_MyMeals_${userId}`, tempCuisineFilter)
-    ]);
+    ]).catch(error => console.warn('Failed to save filters:', error));
 
-    setIsFilterModalVisible(false);
   } catch (error: any) {
     console.error("Error saving filters:", error);
     const errorMessage = error.message || "Failed to apply filters";
     setError(errorMessage);
     Alert.alert("Error", errorMessage);
+  } finally {
+    setIsFilterModalLoading(false);
+    setIsFilterButtonLoading(false);
   }
-}, [tempFilters, tempDietaryRestrictionFilter, tempAiFilter, tempCuisineFilter, getCurrentUserId]);
+}, [tempFilters, tempDietaryRestrictionFilter, tempAiFilter, tempCuisineFilter, getCurrentUserId, closeFilterModal]);
 
   if (loading || !filtersLoaded || !filteredMealsReady) {
     return (
-      <View style={[styles.container, { backgroundColor: theme.background }]}>
+      <View 
+        style={[styles.container, { backgroundColor: theme.background }]}
+        // Prevent gesture interference
+        onStartShouldSetResponder={() => true}
+        onMoveShouldSetResponder={() => false}
+      >
         <View style={styles.centerContent}>
           <View style={[styles.loadingCard, { backgroundColor: theme.card }]}>
             <ActivityIndicator size="large" color={theme.primary} />
@@ -704,7 +736,12 @@ const applyFilters = useCallback(async () => {
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.background }]}>
+    <View 
+      style={[styles.container, { backgroundColor: theme.background }]}
+      // Prevent gesture interference
+      onStartShouldSetResponder={() => true}
+      onMoveShouldSetResponder={() => false}
+    >
       {error && (
         <View style={[styles.errorBanner, { backgroundColor: theme.card, borderColor: theme.danger }]}>
           <Ionicons name="warning" size={20} color={theme.danger} />
@@ -738,23 +775,29 @@ const applyFilters = useCallback(async () => {
             styles.filterButton,
             { 
               backgroundColor: isFilterActive ? theme.primary : theme.card,
-              borderColor: theme.border
+              borderColor: theme.border,
+              opacity: (isFilterModalLoading || isFilterButtonLoading) ? 0.7 : 1
             }
           ]}
           onPress={openFilterModal}
+          disabled={isFilterModalLoading || isFilterButtonLoading}
         >
-          <Ionicons 
-            name="filter" 
-            size={20} 
-            color={isFilterActive ? theme.buttonText : theme.text} 
-          />
+          {(isFilterModalLoading || isFilterButtonLoading) ? (
+            <ActivityIndicator size="small" color={isFilterActive ? theme.buttonText : theme.text} />
+          ) : (
+            <Ionicons 
+              name="filter" 
+              size={20} 
+              color={isFilterActive ? theme.buttonText : theme.text} 
+            />
+          )}
           <Text style={[
             styles.filterButtonText, 
             { color: isFilterActive ? theme.buttonText : theme.text }
           ]}>
-            Filter
+            {(isFilterModalLoading || isFilterButtonLoading) ? "Loading..." : "Filter"}
           </Text>
-          {isFilterActive && (
+          {isFilterActive && !isFilterModalLoading && !isFilterButtonLoading && (
             <View style={[styles.filterActiveDot, { backgroundColor: theme.warning }]} />
           )}
         </TouchableOpacity>
@@ -937,9 +980,10 @@ const applyFilters = useCallback(async () => {
         statusBarTranslucent
         hardwareAccelerated
       >
-        <Animated.View 
-          style={[styles.modalContainer, { opacity: modalOpacity }]}
-        >
+        {isCreateMealModalVisible && (
+          <Animated.View 
+            style={[styles.modalContainer, { opacity: modalOpacity }]}
+          >
           <Pressable 
             style={StyleSheet.absoluteFillObject}
             onPress={closeCreateMealModal}
@@ -964,6 +1008,7 @@ const applyFilters = useCallback(async () => {
             </Pressable>
           </Animated.View>
         </Animated.View>
+        )}
       </Modal>
 
       <Modal 
@@ -974,50 +1019,103 @@ const applyFilters = useCallback(async () => {
         statusBarTranslucent
         hardwareAccelerated
       >
-        <Animated.View 
-          style={[
-            styles.modalContainer, 
-            { opacity: filterModalOpacity }
-          ]}
-        >
-          <Pressable 
-            style={StyleSheet.absoluteFillObject}
-            onPress={closeFilterModal}
-          />
+        {isFilterModalVisible && (
           <Animated.View 
             style={[
-              styles.filterModalContent, 
-              { 
-                backgroundColor: theme.card, 
-                shadowColor: theme.shadow,
-                transform: [{ translateY: filterModalTranslateY }]
-              }
+              styles.modalContainer, 
+              { opacity: filterModalOpacity }
             ]}
           >
-            <Pressable onPress={(e) => e.stopPropagation()}>
-            <ScrollView style={styles.filterModalScrollView} showsVerticalScrollIndicator={false}>
+            <Pressable 
+              style={StyleSheet.absoluteFillObject}
+              onPress={closeFilterModal}
+            />
+            <Animated.View 
+              style={[
+                styles.filterModalContent, 
+                { 
+                  backgroundColor: theme.card, 
+                  shadowColor: theme.shadow,
+                  transform: [{ translateY: filterModalTranslateY }]
+                },
+                isSmallScreen && {
+                  maxHeight: '90%',
+                  borderRadius: 12,
+                  margin: 10,
+                }
+              ]}
+            >
+              <Pressable onPress={(e) => e.stopPropagation()}>
+              <ScrollView 
+                style={[
+                  styles.filterModalScrollView,
+                  isSmallScreen && { maxHeight: '75%' }
+                ]} 
+                showsVerticalScrollIndicator={false}
+                bounces={true}
+                scrollEventThrottle={16}
+                contentInsetAdjustmentBehavior="automatic"
+                keyboardShouldPersistTaps="handled"
+                nestedScrollEnabled={true}
+              >
               {/* Modal Header */}
-              <View style={styles.filterModalHeader}>
+              <View style={[
+                styles.filterModalHeader,
+                isSmallScreen && { padding: 16, paddingBottom: 12 }
+              ]}>
                 <View style={styles.filterModalHeaderContent}>
-                  <Ionicons name="filter" size={28} color={theme.primary} />
-                  <Text style={[styles.filterModalTitle, { color: theme.text }]}>Filter Meals</Text>
+                  <Ionicons name="filter" size={isSmallScreen ? 24 : 28} color={theme.primary} />
+                  <Text style={[
+                    styles.filterModalTitle, 
+                    { color: theme.text },
+                    isSmallScreen && { fontSize: responsiveFontSizes.h4 }
+                  ]}>
+                    Filter Meals
+                  </Text>
                 </View>
                 <TouchableOpacity
-                  style={[styles.filterModalCloseButton, { backgroundColor: theme.background }]}
+                  style={[
+                    styles.filterModalCloseButton, 
+                    { backgroundColor: theme.background },
+                    isSmallScreen && { padding: 6 }
+                  ]}
                   onPress={closeFilterModal}
                 >
-                  <Ionicons name="close" size={20} color={theme.subtext} />
+                  <Ionicons 
+                    name="close" 
+                    size={isSmallScreen ? 18 : 20} 
+                    color={theme.subtext} 
+                  />
                 </TouchableOpacity>
               </View>
 
-              <Text style={[styles.filterModalSubtitle, { color: theme.subtext }]}>
+              <Text style={[
+                styles.filterModalSubtitle, 
+                { color: theme.subtext },
+                isSmallScreen && { 
+                  fontSize: responsiveFontSizes.bodySmall,
+                  paddingHorizontal: 16,
+                  marginBottom: 16
+                }
+              ]}>
                 Refine your meal search with these filters
               </Text>
 
               {/* Quick Filter Chips */}
-              <View style={styles.quickFiltersSection}>
-                <Text style={[styles.sectionTitle, { color: theme.text }]}>
-                  <Ionicons name="flash" size={18} color={theme.primary} /> Quick Filters
+              <View style={[
+                styles.quickFiltersSection,
+                isSmallScreen && { paddingHorizontal: 16 }
+              ]}>
+                <Text style={[
+                  styles.sectionTitle, 
+                  { color: theme.text },
+                  isSmallScreen && { fontSize: responsiveFontSizes.h6 }
+                ]}>
+                  <Ionicons 
+                    name="flash" 
+                    size={isSmallScreen ? 16 : 18} 
+                    color={theme.primary} 
+                  /> Quick Filters
                 </Text>
                 <View style={styles.quickFiltersContainer}>
                   <TouchableOpacity
@@ -1069,9 +1167,21 @@ const applyFilters = useCallback(async () => {
               </View>
 
               {/* Nutrition Filters */}
-              <View style={[styles.filterSection, { borderBottomColor: theme.border }]}>
-                <Text style={[styles.sectionTitle, { color: theme.text }]}>
-                  <Ionicons name="nutrition" size={18} color={theme.primary} /> Nutrition Ranges
+              <View style={[
+                styles.filterSection, 
+                { borderBottomColor: theme.border },
+                isSmallScreen && { paddingHorizontal: 16, paddingVertical: 12 }
+              ]}>
+                <Text style={[
+                  styles.sectionTitle, 
+                  { color: theme.text },
+                  isSmallScreen && { fontSize: responsiveFontSizes.h6 }
+                ]}>
+                  <Ionicons 
+                    name="nutrition" 
+                    size={isSmallScreen ? 16 : 18} 
+                    color={theme.primary} 
+                  /> Nutrition Ranges
                 </Text>
                 {tempFilters.map((filter, index) => (
                   <View key={index} style={styles.nutritionRow}>
@@ -1115,9 +1225,21 @@ const applyFilters = useCallback(async () => {
               </View>
 
               {/* Dietary Restrictions */}
-              <View style={[styles.filterSection, { borderBottomColor: theme.border }]}>
-                <Text style={[styles.sectionTitle, { color: theme.text }]}>
-                  <Ionicons name="leaf" size={18} color={theme.success} /> Dietary Restrictions
+              <View style={[
+                styles.filterSection, 
+                { borderBottomColor: theme.border },
+                isSmallScreen && { paddingHorizontal: 16, paddingVertical: 12 }
+              ]}>
+                <Text style={[
+                  styles.sectionTitle, 
+                  { color: theme.text },
+                  isSmallScreen && { fontSize: responsiveFontSizes.h6 }
+                ]}>
+                  <Ionicons 
+                    name="leaf" 
+                    size={isSmallScreen ? 16 : 18} 
+                    color={theme.success} 
+                  /> Dietary Restrictions
                 </Text>
                 <TouchableOpacity
                   style={[styles.pickerContainer, { borderColor: theme.border, backgroundColor: theme.background }]}
@@ -1140,9 +1262,21 @@ const applyFilters = useCallback(async () => {
               </View>
 
               {/* Cuisine */}
-              <View style={[styles.filterSection, { borderBottomWidth: 0 }]}>
-                <Text style={[styles.sectionTitle, { color: theme.text }]}>
-                  <Ionicons name="globe" size={18} color={theme.warning} /> Cuisine Type
+              <View style={[
+                styles.filterSection, 
+                { borderBottomWidth: 0 },
+                isSmallScreen && { paddingHorizontal: 16, paddingVertical: 12 }
+              ]}>
+                <Text style={[
+                  styles.sectionTitle, 
+                  { color: theme.text },
+                  isSmallScreen && { fontSize: responsiveFontSizes.h6 }
+                ]}>
+                  <Ionicons 
+                    name="globe" 
+                    size={isSmallScreen ? 16 : 18} 
+                    color={theme.warning} 
+                  /> Cuisine Type
                 </Text>
                 <TouchableOpacity
                   style={[styles.pickerContainer, { borderColor: theme.border, backgroundColor: theme.background }]}
@@ -1166,26 +1300,78 @@ const applyFilters = useCallback(async () => {
             </ScrollView>
 
             {/* Modal Actions */}
-            <View style={styles.filterModalActions}>
+            <View style={[
+              styles.filterModalActions,
+              isSmallScreen && { padding: 14, gap: 8 }
+            ]}>
               <TouchableOpacity 
-                style={[styles.filterModalButton, styles.clearFilterButton, { backgroundColor: theme.button, borderColor: theme.border }]} 
+                style={[
+                  styles.filterModalButton, 
+                  styles.clearFilterButton, 
+                  { backgroundColor: theme.button, borderColor: theme.border },
+                  isSmallScreen && { paddingVertical: 8, paddingHorizontal: 12, minHeight: 36 },
+                  isFilterModalLoading && { opacity: 0.6 }
+                ]} 
                 onPress={clearFilters}
+                disabled={isFilterModalLoading}
               >
-                <Ionicons name="refresh" size={18} color={theme.text} />
-                <Text style={[styles.filterModalButtonText, { color: theme.text }]}>Clear All</Text>
+                {isFilterModalLoading ? (
+                  <ActivityIndicator 
+                    size="small" 
+                    color={theme.text} 
+                  />
+                ) : (
+                  <Ionicons 
+                    name="refresh" 
+                    size={isSmallScreen ? 14 : 18} 
+                    color={theme.text} 
+                  />
+                )}
+                <Text style={[
+                  styles.filterModalButtonText, 
+                  { color: theme.text },
+                  isSmallScreen && { fontSize: responsiveFontSizes.buttonSmall }
+                ]}>
+                  {isFilterModalLoading ? "Clearing..." : "Clear All"}
+                </Text>
               </TouchableOpacity>
               
               <TouchableOpacity 
-                style={[styles.filterModalButton, styles.applyFilterButton, { backgroundColor: theme.primary }]} 
+                style={[
+                  styles.filterModalButton, 
+                  styles.applyFilterButton, 
+                  { backgroundColor: theme.primary },
+                  isSmallScreen && { paddingVertical: 8, paddingHorizontal: 12, minHeight: 36 },
+                  isFilterModalLoading && { opacity: 0.6 }
+                ]} 
                 onPress={applyFilters}
+                disabled={isFilterModalLoading}
               >
-                <Ionicons name="checkmark" size={18} color={theme.buttonText} />
-                <Text style={[styles.filterModalButtonText, { color: theme.buttonText }]}>Apply Filters</Text>
+                {isFilterModalLoading ? (
+                  <ActivityIndicator 
+                    size="small" 
+                    color={theme.buttonText} 
+                  />
+                ) : (
+                  <Ionicons 
+                    name="checkmark" 
+                    size={isSmallScreen ? 14 : 18} 
+                    color={theme.buttonText} 
+                  />
+                )}
+                <Text style={[
+                  styles.filterModalButtonText, 
+                  { color: theme.buttonText },
+                  isSmallScreen && { fontSize: responsiveFontSizes.buttonSmall }
+                ]}>
+                  {isFilterModalLoading ? "Applying..." : "Apply Filters"}
+                </Text>
               </TouchableOpacity>
             </View>
             </Pressable>
           </Animated.View>
         </Animated.View>
+        )}
       </Modal>
 
       {/* Dietary Restrictions Modal */}
@@ -1201,8 +1387,9 @@ const applyFilters = useCallback(async () => {
           setTimeout(() => setIsFilterModalVisible(true), 50);
         }}
       >
-        <View style={styles.modalContainer}>
-          <View style={[styles.modalContent, { backgroundColor: theme.card, maxHeight: '80%' }]}>
+        {showDietaryModal && (
+          <View style={styles.modalContainer}>
+            <View style={[styles.modalContent, { backgroundColor: theme.card, maxHeight: '80%' }]}>
             <View style={[styles.modalHeader, { borderBottomColor: theme.border }]}>
               <Text style={[styles.modalTitle, { color: theme.text }]}>
                 <Ionicons name="leaf" size={20} color={theme.success} /> Select Dietary Restrictions
@@ -1255,6 +1442,7 @@ const applyFilters = useCallback(async () => {
             </ScrollView>
           </View>
         </View>
+        )}
       </Modal>
 
       {/* Cuisine Modal */}
@@ -1270,8 +1458,9 @@ const applyFilters = useCallback(async () => {
           setTimeout(() => setIsFilterModalVisible(true), 50);
         }}
       >
-        <View style={styles.modalContainer}>
-          <View style={[styles.modalContent, { backgroundColor: theme.card, maxHeight: '80%' }]}>
+        {showCuisineModal && (
+          <View style={styles.modalContainer}>
+            <View style={[styles.modalContent, { backgroundColor: theme.card, maxHeight: '80%' }]}>
             <View style={[styles.modalHeader, { borderBottomColor: theme.border }]}>
               <Text style={[styles.modalTitle, { color: theme.text }]}>
                 <Ionicons name="globe" size={20} color={theme.warning} /> Select Cuisine Type
@@ -1324,12 +1513,13 @@ const applyFilters = useCallback(async () => {
             </ScrollView>
           </View>
         </View>
+        )}
       </Modal>
       
       <BottomNav /> 
     </View>
   );
-};
+});
 
 const styles = StyleSheet.create({
   container: {
@@ -1737,6 +1927,7 @@ const styles = StyleSheet.create({
   },
   filterModalScrollView: {
     maxHeight: "80%",
+    paddingBottom: 10,
   },
   filterModalHeader: {
     flexDirection: 'row',
@@ -2052,4 +2243,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default React.memo(MyMeals);
+export default MyMeals;

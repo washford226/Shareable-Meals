@@ -431,6 +431,41 @@ const AccountScreen: React.FC = () => {
             <Ionicons name="open-outline" size={16} color={theme.subtext} />
           </TouchableOpacity>
 
+          {/* Manage Subscription */}
+          <TouchableOpacity
+            style={styles.actionItem}
+            onPress={async () => {
+              try {
+                const subscriptionUrl = 'https://apps.apple.com/account/subscriptions';
+                const supported = await Linking.canOpenURL(subscriptionUrl);
+                if (supported) {
+                  await Linking.openURL(subscriptionUrl);
+                } else {
+                  Alert.alert(
+                    'Unable to Open Subscription Management',
+                    'Please open the App Store app and go to your Apple ID profile to manage subscriptions.',
+                    [{ text: 'OK' }]
+                  );
+                }
+              } catch (error) {
+                console.error('Error opening subscription management:', error);
+                Alert.alert(
+                  'Manage Subscriptions',
+                  'To manage your subscription:\n\n1. Open the Settings app on your device\n2. Tap your name at the top\n3. Tap "Subscriptions"\n4. Find and tap "Shareable Meals"',
+                  [{ text: 'OK' }]
+                );
+              }
+            }}
+          >
+            <View style={styles.actionItemLeft}>
+              <Ionicons name="card" size={16} color={theme.primary} />
+              <Text style={[styles.actionItemLabel, { color: theme.text }]}>
+                Manage Subscription
+              </Text>
+            </View>
+            <Ionicons name="open-outline" size={16} color={theme.subtext} />
+          </TouchableOpacity>
+
           {/* Admin Panel - Only show for admins */}
           {isAdmin && (
             <TouchableOpacity

@@ -22,6 +22,7 @@ import BottomNav from "components/bottomNav";
 import { supabase } from "utils/supabase";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { dietaryFilterOptions, dietaryFilterOptionsEnhanced, cuisineFilterOptions, cuisineFilterOptionsEnhanced } from "../../../constants/dietaryOptions";
+import { isSmallScreen, responsiveFontSizes } from "../../../utils/responsiveUtils";
 
 const aiOptions = [
   { label: "All", value: "" },
@@ -67,6 +68,8 @@ const OtherMeals: React.FC = () => {
   // Modal state for enhanced pickers
   const [showDietaryModal, setShowDietaryModal] = useState(false);
   const [showCuisineModal, setShowCuisineModal] = useState(false);
+  const [isFilterModalLoading, setIsFilterModalLoading] = useState(false);
+  const [isFilterButtonLoading, setIsFilterButtonLoading] = useState(false);
   
   // Pagination state
   const [currentPage, setCurrentPage] = useState<number>(0);
@@ -356,35 +359,79 @@ const OtherMeals: React.FC = () => {
   };
 
   const applyFilters = async () => {
-    setFilters(tempFilters);
-    setAiFilter(tempAiFilter);
-    setDietaryRestrictionFilter(tempDietaryRestrictionFilter);
-    setCuisineFilter(tempCuisineFilter);
-    setIsFilterModalVisible(false);
-    await saveFilters();
+    setIsFilterButtonLoading(true);
+    
+    try {
+      // Animate modal close first for immediate feedback
+      setIsFilterModalVisible(false);
+      
+      // Small delay for UX, then apply filters
+      setTimeout(async () => {
+        setFilters(tempFilters);
+        setAiFilter(tempAiFilter);
+        setDietaryRestrictionFilter(tempDietaryRestrictionFilter);
+        setCuisineFilter(tempCuisineFilter);
+        
+        await saveFilters();
+        setIsFilterButtonLoading(false);
+      }, 100);
+    } catch (error) {
+      console.error('Error applying filters:', error);
+      setIsFilterButtonLoading(false);
+    }
   };
 
   const clearFilters = async () => {
-    setFilters(defaultFilters);
-    setTempFilters(defaultFilters);
-    setAiFilter("");
-    setTempAiFilter("");
-    setDietaryRestrictionFilter("");
-    setTempDietaryRestrictionFilter("");
-    setCuisineFilter("");
-    setTempCuisineFilter("");
-    setSearchQuery("");
-    setIsFilterModalVisible(false);
+    setIsFilterButtonLoading(true);
+    
     try {
-      await AsyncStorage.removeItem('otherMealsFilters');
+      // Clear temp filters immediately for visual feedback
+      setTempFilters(defaultFilters);
+      setTempAiFilter("");
+      setTempDietaryRestrictionFilter("");
+      setTempCuisineFilter("");
+      
+      // Small delay then clear actual filters and close modal
+      setTimeout(async () => {
+        setFilters(defaultFilters);
+        setAiFilter("");
+        setDietaryRestrictionFilter("");
+        setCuisineFilter("");
+        setSearchQuery("");
+        setIsFilterModalVisible(false);
+        
+        try {
+          await AsyncStorage.removeItem('otherMealsFilters');
+        } catch (error) {
+          console.warn('Failed to clear saved filters:', error);
+        }
+        
+        setIsFilterButtonLoading(false);
+      }, 100);
     } catch (error) {
-      console.warn('Failed to clear saved filters:', error);
+      console.error('Error clearing filters:', error);
+      setIsFilterButtonLoading(false);
     }
   };
 
   const handleSearchChange = (text: string) => {
     setSearchQuery(text);
   };
+
+  const openFilterModal = useCallback(() => {
+    setIsFilterButtonLoading(true);
+    setIsFilterModalLoading(true);
+    
+    // Pre-set temp filters immediately to avoid delay
+    setTempAiFilter(aiFilter);
+    setTempDietaryRestrictionFilter(dietaryRestrictionFilter);
+    setTempCuisineFilter(cuisineFilter);
+    
+    // Open modal immediately
+    setIsFilterModalVisible(true);
+    setIsFilterModalLoading(false);
+    setIsFilterButtonLoading(false);
+  }, [aiFilter, dietaryRestrictionFilter, cuisineFilter]);
 
   if (loading && meals.length === 0) {
     return (
@@ -469,28 +516,34 @@ const OtherMeals: React.FC = () => {
             styles.filterButton,
             { 
               backgroundColor: isFilterActive ? theme.primary : theme.card,
-              borderColor: theme.border
+              borderColor: theme.border,
+              opacity: (isFilterModalLoading || isFilterButtonLoading) ? 0.7 : 1,
+              paddingVertical: isSmallScreen ? 8 : 10,
+              paddingHorizontal: isSmallScreen ? 12 : 16
             }
           ]}
-          onPress={() => {
-            setTempAiFilter(aiFilter);
-            setTempDietaryRestrictionFilter(dietaryRestrictionFilter);
-            setTempCuisineFilter(cuisineFilter);
-            setIsFilterModalVisible(true);
-          }}
+          onPress={openFilterModal}
+          disabled={isFilterModalLoading || isFilterButtonLoading}
         >
-          <Ionicons 
-            name="filter" 
-            size={20} 
-            color={isFilterActive ? theme.buttonText : theme.text} 
-          />
+          {(isFilterModalLoading || isFilterButtonLoading) ? (
+            <ActivityIndicator size={isSmallScreen ? 16 : 20} color={isFilterActive ? theme.buttonText : theme.text} />
+          ) : (
+            <Ionicons 
+              name="filter" 
+              size={isSmallScreen ? 16 : 20}
+              color={isFilterActive ? theme.buttonText : theme.text} 
+            />
+          )}
           <Text style={[
             styles.filterButtonText, 
-            { color: isFilterActive ? theme.buttonText : theme.text }
+            { 
+              color: isFilterActive ? theme.buttonText : theme.text,
+              fontSize: responsiveFontSizes.body
+            }
           ]}>
-            Filter
+            {(isFilterModalLoading || isFilterButtonLoading) ? "Loading..." : "Filter"}
           </Text>
-          {isFilterActive && (
+          {isFilterActive && !isFilterModalLoading && !isFilterButtonLoading && (
             <View style={[styles.filterActiveDot, { backgroundColor: theme.warning }]} />
           )}
         </TouchableOpacity>
@@ -663,7 +716,8 @@ const OtherMeals: React.FC = () => {
 
       {/* Filter Modal */}
       <Modal visible={isFilterModalVisible} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
+        {isFilterModalVisible && (
+          <View style={styles.modalOverlay}>
           <View style={[styles.modalContainer, { backgroundColor: theme.card, shadowColor: theme.shadow }]}>
             <ScrollView 
               style={styles.modalScrollView} 
@@ -842,23 +896,53 @@ const OtherMeals: React.FC = () => {
             {/* Modal Actions */}
             <View style={styles.modalActions}>
               <TouchableOpacity 
-                style={[styles.modalButton, styles.clearModalButton, { backgroundColor: theme.button, borderColor: theme.border }]} 
+                style={[
+                  styles.modalButton, 
+                  styles.clearModalButton, 
+                  { 
+                    backgroundColor: theme.button, 
+                    borderColor: theme.border,
+                    paddingVertical: isSmallScreen ? 10 : 12,
+                    paddingHorizontal: isSmallScreen ? 12 : 16
+                  }
+                ]} 
                 onPress={clearFilters}
               >
                 <Ionicons name="refresh" size={18} color={theme.text} />
-                <Text style={[styles.modalButtonText, { color: theme.text }]}>Clear All</Text>
+                <Text style={[
+                  styles.modalButtonText, 
+                  { 
+                    color: theme.text,
+                    fontSize: responsiveFontSizes.body
+                  }
+                ]}>Clear All</Text>
               </TouchableOpacity>
               
               <TouchableOpacity 
-                style={[styles.modalButton, styles.applyButton, { backgroundColor: theme.primary }]} 
+                style={[
+                  styles.modalButton, 
+                  styles.applyButton, 
+                  { 
+                    backgroundColor: theme.primary,
+                    paddingVertical: isSmallScreen ? 10 : 12,
+                    paddingHorizontal: isSmallScreen ? 16 : 20
+                  }
+                ]} 
                 onPress={applyFilters}
               >
                 <Ionicons name="checkmark" size={18} color={theme.buttonText} />
-                <Text style={[styles.modalButtonText, { color: theme.buttonText }]}>Apply Filters</Text>
+                <Text style={[
+                  styles.modalButtonText, 
+                  { 
+                    color: theme.buttonText,
+                    fontSize: responsiveFontSizes.body
+                  }
+                ]}>Apply Filters</Text>
               </TouchableOpacity>
             </View>
           </View>
         </View>
+        )}
       </Modal>
 
       {/* Dietary Restrictions Modal */}
@@ -871,7 +955,8 @@ const OtherMeals: React.FC = () => {
           setTimeout(() => setIsFilterModalVisible(true), 10);
         }}
       >
-        <View style={styles.modalOverlay}>
+        {showDietaryModal && (
+          <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
             <View style={[styles.modalHeader, { borderBottomColor: theme.border }]}>
               <Text style={[styles.modalTitle, { color: theme.text }]}>
@@ -924,6 +1009,7 @@ const OtherMeals: React.FC = () => {
             </ScrollView>
           </View>
         </View>
+        )}
       </Modal>
 
       {/* Cuisine Modal */}
@@ -936,7 +1022,8 @@ const OtherMeals: React.FC = () => {
           setTimeout(() => setIsFilterModalVisible(true), 10);
         }}
       >
-        <View style={styles.modalOverlay}>
+        {showCuisineModal && (
+          <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
             <View style={[styles.modalHeader, { borderBottomColor: theme.border }]}>
               <Text style={[styles.modalTitle, { color: theme.text }]}>
@@ -989,6 +1076,7 @@ const OtherMeals: React.FC = () => {
             </ScrollView>
           </View>
         </View>
+        )}
       </Modal>
 
       <BottomNav />

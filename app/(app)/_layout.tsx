@@ -9,10 +9,11 @@ export default function AppLayout() {
         // Optimized settings for in-app navigation
         animation: 'slide_from_right',
         animationDuration: 150, // Even faster for internal navigation
-        gestureEnabled: true,
+        gestureEnabled: false, // Disable swipe to go back
         gestureDirection: 'horizontal',
-        // Enable swipe gestures for better UX
-        fullScreenGestureEnabled: true,
+        // Disable all swipe gestures for more controlled navigation
+        fullScreenGestureEnabled: false,
+        presentation: 'card',
       }} 
     />
   );
