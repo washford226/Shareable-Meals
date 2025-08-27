@@ -11,6 +11,7 @@ import {
   Image,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { Ionicons } from '@expo/vector-icons';
 import NutritionNav from "../../../../components/nutritionNav";
 import { format, subDays } from "date-fns";
 import { useTheme } from "../../../../context/ThemeContext";
@@ -256,7 +257,21 @@ const MonthNutritionScreen = () => {
         />
       }
     >
-      <View style={{ paddingTop: 45 }}>
+      {/* Back Button Header */}
+      <View style={[styles.header, { backgroundColor: theme.background }]}>
+        <TouchableOpacity
+          style={[styles.headerBackButton, { backgroundColor: theme.card }]}
+          onPress={() => router.push("/(app)/meal-plan/calendar")}
+        >
+          <Ionicons name="arrow-back" size={24} color={theme.text} />
+        </TouchableOpacity>
+        <Text style={[styles.headerTitle, { color: theme.text }]}>
+          Month Nutrition
+        </Text>
+        <View style={styles.headerSpacer} />
+      </View>
+
+      <View style={{ paddingTop: 10 }}>
         <NutritionNav />
 
         {/* Error Banner */}
@@ -750,6 +765,34 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontStyle: 'italic',
     textAlign: 'center',
+  },
+  // Header styles
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    paddingTop: 44, // Account for status bar
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  headerBackButton: {
+    padding: 8,
+    borderRadius: 8,
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  headerSpacer: {
+    width: 40, // Match back button width for centering
   },
 });
 

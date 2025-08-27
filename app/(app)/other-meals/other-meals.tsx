@@ -555,11 +555,27 @@ const OtherMeals: React.FC = () => {
           style={[styles.weeklyMealsButton, { backgroundColor: theme.primary }]}
           onPress={() => router.push("/competition/current-meals")}
         >
-          <Ionicons name="trophy" size={20} color={theme.buttonText} />
-          <Text style={[styles.weeklyMealsButtonText, { color: theme.buttonText }]}>
+          <Ionicons 
+            name="trophy" 
+            size={isSmallScreen ? 18 : 20} 
+            color={theme.buttonText} 
+            style={styles.weeklyMealsIcon}
+          />
+          <Text style={[
+            styles.weeklyMealsButtonText, 
+            { 
+              color: theme.buttonText,
+              fontSize: isSmallScreen ? 14 : 16
+            }
+          ]}>
             Weekly Meals Competition
           </Text>
-          <Ionicons name="chevron-forward" size={16} color={theme.buttonText} />
+          <Ionicons 
+            name="chevron-forward" 
+            size={isSmallScreen ? 14 : 16} 
+            color={theme.buttonText} 
+            style={styles.weeklyMealsArrow}
+          />
         </TouchableOpacity>
       </View>
 
@@ -1188,14 +1204,23 @@ const styles = StyleSheet.create({
   weeklyMealsButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'space-between',
     padding: 16,
     borderRadius: 12,
-    gap: 8,
+    paddingHorizontal: 20,
+  },
+  weeklyMealsIcon: {
+    marginRight: 4,
   },
   weeklyMealsButtonText: {
     fontSize: 16,
     fontWeight: '600',
+    flex: 1,
+    textAlign: 'center',
+    marginHorizontal: 8,
+  },
+  weeklyMealsArrow: {
+    marginLeft: 4,
   },
 
   // Meal Card Styles

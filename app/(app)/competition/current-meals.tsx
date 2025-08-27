@@ -842,61 +842,6 @@ const CurrentMeals = () => {
 
     return (
       <View style={styles.scrollContainer}>
-        {/* Competition Theme Card */}
-        {competitionTheme && (
-          <View style={[styles.competitionCard, { backgroundColor: theme.card }]}>
-            <View style={styles.cardHeader}>
-              <Ionicons name="trophy" size={24} color={theme.primary} />
-              <Text style={[styles.cardTitle, { color: theme.text }]}>
-                Weekly Competition
-              </Text>
-            </View>
-            
-            <View style={styles.competitionContent}>
-              <Text style={[styles.themeText, { color: theme.text }]}>
-                {competitionTheme}
-              </Text>
-              
-              <View style={styles.competitionMeta}>
-                {competitionStatus && (
-                  <View style={[styles.statusBadge, { 
-                    backgroundColor: competitionStatus === 'active' ? theme.success : theme.warning 
-                  }]}>
-                    <Text style={[styles.statusText, { color: theme.buttonText }]}>
-                      {competitionStatus ? competitionStatus.charAt(0).toUpperCase() + competitionStatus.slice(1) : ''}
-                    </Text>
-                  </View>
-                )}
-                
-                {competitionDates && competitionStatus === 'active' && (
-                  <View style={[styles.timeRemainingBadge, { backgroundColor: `${theme.primary}20` }]}>
-                    <Ionicons name="time-outline" size={14} color={theme.primary} />
-                    <Text style={[styles.timeRemainingText, { color: theme.primary }]}>
-                      {getTimeRemaining(competitionDates.end)}
-                    </Text>
-                  </View>
-                )}
-              </View>
-
-              {competitionDates && (
-                <Text style={[styles.dateRangeText, { color: theme.textSecondary }]}>
-                  {formatDate(competitionDates.start)} - {formatDate(competitionDates.end)}
-                </Text>
-              )}
-            </View>
-            
-            <TouchableOpacity
-              style={[styles.addMealButton, { backgroundColor: theme.primary }]}
-              onPress={() => router.push("/competition/add-meal")}
-            >
-              <Ionicons name="add-circle-outline" size={20} color={theme.buttonText} />
-              <Text style={[styles.addMealButtonText, { color: theme.buttonText }]}>
-                Submit Your Meal
-              </Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
         {/* Meals List */}
         <FlatList
           data={meals}
@@ -909,6 +854,59 @@ const CurrentMeals = () => {
           windowSize={10}
           onEndReached={loadMoreMeals}
           onEndReachedThreshold={0.3}
+          ListHeaderComponent={competitionTheme ? () => (
+            <View style={[styles.competitionCard, { backgroundColor: theme.card }]}>
+              <View style={styles.cardHeader}>
+                <Ionicons name="trophy" size={24} color={theme.primary} />
+                <Text style={[styles.cardTitle, { color: theme.text }]}>
+                  Weekly Competition
+                </Text>
+              </View>
+              
+              <View style={styles.competitionContent}>
+                <Text style={[styles.themeText, { color: theme.text }]}>
+                  {competitionTheme}
+                </Text>
+                
+                <View style={styles.competitionMeta}>
+                  {competitionStatus && (
+                    <View style={[styles.statusBadge, { 
+                      backgroundColor: competitionStatus === 'active' ? theme.success : theme.warning 
+                    }]}>
+                      <Text style={[styles.statusText, { color: theme.buttonText }]}>
+                        {competitionStatus ? competitionStatus.charAt(0).toUpperCase() + competitionStatus.slice(1) : ''}
+                      </Text>
+                    </View>
+                  )}
+                  
+                  {competitionDates && competitionStatus === 'active' && (
+                    <View style={[styles.timeRemainingBadge, { backgroundColor: `${theme.primary}20` }]}>
+                      <Ionicons name="time-outline" size={14} color={theme.primary} />
+                      <Text style={[styles.timeRemainingText, { color: theme.primary }]}>
+                        {getTimeRemaining(competitionDates.end)}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+
+                {competitionDates && (
+                  <Text style={[styles.dateRangeText, { color: theme.textSecondary }]}>
+                    {formatDate(competitionDates.start)} - {formatDate(competitionDates.end)}
+                  </Text>
+                )}
+              </View>
+              
+              <TouchableOpacity
+                style={[styles.addMealButton, { backgroundColor: theme.primary }]}
+                onPress={() => router.push("/competition/add-meal")}
+              >
+                <Ionicons name="add-circle-outline" size={20} color={theme.buttonText} />
+                <Text style={[styles.addMealButtonText, { color: theme.buttonText }]}>
+                  Submit Your Meal
+                </Text>
+              </TouchableOpacity>
+            </View>
+          ) : undefined}
           ListFooterComponent={() => (
             loadingMore ? (
               <View style={styles.loadingMoreContainer}>
@@ -1302,12 +1300,14 @@ const styles = StyleSheet.create({
   competitionCard: {
     margin: 16,
     marginTop: 8,
+    marginBottom: 20,
     padding: 20,
     borderRadius: 16,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
+    minHeight: 220,
   },
   mealCard: {
     flex: 1,
@@ -1322,11 +1322,11 @@ const styles = StyleSheet.create({
   cardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 12,
     gap: 8,
   },
   cardTitle: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '600',
   },
 
@@ -1337,17 +1337,19 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   themeText: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '700',
     textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: 4,
   },
   statusBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: 10,
   },
   statusText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
     textTransform: 'uppercase',
   },
@@ -1359,9 +1361,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     borderRadius: 8,
     gap: 6,
+    marginTop: 8,
   },
   addMealButtonText: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
   },
 
@@ -1541,22 +1544,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
     marginTop: 8,
+    marginBottom: 6,
   },
   timeRemainingBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingVertical: 3,
     borderRadius: 6,
   },
   timeRemainingText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '500',
   },
   dateRangeText: {
-    fontSize: 12,
-    marginTop: 4,
+    fontSize: 11,
+    marginTop: 3,
   },
 
   // Winner card styles

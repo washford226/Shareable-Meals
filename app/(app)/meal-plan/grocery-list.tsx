@@ -443,48 +443,55 @@ const GroceryListScreen = () => {
         <View style={styles.headerSpacer} />
       </View>
 
-      {/* Error Banner */}
-      {error && (
-        <View style={[styles.errorBanner, { backgroundColor: theme.card, borderColor: theme.danger }]}>
-          <Ionicons name="warning" size={20} color={theme.danger} />
-          <Text style={[styles.errorBannerText, { color: theme.danger }]}>
-            {error}
-          </Text>
-          <TouchableOpacity
-            style={[styles.errorBannerRetry, { backgroundColor: theme.danger }]}
-            onPress={handleRefresh}
-          >
-            <Text style={[styles.errorBannerRetryText, { color: theme.buttonText }]}>
-              Retry
+      {/* Scrollable Content */}
+      <ScrollView 
+        style={styles.scrollContent}
+        contentContainerStyle={styles.scrollContentContainer}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        {/* Error Banner */}
+        {error && (
+          <View style={[styles.errorBanner, { backgroundColor: theme.card, borderColor: theme.danger }]}>
+            <Ionicons name="warning" size={20} color={theme.danger} />
+            <Text style={[styles.errorBannerText, { color: theme.danger }]}>
+              {error}
             </Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {/* Mode Toggle */}
-      <View style={[styles.modeContainer, { backgroundColor: theme.card, borderColor: theme.border }]}>
-        <View style={styles.modeInfo}>
-          <Ionicons 
-            name={isShoppingMode ? "basket-outline" : "construct-outline"} 
-            size={24} 
-            color={theme.primary} 
-          />
-          <View style={styles.modeTextContainer}>
-            <Text style={[styles.modeLabel, { color: theme.text }]}>
-              {isShoppingMode ? "Shopping Mode" : "Planning Mode"}
-            </Text>
-            <Text style={[styles.modeDescription, { color: theme.subtext }]}>
-              {isShoppingMode ? "Check off items as you shop" : "Manage your grocery list"}
-            </Text>
+            <TouchableOpacity
+              style={[styles.errorBannerRetry, { backgroundColor: theme.danger }]}
+              onPress={handleRefresh}
+            >
+              <Text style={[styles.errorBannerRetryText, { color: theme.buttonText }]}>
+                Retry
+              </Text>
+            </TouchableOpacity>
           </View>
+        )}
+
+        {/* Mode Toggle */}
+        <View style={[styles.modeContainer, { backgroundColor: theme.card, borderColor: theme.border }]}>
+          <View style={styles.modeInfo}>
+            <Ionicons 
+              name={isShoppingMode ? "basket-outline" : "construct-outline"} 
+              size={24} 
+              color={theme.primary} 
+            />
+            <View style={styles.modeTextContainer}>
+              <Text style={[styles.modeLabel, { color: theme.text }]}>
+                {isShoppingMode ? "Shopping Mode" : "Planning Mode"}
+              </Text>
+              <Text style={[styles.modeDescription, { color: theme.subtext }]}>
+                {isShoppingMode ? "Check off items as you shop" : "Manage your grocery list"}
+              </Text>
+            </View>
+          </View>
+          <Switch
+            value={isShoppingMode}
+            onValueChange={setIsShoppingMode}
+            trackColor={{ false: theme.border, true: theme.primary }}
+            thumbColor={isShoppingMode ? theme.background : theme.background}
+          />
         </View>
-        <Switch
-          value={isShoppingMode}
-          onValueChange={setIsShoppingMode}
-          trackColor={{ false: theme.border, true: theme.primary }}
-          thumbColor={isShoppingMode ? theme.background : theme.background}
-        />
-      </View>
 
       {/* Planning Mode Controls */}
       {!isShoppingMode && (
@@ -730,6 +737,7 @@ const GroceryListScreen = () => {
           </View>
         )}
       </View>
+      </ScrollView>
       
       {/* Bottom Back Button */}
       <TouchableOpacity
@@ -749,6 +757,14 @@ const styles = StyleSheet.create({
   container: { 
     flex: 1, 
     padding: 20
+  },
+  
+  // Scroll Content Styles
+  scrollContent: {
+    flex: 1,
+  },
+  scrollContentContainer: {
+    paddingBottom: 20,
   },
   
   // Enhanced Header Styles

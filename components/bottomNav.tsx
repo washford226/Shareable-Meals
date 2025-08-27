@@ -129,7 +129,7 @@ const BottomNav = memo(() => {
             onPressOut={handlePressOut}
             style={[
               styles.navItem,
-              item.isActive && [styles.activeNavItem, { backgroundColor: `${theme.primary}15` }],
+              item.isActive && styles.activeNavItem,
               pressedItem === item.id && [styles.pressedNavItem, { backgroundColor: `${theme.primary}25` }]
             ]}
             activeOpacity={0.8}
@@ -159,9 +159,6 @@ const BottomNav = memo(() => {
             ]}>
               {item.label}
             </Text>
-            {item.isActive && (
-              <View style={[styles.activeIndicator, { backgroundColor: theme.primary }]} />
-            )}
             {pressedItem === item.id && !item.isActive && (
               <View style={[styles.pressIndicator, { backgroundColor: `${theme.primary}60` }]} />
             )}

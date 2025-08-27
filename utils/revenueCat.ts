@@ -34,7 +34,16 @@ class RevenueCatManager {
     try {
       if (this.isInitialized) return;
       
-      // Configure RevenueCat (works in both Expo Go and production)
+      // Skip RevenueCat initialization in Expo Go due to crypto dependency
+      if (isExpoGo) {
+        console.log('🔧 Development Mode: Skipping RevenueCat initialization (Expo Go detected)');
+        console.log('🔧 Development Mode: No app access (testing paywall)');
+        this.isInitialized = true;
+        this.mockSubscriptionActive = false; // Force paywall display
+        return;
+      }
+      
+      // Configure RevenueCat (works in production builds)
       await Purchases.configure({
         apiKey: 'appl_yanmwOxgRTMnRrTxdrZUtwdjjoo',
         appUserID: userId || undefined
@@ -43,11 +52,12 @@ class RevenueCatManager {
       this.isInitialized = true;
       console.log('RevenueCat initialized successfully');
     } catch (error) {
-      console.error('Failed to initialize RevenueCat:', error);
+      console.error('Error configuring Purchases:', error);
       // In development, continue with mock data
-      if (isDevelopmentMode) {
-        console.log('🔧 Falling back to no subscription (testing paywall)');
+      if (isDevelopmentMode || isExpoGo) {
+        console.log('🔧 Development Mode: No app access (testing paywall)');
         this.isInitialized = true;
+        this.mockSubscriptionActive = false; // Force paywall display
         return;
       }
       throw error;
@@ -58,6 +68,12 @@ class RevenueCatManager {
     try {
       if (!this.isInitialized) {
         await this.initialize();
+      }
+      
+      // Return empty offerings in Expo Go
+      if (isExpoGo) {
+        console.log('🔧 Development Mode: Returning empty offerings (Expo Go)');
+        return [];
       }
       
       const offerings = await Purchases.getOfferings();
@@ -71,7 +87,8 @@ class RevenueCatManager {
       return Object.values(currentOffering.availablePackages);
     } catch (error) {
       console.error('Error fetching offerings:', error);
-      throw error;
+      // Return empty array instead of throwing
+      return [];
     }
   }
 
@@ -117,11 +134,29 @@ class RevenueCatManager {
         await this.initialize();
       }
       
+      // Return mock status in Expo Go
+      if (isExpoGo) {
+        return {
+          isActive: this.mockSubscriptionActive,
+          productId: null,
+          expirationDate: null,
+          willRenew: false,
+          isTrialActive: false,
+        };
+      }
+      
       const customerInfo = await Purchases.getCustomerInfo();
       return this.parseSubscriptionStatus(customerInfo);
     } catch (error) {
       console.error('Error getting subscription status:', error);
-      throw error;
+      // Return default inactive status instead of throwing
+      return {
+        isActive: false,
+        productId: null,
+        expirationDate: null,
+        willRenew: false,
+        isTrialActive: false,
+      };
     }
   }
 
