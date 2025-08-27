@@ -13,6 +13,7 @@ import {
 import { useTheme } from "../../../context/ThemeContext";
 import { useRouter } from "expo-router";
 import { supabase } from "utils/supabase";
+import { isSmallScreen, isExtraSmallScreen } from "../../../utils/responsiveUtils";
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as FileSystem from 'expo-file-system';
@@ -396,16 +397,47 @@ const PantryScreen = () => {
       )}
 
       {/* Enhanced Header */}
-      <View style={[styles.headerContainer, { backgroundColor: theme.card, shadowColor: theme.shadow }]}>
+      <View style={[
+        styles.headerContainer, 
+        { 
+          backgroundColor: theme.card, 
+          shadowColor: theme.shadow,
+          padding: (isSmallScreen || isExtraSmallScreen) ? 12 : 20,
+          minHeight: (isSmallScreen || isExtraSmallScreen) ? '18%' : '20%',
+        }
+      ]}>
         <View style={styles.headerContent}>
-          <View style={[styles.pantryIconContainer, { backgroundColor: theme.primaryLight }]}>
-            <Text style={styles.pantryHeaderIcon}>🥫</Text>
+          <View style={[
+            styles.pantryIconContainer, 
+            { 
+              backgroundColor: theme.primaryLight,
+              width: (isSmallScreen || isExtraSmallScreen) ? 36 : 48,
+              height: (isSmallScreen || isExtraSmallScreen) ? 36 : 48,
+              borderRadius: (isSmallScreen || isExtraSmallScreen) ? 18 : 24,
+            }
+          ]}>
+            <Text style={[
+              styles.pantryHeaderIcon,
+              { fontSize: (isSmallScreen || isExtraSmallScreen) ? 18 : 24 }
+            ]}>🥫</Text>
           </View>
           <View style={styles.headerTextContainer}>
-            <Text style={[styles.title, { color: theme.text }]}>
+            <Text style={[
+              styles.title, 
+              { 
+                color: theme.text,
+                fontSize: (isSmallScreen || isExtraSmallScreen) ? 18 : 28
+              }
+            ]}>
               My Pantry
             </Text>
-            <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
+            <Text style={[
+              styles.subtitle, 
+              { 
+                color: theme.textSecondary,
+                fontSize: (isSmallScreen || isExtraSmallScreen) ? 13 : 16
+              }
+            ]}>
               Track your ingredients and expiration dates
             </Text>
           </View>
@@ -501,6 +533,8 @@ const PantryScreen = () => {
                   style={[styles.editButton, { 
                     backgroundColor: theme.primary,
                     shadowColor: theme.shadow,
+                    paddingVertical: (isSmallScreen || isExtraSmallScreen) ? 6 : 8,
+                    paddingHorizontal: (isSmallScreen || isExtraSmallScreen) ? 8 : 12,
                   }]}
                   onPress={() => {
                     if (item.pantry_id && typeof item.pantry_id === 'number') {
@@ -512,7 +546,13 @@ const PantryScreen = () => {
                   disabled={isDeleting}
                   activeOpacity={0.8}
                 >
-                  <Text style={[styles.editButtonText, { color: theme.buttonTextPrimary }]}>
+                  <Text style={[
+                    styles.editButtonText, 
+                    { 
+                      color: theme.buttonTextPrimary,
+                      fontSize: (isSmallScreen || isExtraSmallScreen) ? 11 : 14
+                    }
+                  ]}>
                     ✏️ Edit
                   </Text>
                 </TouchableOpacity>
@@ -524,6 +564,8 @@ const PantryScreen = () => {
                       backgroundColor: theme.danger, 
                       opacity: isDeleting ? 0.5 : 1,
                       shadowColor: theme.shadow,
+                      paddingVertical: (isSmallScreen || isExtraSmallScreen) ? 6 : 8,
+                      paddingHorizontal: (isSmallScreen || isExtraSmallScreen) ? 8 : 12,
                     }
                   ]}
                   onPress={() => {
@@ -546,7 +588,13 @@ const PantryScreen = () => {
                   {isDeleting ? (
                     <ActivityIndicator size="small" color={theme.buttonTextPrimary} />
                   ) : (
-                    <Text style={[styles.deleteButtonText, { color: theme.buttonTextPrimary }]}>
+                    <Text style={[
+                      styles.deleteButtonText, 
+                      { 
+                        color: theme.buttonTextPrimary,
+                        fontSize: (isSmallScreen || isExtraSmallScreen) ? 11 : 14
+                      }
+                    ]}>
                       🗑️ Delete
                     </Text>
                   )}
@@ -636,7 +684,7 @@ const PantryScreen = () => {
                   <Ionicons name="sparkles" size={12} color={theme.success} style={styles.aiSparkle} />
                 </View>
                 <View style={styles.scanButtonContent}>
-                  <Text style={[styles.scanButtonText, { color: theme.buttonTextPrimary, fontSize: 15 }]}>
+                  <Text style={[styles.scanButtonText, { color: theme.buttonTextPrimary, fontSize: 13 }]}>
                     AI Scanner
                   </Text>
                 </View>
@@ -838,25 +886,27 @@ const styles = StyleSheet.create({
   // Enhanced header styles
   headerContainer: {
     padding: 20,
-    borderRadius: 16,
-    marginBottom: 24,
+    borderRadius: 12,
+    marginBottom: 16,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 8,
     elevation: 3,
+    minHeight: '20%',
+    justifyContent: 'center',
   },
   headerContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 8,
   },
   pantryIconContainer: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 16,
+    marginRight: 14,
   },
   pantryHeaderIcon: {
     fontSize: 24,
@@ -1020,9 +1070,9 @@ const styles = StyleSheet.create({
   // Enhanced Footer Buttons
   addButton: {
     flex: 1,
-    paddingVertical: 16,
-    paddingHorizontal: 24,
-    borderRadius: 16,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 12,
     alignItems: "center",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -1030,7 +1080,7 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   addButtonText: {
-    fontSize: 16,
+    fontSize: 13,
     fontWeight: "700",
   },
   backButton: {
@@ -1050,25 +1100,25 @@ const styles = StyleSheet.create({
   actionButtonsContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: 16,
-    gap: 12,
+    marginTop: 12,
+    gap: 8,
   },
   scanButton: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 16,
-    paddingHorizontal: 24,
-    borderRadius: 16,
-    gap: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    gap: 6,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 8,
     elevation: 3,
   },
   scanButtonText: {
-    fontSize: 16,
+    fontSize: 13,
     fontWeight: '700',
   },
   scanButtonContent: {

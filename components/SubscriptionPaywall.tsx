@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   Alert,
   StyleSheet,
+  Linking,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../context/ThemeContext';
@@ -295,8 +296,47 @@ const SubscriptionPaywall: React.FC<SubscriptionPaywallProps> = ({
           {/* Terms */}
           <View style={styles.termsContainer}>
             <Text style={[styles.termsText, { color: theme.textSecondary }]}>
-              Subscriptions auto-renew unless cancelled. Cancel anytime in your account settings. 
-              By subscribing, you agree to our Terms of Service and Privacy Policy.
+              Subscriptions auto-renew unless cancelled. Cancel anytime in your account settings.{'\n'}
+              By subscribing, you agree to our{' '}
+              <Text 
+                style={[styles.linkText, { color: theme.primary }]}
+                onPress={async () => {
+                  try {
+                    const url = 'https://www.shareablemeals.com/terms';
+                    const supported = await Linking.canOpenURL(url);
+                    if (supported) {
+                      await Linking.openURL(url);
+                    } else {
+                      Alert.alert('Error', 'Unable to open Terms of Use. Please check your internet connection.');
+                    }
+                  } catch (error) {
+                    console.error('Error opening Terms of Use:', error);
+                    Alert.alert('Error', 'Unable to open Terms of Use. Please try again.');
+                  }
+                }}
+              >
+                Terms of Use
+              </Text>{' '}
+              and{' '}
+              <Text 
+                style={[styles.linkText, { color: theme.primary }]}
+                onPress={async () => {
+                  try {
+                    const url = 'https://www.shareablemeals.com/privacy';
+                    const supported = await Linking.canOpenURL(url);
+                    if (supported) {
+                      await Linking.openURL(url);
+                    } else {
+                      Alert.alert('Error', 'Unable to open Privacy Policy. Please check your internet connection.');
+                    }
+                  } catch (error) {
+                    console.error('Error opening Privacy Policy:', error);
+                    Alert.alert('Error', 'Unable to open Privacy Policy. Please try again.');
+                  }
+                }}
+              >
+                Privacy Policy
+              </Text>.
             </Text>
           </View>
         </ScrollView>
@@ -440,6 +480,11 @@ const styles = StyleSheet.create({
     fontSize: 12,
     textAlign: 'center',
     lineHeight: 16,
+  },
+  linkText: {
+    fontSize: 12,
+    textDecorationLine: 'underline',
+    fontWeight: '500',
   },
   disclaimerText: {
     fontSize: 12,

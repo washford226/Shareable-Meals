@@ -43,10 +43,20 @@ export const useSubscription = () => {
       }));
     } catch (error: any) {
       console.error('Error refreshing subscription status:', error);
+      // In development/Expo Go, default to no access to test paywall
+      const isDevelopment = __DEV__;
       setState(prev => ({ 
         ...prev, 
-        error: error.message || 'Failed to load subscription status',
+        error: isDevelopment ? null : (error.message || 'Failed to load subscription status'),
         hasAppAccess: false,
+        accessReason: 'no_subscription',
+        subscriptionStatus: {
+          isActive: false,
+          productId: null,
+          expirationDate: null,
+          willRenew: false,
+          isTrialActive: false
+        },
         isLoading: false 
       }));
     }

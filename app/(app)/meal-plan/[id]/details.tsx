@@ -17,6 +17,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { Meal } from "../../../../types/types";
 import { useTheme } from "../../../../context/ThemeContext";
 import { supabase } from "utils/supabase";
+import { isSmallScreen, isExtraSmallScreen } from "../../../../utils/responsiveUtils";
 
 const MealPlanDetails = () => {
   const { id } = useLocalSearchParams();
@@ -337,36 +338,119 @@ const MealPlanDetails = () => {
         <View style={[styles.nutritionCard, { backgroundColor: theme.card, shadowColor: theme.shadow }]}>
           <View style={styles.cardHeader}>
             <Ionicons name="nutrition" size={20} color={theme.primary} />
-            <Text style={[styles.cardTitle, { color: theme.text }]}>
+            <Text style={[
+              styles.cardTitle, 
+              { 
+                color: theme.text,
+                fontSize: (isSmallScreen || isExtraSmallScreen) ? 10 : 16
+              }
+            ]}>
               Nutrition Information
             </Text>
             <View style={{ flex: 1 }} />
             <Image 
               source={require('../../../../assets/images/Edamam_Badge_Transparent.png')} 
-              style={styles.edamamLogo} 
+              style={[
+                styles.edamamLogo,
+                {
+                  width: (isSmallScreen || isExtraSmallScreen) ? 100 : 150,
+                  height: (isSmallScreen || isExtraSmallScreen) ? 20 : 30
+                }
+              ]} 
               resizeMode="contain"
             />
           </View>
           <View style={styles.nutritionGrid}>
-            <View style={[styles.nutritionItem, { backgroundColor: theme.background }]}>
-              <Ionicons name="flame-outline" size={20} color={theme.warning} />
-              <Text style={[styles.nutritionValue, { color: theme.text }]}>{meal.calories}</Text>
-              <Text style={[styles.nutritionLabel, { color: theme.subtext }]}>Calories</Text>
+            <View style={styles.nutritionRow}>
+              <View style={[styles.nutritionItem, { backgroundColor: theme.background }]}>
+                <Ionicons name="flame-outline" size={16} color={theme.warning} />
+                <Text style={[
+                  styles.nutritionValue, 
+                  { 
+                    color: theme.text,
+                    fontSize: (isSmallScreen || isExtraSmallScreen) ? 10 : 18
+                  }
+                ]}>{meal.calories}</Text>
+                <Text style={[
+                  styles.nutritionLabel, 
+                  { 
+                    color: theme.subtext,
+                    fontSize: (isSmallScreen || isExtraSmallScreen) ? 8 : 12
+                  }
+                ]}>Calories</Text>
+              </View>
+              <View style={[styles.nutritionItem, { backgroundColor: theme.background }]}>
+                <Ionicons name="barbell-outline" size={16} color={theme.protein} />
+                <Text style={[
+                  styles.nutritionValue, 
+                  { 
+                    color: theme.text,
+                    fontSize: (isSmallScreen || isExtraSmallScreen) ? 10 : 18
+                  }
+                ]}>{meal.protein}g</Text>
+                <Text style={[
+                  styles.nutritionLabel, 
+                  { 
+                    color: theme.subtext,
+                    fontSize: (isSmallScreen || isExtraSmallScreen) ? 8 : 12
+                  }
+                ]}>Protein</Text>
+              </View>
+              <View style={[styles.nutritionItem, { backgroundColor: theme.background }]}>
+                <Ionicons name="analytics-outline" size={16} color={theme.carbs} />
+                <Text style={[
+                  styles.nutritionValue, 
+                  { 
+                    color: theme.text,
+                    fontSize: (isSmallScreen || isExtraSmallScreen) ? 10 : 18
+                  }
+                ]}>{meal.carbohydrates}g</Text>
+                <Text style={[
+                  styles.nutritionLabel, 
+                  { 
+                    color: theme.subtext,
+                    fontSize: (isSmallScreen || isExtraSmallScreen) ? 8 : 12
+                  }
+                ]}>Carbs</Text>
+              </View>
             </View>
-            <View style={[styles.nutritionItem, { backgroundColor: theme.background }]}>
-              <Ionicons name="barbell-outline" size={20} color={theme.protein} />
-              <Text style={[styles.nutritionValue, { color: theme.text }]}>{meal.protein}g</Text>
-              <Text style={[styles.nutritionLabel, { color: theme.subtext }]}>Protein</Text>
-            </View>
-            <View style={[styles.nutritionItem, { backgroundColor: theme.background }]}>
-              <Ionicons name="analytics-outline" size={20} color={theme.carbs} />
-              <Text style={[styles.nutritionValue, { color: theme.text }]}>{meal.carbohydrates}g</Text>
-              <Text style={[styles.nutritionLabel, { color: theme.subtext }]}>Carbs</Text>
-            </View>
-            <View style={[styles.nutritionItem, { backgroundColor: theme.background }]}>
-              <Ionicons name="water-outline" size={20} color={theme.fat} />
-              <Text style={[styles.nutritionValue, { color: theme.text }]}>{meal.fat}g</Text>
-              <Text style={[styles.nutritionLabel, { color: theme.subtext }]}>Fat</Text>
+            <View style={styles.nutritionRow}>
+              <View style={[styles.nutritionItem, { backgroundColor: theme.background }]}>
+                <Ionicons name="water-outline" size={16} color={theme.fat} />
+                <Text style={[
+                  styles.nutritionValue, 
+                  { 
+                    color: theme.text,
+                    fontSize: (isSmallScreen || isExtraSmallScreen) ? 10 : 18
+                  }
+                ]}>{meal.fat}g</Text>
+                <Text style={[
+                  styles.nutritionLabel, 
+                  { 
+                    color: theme.subtext,
+                    fontSize: (isSmallScreen || isExtraSmallScreen) ? 8 : 12
+                  }
+                ]}>Fat</Text>
+              </View>
+              <View style={[styles.nutritionItem, { backgroundColor: theme.background }]}>
+                <Ionicons name="restaurant-outline" size={16} color={theme.primary} />
+                <Text style={[
+                  styles.nutritionValue, 
+                  { 
+                    color: theme.text,
+                    fontSize: (isSmallScreen || isExtraSmallScreen) ? 10 : 18
+                  }
+                ]}>{meal.servings || 1}</Text>
+                <Text style={[
+                  styles.nutritionLabel, 
+                  { 
+                    color: theme.subtext,
+                    fontSize: (isSmallScreen || isExtraSmallScreen) ? 8 : 12
+                  }
+                ]}>Servings</Text>
+              </View>
+              {/* Empty space for balance */}
+              <View style={[styles.nutritionItem, { opacity: 0 }]} />
             </View>
           </View>
         </View>
@@ -682,8 +766,12 @@ const styles = StyleSheet.create({
 
   // Nutrition Styles
   nutritionGrid: {
+    gap: 12,
+  },
+  nutritionRow: {
     flexDirection: 'row',
     justifyContent: 'space-around',
+    marginBottom: 8,
   },
   nutritionItem: {
     alignItems: 'center',
@@ -693,6 +781,8 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 4,
     elevation: 2,
+    flex: 1,
+    marginHorizontal: 4,
   },
   nutritionValue: {
     fontSize: 20,

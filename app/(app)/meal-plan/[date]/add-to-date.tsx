@@ -12,6 +12,7 @@ import {
   TextInput,
   Image,
   ScrollView,
+  Platform,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { format } from "date-fns";
@@ -20,6 +21,7 @@ import { useTheme } from "../../../../context/ThemeContext";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { supabase } from "utils/supabase";
 import { cachedDataService } from "utils/cachedDataService";
+import { isSmallScreen, isExtraSmallScreen } from "../../../../utils/responsiveUtils";
 
 const AddMealToDate = () => {
   const { theme } = useTheme();
@@ -266,10 +268,22 @@ const AddMealToDate = () => {
   }, [date]);
 
   return (
-    <ScrollView 
-      style={{ backgroundColor: theme.background }}
-      contentContainerStyle={styles.scrollContainer}
-    >
+    <View style={{ flex: 1, backgroundColor: theme.background }}>
+      {/* Top Navigation */}
+      <View style={[styles.topNavContainer, { backgroundColor: theme.background }]}>
+        <View style={{ flex: 1 }} />
+        <TouchableOpacity
+          style={[styles.topBackButton, { backgroundColor: theme.card }]}
+          onPress={() => router.push("/(app)/meal-plan/calendar")}
+        >
+          <Ionicons name="close" size={24} color={theme.text} />
+        </TouchableOpacity>
+      </View>
+
+      <ScrollView 
+        style={{ backgroundColor: theme.background }}
+        contentContainerStyle={styles.scrollContainer}
+      >
       {/* Header Card */}
       <View style={[styles.headerCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
         <View style={styles.headerContent}>
@@ -387,10 +401,22 @@ const AddMealToDate = () => {
 
                   {/* Meal Info */}
                   <View style={styles.mealInfo}>
-                    <Text style={[styles.mealName, { color: theme.text }]}>
+                    <Text style={[
+                      styles.mealName, 
+                      { 
+                        color: theme.text,
+                        fontSize: (isSmallScreen || isExtraSmallScreen) ? 12 : 16
+                      }
+                    ]}>
                       {item.name}
                     </Text>
-                    <Text style={[styles.mealDescription, { color: theme.textSecondary }]}>
+                    <Text style={[
+                      styles.mealDescription, 
+                      { 
+                        color: theme.textSecondary,
+                        fontSize: (isSmallScreen || isExtraSmallScreen) ? 10 : 14
+                      }
+                    ]}>
                       {item.description || "No description available"}
                     </Text>
                     
@@ -398,7 +424,13 @@ const AddMealToDate = () => {
                       {item.cuisine && (
                         <View style={[styles.cuisineTag, { backgroundColor: theme.primary + '20', borderColor: theme.primary }]}>
                           <Ionicons name="globe" size={12} color={theme.primary} />
-                          <Text style={[styles.cuisineText, { color: theme.primary }]}>
+                          <Text style={[
+                            styles.cuisineText, 
+                            { 
+                              color: theme.primary,
+                              fontSize: (isSmallScreen || isExtraSmallScreen) ? 9 : 12
+                            }
+                          ]}>
                             {item.cuisine}
                           </Text>
                         </View>
@@ -406,14 +438,26 @@ const AddMealToDate = () => {
                       
                       <View style={styles.nutritionInfo}>
                         <View style={styles.nutritionItem}>
-                          <Ionicons name="flash" size={14} color={theme.textSecondary} />
-                          <Text style={[styles.nutritionText, { color: theme.textSecondary }]}>
+                          <Ionicons name="flash" size={12} color={theme.textSecondary} />
+                          <Text style={[
+                            styles.nutritionText, 
+                            { 
+                              color: theme.textSecondary,
+                              fontSize: (isSmallScreen || isExtraSmallScreen) ? 9 : 12
+                            }
+                          ]}>
                             {item.calories || 0} cal
                           </Text>
                         </View>
                         <View style={styles.nutritionItem}>
-                          <Ionicons name="fitness" size={14} color={theme.textSecondary} />
-                          <Text style={[styles.nutritionText, { color: theme.textSecondary }]}>
+                          <Ionicons name="fitness" size={12} color={theme.textSecondary} />
+                          <Text style={[
+                            styles.nutritionText, 
+                            { 
+                              color: theme.textSecondary,
+                              fontSize: (isSmallScreen || isExtraSmallScreen) ? 9 : 12
+                            }
+                          ]}>
                             {item.protein || 0}g protein
                           </Text>
                         </View>
@@ -565,10 +609,32 @@ const AddMealToDate = () => {
         </View>
       </Modal>
     </ScrollView>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
+  // Top Navigation Styles
+  topNavContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    paddingTop: Platform.OS === 'ios' ? 50 : 12,
+    zIndex: 1000,
+  },
+  topBackButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  
   scrollContainer: {
     flexGrow: 1,
     padding: 16,

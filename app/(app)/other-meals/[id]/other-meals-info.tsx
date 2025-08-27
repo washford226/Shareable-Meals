@@ -18,6 +18,7 @@ import { useTheme } from "../../../../context/ThemeContext";
 import { Meal } from "../../../../types/types";
 import { Ionicons } from "@expo/vector-icons";
 import { supabase } from "utils/supabase";
+import { isSmallScreen, isExtraSmallScreen, responsiveFontSizes, scaleFont } from "../../../../utils/responsiveUtils";
 
 const MealDetails = () => {
   const { id } = useLocalSearchParams();
@@ -768,7 +769,7 @@ const styles = StyleSheet.create({
   nutritionCard: {
     margin: 16,
     marginTop: 8,
-    padding: 20,
+    padding: (isSmallScreen || isExtraSmallScreen) ? 12 : 20,
     borderRadius: 16,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -798,31 +799,37 @@ const styles = StyleSheet.create({
   cardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
-    gap: 8,
+    marginBottom: (isSmallScreen || isExtraSmallScreen) ? 10 : 16,
+    gap: (isSmallScreen || isExtraSmallScreen) ? 4 : 8,
+    flexWrap: (isSmallScreen || isExtraSmallScreen) ? 'wrap' : 'nowrap',
   },
   cardTitle: {
-    fontSize: 18,
+    fontSize: (isSmallScreen || isExtraSmallScreen) ? 14 : 18,
     fontWeight: '600',
+    flex: (isSmallScreen || isExtraSmallScreen) ? 1 : 0,
   },
 
   // Nutrition Styles
   nutritionGrid: {
     flexDirection: 'row',
     justifyContent: 'space-around',
+    paddingHorizontal: (isSmallScreen || isExtraSmallScreen) ? 2 : 0,
+    flexWrap: (isSmallScreen || isExtraSmallScreen) ? 'wrap' : 'nowrap',
   },
   nutritionItem: {
     alignItems: 'center',
+    minWidth: (isSmallScreen || isExtraSmallScreen) ? 42 : 60,
+    marginBottom: (isSmallScreen || isExtraSmallScreen) ? 8 : 0,
   },
   nutritionValue: {
-    fontSize: 20,
+    fontSize: (isSmallScreen || isExtraSmallScreen) ? 12 : 20,
     fontWeight: 'bold',
-    marginBottom: 4,
+    marginBottom: 2,
   },
   nutritionLabel: {
-    fontSize: 12,
+    fontSize: (isSmallScreen || isExtraSmallScreen) ? 8 : 12,
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    letterSpacing: 0.3,
   },
 
   // Ingredients Styles
@@ -1150,9 +1157,9 @@ const styles = StyleSheet.create({
     color: "#6c757d",
   },
   edamamLogo: {
-    width: 200,
-    height: 40,
-    marginLeft: 8,
+    width: (isSmallScreen || isExtraSmallScreen) ? 120 : 200,
+    height: (isSmallScreen || isExtraSmallScreen) ? 24 : 40,
+    marginLeft: (isSmallScreen || isExtraSmallScreen) ? 2 : 8,
   },
 });
 

@@ -20,6 +20,7 @@ import { useTheme } from "../../../../context/ThemeContext";
 import { supabase } from "utils/supabase";
 import { calculateAndSaveMealNutrition } from "../../../../utils/edamamUtils";
 import { dietaryCreateOptionsEnhanced, cuisineOptionsEnhanced } from "../../../../constants/dietaryOptions";
+import { isSmallScreen, isExtraSmallScreen, responsiveFontSizes, scaleFont } from "../../../../utils/responsiveUtils";
 
 export default function EditMealScreen() {
   const { id: mealId } = useLocalSearchParams<{ id: string }>();
@@ -1513,7 +1514,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   cardTitle: {
-    fontSize: 18,
+    fontSize: (isSmallScreen || isExtraSmallScreen) ? 14 : 18,
     fontWeight: '700',
   },
 
@@ -1522,7 +1523,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   label: {
-    fontSize: 16,
+    fontSize: (isSmallScreen || isExtraSmallScreen) ? 14 : 16,
     fontWeight: '600',
     marginBottom: 8,
   },
@@ -1559,7 +1560,7 @@ const styles = StyleSheet.create({
   ingredientInput: {
     borderRadius: 8,
     padding: 12,
-    fontSize: 14,
+    fontSize: (isSmallScreen || isExtraSmallScreen) ? 12 : 14,
     borderWidth: 1,
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
@@ -1590,7 +1591,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   addButtonText: {
-    fontSize: 14,
+    fontSize: (isSmallScreen || isExtraSmallScreen) ? 12 : 14,
     fontWeight: '600',
   },
 
@@ -1785,12 +1786,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginVertical: 15,
-    paddingHorizontal: 20,
+    paddingHorizontal: (isSmallScreen || isExtraSmallScreen) ? 10 : 20,
+    maxWidth: (isSmallScreen || isExtraSmallScreen) ? 320 : '100%',
+    alignSelf: 'center',
   },
   toggleLabel: {
-    fontSize: 16,
+    fontSize: (isSmallScreen || isExtraSmallScreen) ? 12 : 16,
     fontWeight: '500',
-    marginHorizontal: 15,
+    marginHorizontal: (isSmallScreen || isExtraSmallScreen) ? 8 : 15,
+    textAlign: 'center',
+    maxWidth: (isSmallScreen || isExtraSmallScreen) ? 80 : 120,
+    lineHeight: (isSmallScreen || isExtraSmallScreen) ? 16 : 20,
   },
   activeToggleLabel: {
     fontWeight: 'bold',
