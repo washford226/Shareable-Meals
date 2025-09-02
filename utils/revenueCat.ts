@@ -128,6 +128,36 @@ class RevenueCatManager {
     }
   }
 
+  async presentCodeRedemptionSheet(): Promise<void> {
+    try {
+      if (!this.isInitialized) {
+        await this.initialize();
+      }
+      
+      // Skip in Expo Go - simulate the sheet presentation
+      if (isExpoGo) {
+        console.log('🔧 Development Mode: Simulating code redemption sheet presentation');
+        // Simulate user redeeming a code for testing
+        this.mockSubscriptionActive = true;
+        return;
+      }
+      
+      // Present Apple's native code redemption sheet (iOS 14+ only)
+      // This method doesn't return success/failure - Apple handles everything
+      await Purchases.presentCodeRedemptionSheet();
+      
+      // After presentation (whether user redeemed or cancelled), sync purchases
+      await Purchases.syncPurchases();
+      
+      // Get updated customer info and sync with Supabase
+      const customerInfo = await Purchases.getCustomerInfo();
+      await this.syncSubscriptionWithSupabase(customerInfo);
+    } catch (error: any) {
+      console.error('Failed to present code redemption sheet:', error);
+      throw error;
+    }
+  }
+
   async getSubscriptionStatus(): Promise<SubscriptionStatus> {
     try {
       if (!this.isInitialized) {

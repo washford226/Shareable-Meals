@@ -45,6 +45,7 @@ const SubscriptionPaywall: React.FC<SubscriptionPaywallProps> = ({
   const [purchasing, setPurchasing] = useState<string | null>(null);
   const [offerings, setOfferings] = useState<PurchasesPackage[] | null>(null);
   const [subscriptionStatus, setSubscriptionStatus] = useState<SubscriptionStatus | null>(null);
+  const [presentingCodeSheet, setPresentingCodeSheet] = useState(false);
 
   useEffect(() => {
     if (visible) {
@@ -139,6 +140,41 @@ const SubscriptionPaywall: React.FC<SubscriptionPaywallProps> = ({
       Alert.alert('Restore Failed', error.message || 'Something went wrong. Please try again.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handlePresentCodeRedemption = async () => {
+    try {
+      setPresentingCodeSheet(true);
+
+      // Opens Apple's native code redemption UI (iOS 14+ only).
+      await revenueCatManager.presentCodeRedemptionSheet();
+
+      // After the user redeems (or cancels), sync entitlements
+      // Note: presentCodeRedemptionSheet doesn't return success/failure
+      // Apple handles all validation internally
+      
+      // ✅ Optimistically show success message
+      Alert.alert(
+        '🎉 Code Redemption',
+        'If you entered a valid code, your subscription has been updated.',
+        [
+          {
+            text: 'Continue',
+            onPress: () => {
+              onSuccess?.();
+            }
+          }
+        ]
+      );
+    } catch (error: any) {
+      console.error('Code redemption error:', error);
+      Alert.alert(
+        'Redemption Failed',
+        error.message || 'Failed to open the code redemption sheet. Please try again.'
+      );
+    } finally {
+      setPresentingCodeSheet(false);
     }
   };
 
@@ -292,6 +328,28 @@ const SubscriptionPaywall: React.FC<SubscriptionPaywallProps> = ({
               Restore Previous Purchase
             </Text>
           </TouchableOpacity>
+
+          {/* Offer Code Section */}
+          <View style={styles.offerCodeSection}>
+            <TouchableOpacity
+              style={[
+                styles.offerCodeButton,
+                { borderColor: theme.border },
+                presentingCodeSheet && { opacity: 0.5 }
+              ]}
+              onPress={handlePresentCodeRedemption}
+              disabled={loading || presentingCodeSheet}
+            >
+              {presentingCodeSheet ? (
+                <ActivityIndicator size="small" color={theme.primary} />
+              ) : (
+                <Ionicons name="gift" size={16} color={theme.primary} />
+              )}
+              <Text style={[styles.offerCodeButtonText, { color: theme.primary }]}>
+                {presentingCodeSheet ? 'Opening...' : 'Redeem Offer Code'}
+              </Text>
+            </TouchableOpacity>
+          </View>
 
           {/* Terms */}
           <View style={styles.termsContainer}>
@@ -469,6 +527,25 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   restoreButtonText: {
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  // Offer Code Styles (Apple native redemption)
+  offerCodeSection: {
+    marginBottom: 24,
+    paddingHorizontal: 20,
+  },
+  offerCodeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderWidth: 1,
+    borderRadius: 8,
+    gap: 8,
+  },
+  offerCodeButtonText: {
     fontSize: 16,
     fontWeight: '500',
   },
