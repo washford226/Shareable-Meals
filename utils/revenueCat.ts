@@ -2,14 +2,15 @@ import Purchases, {
   PurchasesOffering, 
   PurchasesPackage, 
   CustomerInfo, 
-  PurchasesStoreProduct 
+  PurchasesStoreProduct,
+  LOG_LEVEL 
 } from 'react-native-purchases';
 import { Platform } from 'react-native';
 import { supabase } from './supabase';
 
 // Check if we're in development mode (Expo Go)
 const isDevelopmentMode = __DEV__ && !Platform.OS.includes('web');
-const isExpoGo = __DEV__; // Allow toggling for Expo testing
+const isExpoGo = false; // Only true when actually running in Expo Go
 
 // Types and interfaces
 export interface SubscriptionStatus {
@@ -34,30 +35,34 @@ class RevenueCatManager {
     try {
       if (this.isInitialized) return;
       
-      // Skip RevenueCat initialization in Expo Go due to crypto dependency
+      // Only skip RevenueCat initialization in actual Expo Go environment
       if (isExpoGo) {
         console.log('🔧 Development Mode: Skipping RevenueCat initialization (Expo Go detected)');
-        console.log('🔧 Development Mode: No app access (testing paywall)');
         this.isInitialized = true;
-        this.mockSubscriptionActive = false; // Force paywall display
+        this.mockSubscriptionActive = false;
         return;
       }
       
-      // Configure RevenueCat (works in production builds)
+      // Configure RevenueCat for both development and production builds
       await Purchases.configure({
         apiKey: 'appl_yanmwOxgRTMnRrTxdrZUtwdjjoo',
-        appUserID: userId || undefined
+        appUserID: userId || undefined,
       });
+      
+      // Enable debug logging in development
+      if (__DEV__) {
+        await Purchases.setLogLevel(LOG_LEVEL.DEBUG);
+      }
       
       this.isInitialized = true;
       console.log('RevenueCat initialized successfully');
     } catch (error) {
       console.error('Error configuring Purchases:', error);
-      // In development, continue with mock data
-      if (isDevelopmentMode || isExpoGo) {
-        console.log('🔧 Development Mode: No app access (testing paywall)');
+      // Only fall back to mock in actual Expo Go
+      if (isExpoGo) {
+        console.log('🔧 Development Mode: Falling back to mock mode');
         this.isInitialized = true;
-        this.mockSubscriptionActive = false; // Force paywall display
+        this.mockSubscriptionActive = false;
         return;
       }
       throw error;
@@ -70,7 +75,7 @@ class RevenueCatManager {
         await this.initialize();
       }
       
-      // Return empty offerings in Expo Go
+      // Return empty offerings only in actual Expo Go
       if (isExpoGo) {
         console.log('🔧 Development Mode: Returning empty offerings (Expo Go)');
         return [];
@@ -80,14 +85,18 @@ class RevenueCatManager {
       const currentOffering = offerings.current;
       
       if (!currentOffering) {
-        console.warn('No current offering available');
+        console.warn('No current offering available - check App Store Connect configuration');
         return [];
       }
       
+      console.log('Available packages:', Object.keys(currentOffering.availablePackages));
       return Object.values(currentOffering.availablePackages);
     } catch (error) {
       console.error('Error fetching offerings:', error);
-      // Return empty array instead of throwing
+      // Don't return empty array in production - let the UI handle the error
+      if (!__DEV__) {
+        throw error;
+      }
       return [];
     }
   }
@@ -98,7 +107,12 @@ class RevenueCatManager {
         await this.initialize();
       }
       
-      const { customerInfo } = await Purchases.purchasePackage(purchasePackage);
+      console.log('Attempting to purchase package:', purchasePackage.identifier);
+      
+      const { customerInfo, productIdentifier } = await Purchases.purchasePackage(purchasePackage);
+      
+      console.log('Purchase successful for product:', productIdentifier);
+      console.log('Customer info entitlements:', Object.keys(customerInfo.entitlements.all));
       
       // Sync with Supabase
       await this.syncSubscriptionWithSupabase(customerInfo);
@@ -106,7 +120,20 @@ class RevenueCatManager {
       return { success: true, customerInfo };
     } catch (error: any) {
       console.error('Purchase failed:', error);
-      return { success: false, error: error.message || 'Purchase failed' };
+      
+      // Log specific error details for debugging
+      if (error.code) {
+        console.error('Purchase error code:', error.code);
+      }
+      if (error.userCancelled) {
+        console.log('Purchase was cancelled by user');
+        return { success: false, error: 'Purchase cancelled' };
+      }
+      
+      return { 
+        success: false, 
+        error: error.message || error.userInfo?.localizedDescription || 'Purchase failed' 
+      };
     }
   }
 
@@ -116,7 +143,11 @@ class RevenueCatManager {
         await this.initialize();
       }
       
+      console.log('Attempting to restore purchases...');
+      
       const customerInfo = await Purchases.restorePurchases();
+      
+      console.log('Restore completed. Active entitlements:', Object.keys(customerInfo.entitlements.active));
       
       // Sync with Supabase
       await this.syncSubscriptionWithSupabase(customerInfo);
@@ -124,7 +155,10 @@ class RevenueCatManager {
       return { success: true, customerInfo };
     } catch (error: any) {
       console.error('Restore failed:', error);
-      return { success: false, error: error.message || 'Restore failed' };
+      return { 
+        success: false, 
+        error: error.message || error.userInfo?.localizedDescription || 'Restore failed' 
+      };
     }
   }
 
@@ -164,7 +198,7 @@ class RevenueCatManager {
         await this.initialize();
       }
       
-      // Return mock status in Expo Go
+      // Return mock status only in actual Expo Go
       if (isExpoGo) {
         return {
           isActive: this.mockSubscriptionActive,
@@ -176,6 +210,8 @@ class RevenueCatManager {
       }
       
       const customerInfo = await Purchases.getCustomerInfo();
+      console.log('Customer info retrieved. Active entitlements:', Object.keys(customerInfo.entitlements.active));
+      
       return this.parseSubscriptionStatus(customerInfo);
     } catch (error) {
       console.error('Error getting subscription status:', error);
@@ -192,14 +228,23 @@ class RevenueCatManager {
 
   async hasActiveSubscription(): Promise<boolean> {
     try {
-      // Return mock status in development
-      if (isExpoGo || !this.isInitialized) {
+      // Return mock status only in actual Expo Go
+      if (isExpoGo) {
         console.log('🔧 Development Mode: No active subscription (testing paywall)');
         return this.mockSubscriptionActive;
       }
       
       const status = await this.getSubscriptionStatus();
-      return status.isActive || status.isTrialActive;
+      const hasAccess = status.isActive || status.isTrialActive;
+      
+      console.log('Subscription check result:', {
+        isActive: status.isActive,
+        isTrialActive: status.isTrialActive,
+        productId: status.productId,
+        hasAccess
+      });
+      
+      return hasAccess;
     } catch (error) {
       console.error('Error checking subscription status:', error);
       return false; // Default to false if we can't check

@@ -16,7 +16,7 @@ import { revenueCatManager, SubscriptionStatus } from '../utils/revenueCat';
 import { PurchasesPackage } from 'react-native-purchases';
 
 // Helper function to format price
-const formatPrice = (price: number, currencyCode: string): string => {
+export const formatPrice = (price: number, currencyCode: string): string => {
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: currencyCode,
@@ -63,9 +63,20 @@ const SubscriptionPaywall: React.FC<SubscriptionPaywallProps> = ({
       
       setOfferings(offeringsData);
       setSubscriptionStatus(statusData);
+      
+      // Check if no offerings are available
+      if (!offeringsData || offeringsData.length === 0) {
+        Alert.alert(
+          'No Subscriptions Available',
+          'Subscription options are not available at this time. Please check your internet connection and try again.'
+        );
+      }
     } catch (error) {
       console.error('Error loading paywall data:', error);
-      Alert.alert('Error', 'Failed to load subscription options. Please try again.');
+      Alert.alert(
+        'Connection Error', 
+        'Failed to load subscription options. Please check your internet connection and try again.'
+      );
     } finally {
       setLoading(false);
     }
@@ -245,6 +256,7 @@ const SubscriptionPaywall: React.FC<SubscriptionPaywallProps> = ({
       animationType="slide"
       presentationStyle="pageSheet"
       onRequestClose={allowClose ? onClose : undefined}
+      testID="subscription-paywall-modal"
     >
       <View style={[styles.container, { backgroundColor: theme.background }]}>
         {/* Header */}
@@ -253,6 +265,8 @@ const SubscriptionPaywall: React.FC<SubscriptionPaywallProps> = ({
             <TouchableOpacity
               style={styles.closeButton}
               onPress={onClose}
+              accessibilityLabel="Close"
+              accessibilityRole="button"
             >
               <Ionicons name="close" size={24} color={theme.text} />
             </TouchableOpacity>

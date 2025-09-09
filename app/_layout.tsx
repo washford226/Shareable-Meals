@@ -5,7 +5,6 @@ import { View, Platform, StatusBar } from "react-native";
 import { ThemeProvider, useTheme } from "../context/ThemeContext";
 import { useDataPreloader } from "../utils/appDataPreloader";
 import AppAccessGuard from "../components/AppAccessGuard";
-import DevToggle from "../components/DevToggle";
 
 function AppContent() {
   const { theme } = useTheme();
@@ -32,8 +31,6 @@ function AppContent() {
           presentation: 'card',
         }} 
       />
-      {/* Development Toggle - only shows in __DEV__ mode */}
-      <DevToggle />
     </View>
   );
 }
