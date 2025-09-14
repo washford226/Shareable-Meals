@@ -23,7 +23,6 @@ import { dietaryFilterOptionsEnhanced, cuisineFilterOptionsEnhanced } from "../.
 import { useRouter } from "expo-router";  // Import Expo Router hook
 import BottomNav from "components/bottomNav";
 import { supabase } from "utils/supabase";
-import { cachedDataService } from "utils/cachedDataService";
 import { isSmallScreen, responsiveFontSizes } from "../../../utils/responsiveUtils";
 
 interface MyMealsProps {
@@ -441,49 +440,31 @@ const MyMeals: React.FC<MyMealsProps> = React.memo(({ onCreateMeal}) => {
         throw new Error("Authentication required. Please log in again.");
       }
 
-      // Use cached data service for initial load, Supabase for filtered/paginated loads
-      let useCache = !loadMore && !dietaryRestrictionFilter && !aiFilter && !cuisineFilter;
+      // Fetch meals directly from Supabase
       const pageToLoad = loadMore ? currentPage + 1 : 0;
-      
-      let newMeals = [];
-      
-      if (useCache) {
-        // Try to get cached meals first
-        try {
-          newMeals = await cachedDataService.getUserMeals(userId);
-          console.log(`📱 Loaded ${newMeals.length} meals from cache`);
-        } catch (error) {
-          console.log('Cache failed, falling back to Supabase');
-          useCache = false;
-        }
+      const offset = pageToLoad * MEALS_PER_PAGE;
+
+      let query = supabase
+        .from("meals")
+        .select("*")
+        .eq("user_id", userId)
+        .order("favorite", { ascending: false })
+        .order("id", { ascending: false })
+        .range(offset, offset + MEALS_PER_PAGE - 1);
+
+      if (dietaryRestrictionFilter) query = query.eq("dietary_restrictions", dietaryRestrictionFilter);
+      if (aiFilter === "ai") query = query.eq("created_by_ai", true);
+      if (aiFilter === "not_ai") query = query.eq("created_by_ai", false);
+      if (cuisineFilter) query = query.eq("cuisine", cuisineFilter);
+
+      const { data, error } = await query;
+
+      if (error) {
+        throw new Error(error.message || "Failed to fetch meals");
       }
-      
-      if (!useCache || newMeals.length === 0) {
-        // Fallback to Supabase for filtered queries or if cache is empty
-        const offset = pageToLoad * MEALS_PER_PAGE;
 
-        let query = supabase
-          .from("meals")
-          .select("*")
-          .eq("user_id", userId)
-          .order("favorite", { ascending: false })
-          .order("id", { ascending: false })
-          .range(offset, offset + MEALS_PER_PAGE - 1);
-
-        if (dietaryRestrictionFilter) query = query.eq("dietary_restrictions", dietaryRestrictionFilter);
-        if (aiFilter === "ai") query = query.eq("created_by_ai", true);
-        if (aiFilter === "not_ai") query = query.eq("created_by_ai", false);
-        if (cuisineFilter) query = query.eq("cuisine", cuisineFilter);
-
-        const { data, error } = await query;
-
-        if (error) {
-          throw new Error(error.message || "Failed to fetch meals");
-        }
-
-        newMeals = data || [];
-        console.log(`🌐 Loaded ${newMeals.length} meals from Supabase`);
-      }
+      const newMeals = data || [];
+      console.log(`🌐 Loaded ${newMeals.length} meals from Supabase`);
       
       if (loadMore) {
         setMeals(prevMeals => [...prevMeals, ...newMeals]);

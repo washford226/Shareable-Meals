@@ -156,26 +156,26 @@ export const responsiveFontSizes = {
 
 // Calendar-specific responsive sizing with better proportional scaling
 export const getCalendarDayHeight = (): number => {
-  // Reduce the reserved space to maximize day container height
-  const availableHeight = SCREEN_HEIGHT - 140; // Reduced from 200 to 140 - less reserved space
+  // Calculate available height accounting for header and bottom nav
+  const availableHeight = SCREEN_HEIGHT - getBottomNavHeight() - 140; // Dynamic bottom nav height
   const deviceCategory = getDeviceCategory();
   
-  // Use even higher percentages for larger devices to fill more space
+  // Use conservative percentages to ensure content fits without cutoff
   switch (deviceCategory) {
     case 'extraSmall': // iPhone 5/5S (very rare)
-      return availableHeight * 0.90; // Keep same
+      return availableHeight * 0.85; // Reduced to prevent cutoff
     case 'small': // iPhone SE
-      return availableHeight * 0.88; // Keep same - this is working well
+      return availableHeight * 0.83; // Reduced to prevent cutoff
     case 'medium': // iPhone 12/13/14
-      return availableHeight * 0.92; // Increased from 0.85
+      return availableHeight * 0.87; // Reduced to prevent cutoff
     case 'large': // iPhone 11/XR
-      return availableHeight * 0.90; // Increased from 0.82
+      return availableHeight * 0.85; // Reduced to prevent cutoff
     case 'extraLarge': // iPhone Pro Max
-      return availableHeight * 0.88; // Increased from 0.80
+      return availableHeight * 0.83; // Reduced to prevent cutoff
     case 'tablet':
-      return availableHeight * 0.85; // Increased from 0.75
+      return availableHeight * 0.80; // Reduced to prevent cutoff
     default:
-      return availableHeight * 0.90; // Increased from 0.85
+      return availableHeight * 0.85; // Reduced to prevent cutoff
   }
 };
 

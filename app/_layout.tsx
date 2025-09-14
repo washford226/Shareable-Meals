@@ -3,7 +3,6 @@ import React from "react";
 import { Stack } from "expo-router";
 import { View, Platform, StatusBar } from "react-native";
 import { ThemeProvider, useTheme } from "../context/ThemeContext";
-import { useDataPreloader } from "../utils/appDataPreloader";
 import AppAccessGuard from "../components/AppAccessGuard";
 
 function AppContent() {
@@ -36,9 +35,6 @@ function AppContent() {
 }
 
 export default function Layout() {
-  // Enable automatic data preloading
-  useDataPreloader(true);
-
   return (
     <ThemeProvider>
       <AppAccessGuard>

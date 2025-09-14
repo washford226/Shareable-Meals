@@ -10,6 +10,7 @@ import {
   Alert,
   RefreshControl,
   Platform,
+  KeyboardAvoidingView,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -27,7 +28,7 @@ import {
 const AICreateMeal = () => {
   const { theme } = useTheme();
   const router = useRouter();
-  const { todayUsage, remaining, canUse, useAICreation, isLoading: usageLoading } = useAIUsage();
+  const { todayUsage, remaining, dailyLimit, canUse, useAICreation, isLoading: usageLoading } = useAIUsage();
   const [prompt, setPrompt] = useState("");
   const [dietaryRestrictions, setDietaryRestrictions] = useState("");
   const [allergies, setAllergies] = useState("");
@@ -163,8 +164,8 @@ const AICreateMeal = () => {
 
     if (!generatedMeal.instructions.trim()) {
       errors.instructions = "Instructions are required";
-    } else if (generatedMeal.instructions.length > 2000) {
-      errors.instructions = "Instructions must be 2000 characters or less";
+    } else if (generatedMeal.instructions.length > 20000) {
+      errors.instructions = "Instructions must be 20000 characters or less";
     }
 
     setValidationErrors(errors);
@@ -263,97 +264,62 @@ const AICreateMeal = () => {
 
       console.log('Making request with enhanced prompt:', enhancedPrompt);
 
-      const response = await fetch("https://api.openai.com/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${process.env.EXPO_PUBLIC_OPENAI_API_KEY}`,
-        },
-        body: JSON.stringify({
-          model: "gpt-4o-mini",
-          messages: [
-            {
-              role: "system",
-              content: `You are a professional chef and nutritionist AI assistant. Create detailed, practical meal recipes that are delicious, nutritionally balanced, and easy to follow. 
-
-CRITICAL FORMATTING REQUIREMENTS:
-- Return ONLY a JSON object, no other text
-- Use this EXACT structure:
-{
-  "name": "Meal Name Here",
-  "description": "Brief description of the meal",
-  "servings": "4",
-  "ingredients": "• 2 cups flour\n• 1 lb chicken breast\n• 1/2 cup olive oil",
-  "instructions": "Step-by-step cooking instructions"
-}
-
-Guidelines:
-- Make ingredients realistic and commonly available
-- Include specific quantities and units
-- Write clear, detailed cooking instructions
-- Consider dietary restrictions if mentioned
-- Aim for balanced nutrition
-- Make servings appropriate for the meal type`
-            },
-            {
-              role: "user",
-              content: enhancedPrompt
-            }
-          ],
-          max_tokens: 1500,
-          temperature: 0.7
-        }),
+      // Call the Supabase Edge Function for AI meal generation
+      const { data: mealData, error: functionError } = await supabase.functions.invoke('generate-AImeal', {
+        body: {
+          prompt: prompt.trim(),
+          dietaryRestrictions: dietaryRestrictions || undefined,
+          allergies: allergies || undefined,
+          pantryItems: usePantry ? [] : undefined // TODO: Add actual pantry items if needed
+        }
       });
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        console.error('OpenAI API Error:', response.status, errorData);
-        
-        if (response.status === 429) {
-          throw new Error("API rate limit reached. Please try again in a moment.");
-        } else if (response.status === 401) {
-          throw new Error("API authentication failed. Please check your API key.");
-        } else if (response.status >= 500) {
-          throw new Error("OpenAI service is temporarily unavailable. Please try again later.");
-        } else {
-          throw new Error(`API request failed: ${errorData.error?.message || 'Unknown error'}`);
-        }
+      if (functionError) {
+        console.error('Edge Function Error:', functionError);
+        throw new Error(functionError.message || 'Failed to generate meal');
       }
 
-      const data = await response.json();
-      console.log('OpenAI Response:', data);
-
-      if (!data.choices || !data.choices[0] || !data.choices[0].message) {
-        throw new Error("Invalid response from AI service");
+      if (!mealData) {
+        console.error('Edge Function returned no data');
+        throw new Error('No meal data received from AI service');
       }
 
-      const aiResponse = data.choices[0].message.content;
-      console.log('AI Response Content:', aiResponse);
-
-      // Parse JSON response
-      let mealData;
-      try {
-        // Clean the response to extract JSON
-        const jsonMatch = aiResponse.match(/\{[\s\S]*\}/);
-        if (!jsonMatch) {
-          throw new Error("No valid JSON found in AI response");
-        }
-        
-        mealData = JSON.parse(jsonMatch[0]);
-        console.log('Parsed meal data:', mealData);
-      } catch (parseError) {
-        console.error('JSON Parse Error:', parseError);
-        console.log('Raw AI Response:', aiResponse);
-        throw new Error("Failed to parse AI response. Please try again.");
+      if (mealData.error) {
+        console.error('Edge Function returned error:', mealData.error);
+        throw new Error(mealData.error);
       }
+
+      console.log('Edge Function Response:', mealData);
 
       // Validate required fields
       if (!mealData.name || !mealData.description || !mealData.ingredients || !mealData.instructions) {
         throw new Error("Incomplete meal data received from AI. Please try again.");
       }
 
-      // Parse ingredients with enhanced error handling
-      const parsedIngredients = parseIngredients(mealData.ingredients);
+      // Parse ingredients - Edge Function returns 2D array format [[name, quantity, unit], ...]
+      let parsedIngredients;
+      if (Array.isArray(mealData.ingredients)) {
+        // New format from Edge Function: 2D array
+        parsedIngredients = mealData.ingredients.map((ingredient: any, index: number) => {
+          if (Array.isArray(ingredient) && ingredient.length >= 3) {
+            return {
+              name: String(ingredient[0]).trim() || `Ingredient ${index + 1}`,
+              quantity: String(ingredient[1]).trim() || "1",
+              unit: String(ingredient[2]).trim() || "",
+            };
+          } else {
+            console.warn('Invalid ingredient format:', ingredient);
+            return {
+              name: `Ingredient ${index + 1}`,
+              quantity: "1",
+              unit: "",
+            };
+          }
+        }).filter((ingredient: any) => ingredient.name && ingredient.name.length > 0);
+      } else {
+        // Fallback to old string parsing format
+        parsedIngredients = parseIngredients(mealData.ingredients);
+      }
       
       if (parsedIngredients.length === 0) {
         throw new Error("Failed to parse ingredients. Please try again with a more specific prompt.");
@@ -438,25 +404,73 @@ Guidelines:
     setSaving(true);
     
     try {
-      const { error } = await supabase.from("meals").insert([
-        {
-          user_id: userId,
-          name: generatedMeal.name,
-          description: generatedMeal.description,
-          servings: parseInt(generatedMeal.servings),
-          ingredients: generatedMeal.ingredients,
-          instructions: generatedMeal.instructions,
-          calories: generatedMeal.macros?.calories || null,
-          protein: generatedMeal.macros?.protein || null,
-          fat: generatedMeal.macros?.fat || null,
-          carbohydrates: generatedMeal.macros?.carbohydrates || null,
-        },
-      ]);
+      // First, insert the meal into the meals table
+      const { data: mealData, error: mealError } = await supabase
+        .from("meals")
+        .insert([
+          {
+            user_id: userId,
+            name: generatedMeal.name,
+            description: generatedMeal.description,
+            servings: parseInt(generatedMeal.servings),
+            instructions: generatedMeal.instructions,
+            calories: generatedMeal.macros?.calories || null,
+            protein: generatedMeal.macros?.protein || null,
+            fat: generatedMeal.macros?.fat || null,
+            carbohydrates: generatedMeal.macros?.carbohydrates || null,
+            created_by_ai: true, // Mark as AI-generated
+            created_by: "AI Meal Generator",
+            dietary_restrictions: dietaryRestrictions || null,
+            AI_Macros: false, // Will be updated after nutrition calculation
+            Edamam_macros: false
+          },
+        ])
+        .select('id')
+        .single();
 
-      if (error) {
-        console.error("Supabase error:", error);
-        throw error;
+      if (mealError) {
+        console.error("Supabase meal error:", mealError);
+        throw mealError;
       }
+
+      const mealId = mealData.id;
+      console.log('Meal saved with ID:', mealId);
+
+      // Second, insert the ingredients into the meal_ingredients table
+      if (generatedMeal.ingredients.length > 0) {
+        const ingredientsToInsert = generatedMeal.ingredients.map(ingredient => ({
+          meal_id: mealId,
+          raw_name: ingredient.name,
+          quantity: parseFloat(ingredient.quantity) || 1.0,
+          unit: ingredient.unit || ''
+        }));
+
+        const { error: ingredientsError } = await supabase
+          .from("meal_ingredients")
+          .insert(ingredientsToInsert);
+
+        if (ingredientsError) {
+          console.error("Supabase ingredients error:", ingredientsError);
+          throw ingredientsError;
+        }
+
+        console.log('Ingredients saved successfully');
+      }
+
+      // Third, calculate nutrition using Edamam if ingredients are available
+      try {
+        if (generatedMeal.ingredients.length > 0) {
+          console.log('Calculating nutrition for meal ID:', mealId);
+          await calculateAndSaveMealNutrition(mealId, generatedMeal.ingredients);
+          console.log('Nutrition calculation completed');
+        }
+      } catch (nutritionError) {
+        console.warn('Nutrition calculation failed, but meal was saved:', nutritionError);
+        // Don't throw here - the meal was saved successfully
+      }
+
+      // AI meal saved successfully
+      console.log('New AI meal saved successfully');
 
       // Provide haptic success feedback
       if (Platform.OS !== 'web') {
@@ -544,9 +558,14 @@ Guidelines:
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.background }]}>
+    <KeyboardAvoidingView 
+      style={[styles.container, { backgroundColor: theme.background }]}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}
+    >
       <ScrollView 
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -562,7 +581,7 @@ Guidelines:
             <View style={styles.usageInfo}>
               <Ionicons name="sparkles" size={20} color={theme.primary} />
               <Text style={[styles.usageText, { color: theme.text }]}>
-                AI Creations: {todayUsage}/5 used today
+                AI Creations: {todayUsage}/{__DEV__ ? '∞' : dailyLimit} used today
               </Text>
             </View>
             <Text style={[styles.remainingText, { color: remaining > 0 ? theme.success : theme.danger }]}>
@@ -967,7 +986,7 @@ Guidelines:
                 placeholder="Enter cooking instructions"
                 placeholderTextColor={theme.textSecondary}
                 multiline
-                maxLength={2000}
+                maxLength={20000}
                 textAlignVertical="top"
               />
               {validationErrors.instructions && (
@@ -1011,7 +1030,7 @@ Guidelines:
           </View>
         )}
       </ScrollView>
-    </View>
+    </KeyboardAvoidingView>
   );
 };
 

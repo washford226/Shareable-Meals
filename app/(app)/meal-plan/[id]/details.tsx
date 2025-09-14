@@ -496,21 +496,19 @@ const MealPlanDetails = () => {
 
         {/* Recipe Link Card */}
         {meal?.recipeLink && meal.recipeLink.trim() !== '' && (
-          <TouchableOpacity 
+          <View 
             style={[styles.linkCard, { backgroundColor: theme.primaryLight, borderColor: theme.primary }]}
-            onPress={() => meal?.recipeLink && Linking.openURL(meal.recipeLink)}
           >
-            <Ionicons name="link-outline" size={24} color={theme.primary} />
+            <Ionicons name="document-text-outline" size={24} color={theme.primary} />
             <View style={styles.linkContent}>
               <Text style={[styles.linkTitle, { color: theme.primary }]}>
-                View Full Recipe
+                Recipe Source
               </Text>
-              <Text style={[styles.linkSubtext, { color: theme.primary }]}>
-                Open in browser
+              <Text style={[styles.linkSubtext, { color: theme.primary }]} numberOfLines={1}>
+                {meal.recipeLink}
               </Text>
             </View>
-            <Ionicons name="arrow-forward-outline" size={20} color={theme.primary} />
-          </TouchableOpacity>
+          </View>
         )}
 
         {/* Action Buttons */}

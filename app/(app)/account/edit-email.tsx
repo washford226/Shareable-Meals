@@ -294,6 +294,9 @@ const EditProfile = () => {
         // Don't throw here as auth updates succeeded
       }
 
+      // Profile updated successfully
+      console.log('User profile updated successfully');
+
       let successMessage = "Your profile has been updated successfully!";
       if (email !== originalEmail) {
         successMessage += " Please check your inbox to confirm the new email.";

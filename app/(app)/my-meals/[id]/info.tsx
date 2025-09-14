@@ -12,6 +12,7 @@ import {
   Linking,
   ActivityIndicator,
   RefreshControl,
+  TouchableWithoutFeedback,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "../../../../context/ThemeContext";
@@ -32,6 +33,7 @@ const MyMealInfo = () => {
   const [selectedDate, setSelectedDate] = useState("");
   const [mealType, setMealType] = useState("Breakfast");
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showMealTypePicker, setShowMealTypePicker] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -155,7 +157,7 @@ const MyMealInfo = () => {
         // Check if meal already exists for this date and meal type
         const { data: existingMeal, error: checkError } = await supabase
           .from("meal_plan")
-          .select("id")
+          .select("meal_plan_id")
           .eq("user_id", userId)
           .eq("meal_id", id)
           .eq("date", selectedDate)
@@ -594,21 +596,20 @@ const MyMealInfo = () => {
 
         {/* Recipe Link Card */}
         {meal?.recipeLink && meal.recipeLink.trim() !== '' ? (
-          <TouchableOpacity 
+          <View 
             style={[styles.linkCard, { backgroundColor: theme.primaryLight, borderColor: theme.primary }]}
-            onPress={() => meal?.recipeLink && Linking.openURL(meal.recipeLink)}
           >
             <Ionicons name="link-outline" size={24} color={theme.primary} />
             <View style={styles.linkContent}>
               <Text style={[styles.linkTitle, { color: theme.primary }]}>
-                View Full Recipe
+                Recipe Source
               </Text>
-              <Text style={[styles.linkSubtext, { color: theme.primary }]} numberOfLines={1}>
+              <Text style={[styles.linkSubtext, { color: theme.primary }]} numberOfLines={2}>
                 {meal.recipeLink}
               </Text>
             </View>
-            <Ionicons name="arrow-forward-outline" size={20} color={theme.primary} />
-          </TouchableOpacity>
+            <Ionicons name="document-text-outline" size={20} color={theme.primary} />
+          </View>
         ) : null}
 
         {/* Action Buttons */}
@@ -667,17 +668,22 @@ const MyMealInfo = () => {
 
       {/* Enhanced Modal for Adding to Meal Plan */}
       <Modal visible={isModalVisible} transparent animationType="slide">
-        <View style={styles.modalContainer}>
-          <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
-            <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: theme.text }]}>Add to Meal Plan</Text>
-              <TouchableOpacity
-                style={styles.modalCloseButton}
-                onPress={() => setIsModalVisible(false)}
-              >
-                <Ionicons name="close" size={24} color={theme.subtext} />
-              </TouchableOpacity>
-            </View>
+        <TouchableWithoutFeedback onPress={() => setShowMealTypePicker(false)}>
+          <View style={styles.modalContainer}>
+            <TouchableWithoutFeedback onPress={() => {}}>
+              <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
+                <View style={styles.modalHeader}>
+                  <Text style={[styles.modalTitle, { color: theme.text }]}>Add to Meal Plan</Text>
+                  <TouchableOpacity
+                    style={styles.modalCloseButton}
+                    onPress={() => {
+                      setIsModalVisible(false);
+                      setShowMealTypePicker(false);
+                    }}
+                  >
+                    <Ionicons name="close" size={24} color={theme.subtext} />
+                  </TouchableOpacity>
+                </View>
 
             <Text style={[styles.modalSubtitle, { color: theme.subtext }]}>
               Choose when you&apos;d like to have this meal
@@ -715,25 +721,66 @@ const MyMealInfo = () => {
             {/* Meal Type Selection */}
             <View style={styles.inputSection}>
               <Text style={[styles.inputLabel, { color: theme.text }]}>Meal Type</Text>
-              <View style={[styles.pickerContainer, { borderColor: theme.border, backgroundColor: theme.background }]}>
-                <Ionicons name="restaurant-outline" size={20} color={theme.primary} style={styles.pickerIcon} />
-                <Picker
-                  selectedValue={mealType}
-                  onValueChange={(itemValue) => setMealType(itemValue)}
-                  style={[styles.picker, { color: theme.text }]}
-                >
-                  <Picker.Item label="Breakfast" value="Breakfast" />
-                  <Picker.Item label="Lunch" value="Lunch" />
-                  <Picker.Item label="Dinner" value="Dinner" />
-                  <Picker.Item label="Other" value="Other" />
-                </Picker>
-              </View>
+              <TouchableOpacity
+                style={[
+                  styles.dropdownContainer, 
+                  { 
+                    borderColor: theme.border, 
+                    backgroundColor: theme.background 
+                  }
+                ]}
+                onPress={() => setShowMealTypePicker(!showMealTypePicker)}
+              >
+                <Ionicons name="restaurant-outline" size={20} color={theme.primary} style={styles.dropdownIcon} />
+                <Text style={[styles.dropdownText, { color: theme.text }]}>
+                  {mealType}
+                </Text>
+                <Ionicons 
+                  name={showMealTypePicker ? "chevron-up" : "chevron-down"} 
+                  size={20} 
+                  color={theme.subtext} 
+                />
+              </TouchableOpacity>
+              
+              {showMealTypePicker && (
+                <View style={[styles.dropdownOptions, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                  {['Breakfast', 'Lunch', 'Dinner'].map((option, index) => (
+                    <TouchableOpacity
+                      key={option}
+                      style={[
+                        styles.dropdownOption,
+                        mealType === option && { backgroundColor: theme.primary + '20' },
+                        index === 0 && { borderTopLeftRadius: 12, borderTopRightRadius: 12 },
+                        index === 2 && { borderBottomLeftRadius: 12, borderBottomRightRadius: 12, borderBottomWidth: 0 }
+                      ]}
+                      onPress={() => {
+                        setMealType(option);
+                        setShowMealTypePicker(false);
+                      }}
+                    >
+                      <Text style={[
+                        styles.dropdownOptionText, 
+                        { color: mealType === option ? theme.primary : theme.text }
+                      ]}>
+                        {option}
+                      </Text>
+                      {mealType === option && (
+                        <Ionicons name="checkmark" size={16} color={theme.primary} />
+                      )}
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
             </View>
 
             {/* Modal Action Buttons */}
             <View style={styles.modalActions}>
               <TouchableOpacity
-                style={[styles.primaryButton, { backgroundColor: theme.primary }]}
+                style={[
+                  styles.actionButton, 
+                  styles.primaryButton, 
+                  { backgroundColor: theme.primary }
+                ]}
                 onPress={handleAddToMealPlan}
                 disabled={addingToMealPlan}
               >
@@ -742,7 +789,7 @@ const MyMealInfo = () => {
                 ) : (
                   <View style={styles.buttonContent}>
                     <Ionicons name="add-circle-outline" size={20} color={theme.buttonText} />
-                    <Text style={[styles.buttonText, { color: theme.buttonText }]}>
+                    <Text style={[styles.actionButtonText, { color: theme.buttonText }]}>
                       Add to Plan
                     </Text>
                   </View>
@@ -751,15 +798,20 @@ const MyMealInfo = () => {
 
               <TouchableOpacity
                 style={[styles.cancelButton, { backgroundColor: theme.background, borderColor: theme.border }]}
-                onPress={() => setIsModalVisible(false)}
+                onPress={() => {
+                  setIsModalVisible(false);
+                  setShowMealTypePicker(false);
+                }}
               >
-                <Text style={[styles.cancelButtonText, { color: theme.text }]}>
+                <Text style={[styles.actionButtonText, { color: theme.text }]}>
                   Cancel
                 </Text>
               </TouchableOpacity>
             </View>
+              </View>
+            </TouchableWithoutFeedback>
           </View>
-        </View>
+        </TouchableWithoutFeedback>
       </Modal>
     </View>
   );
@@ -1317,6 +1369,9 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     paddingLeft: 16,
+    paddingRight: 8,
+    height: 50,
+    backgroundColor: 'transparent',
   },
   pickerIcon: {
     marginRight: 12,
@@ -1324,6 +1379,49 @@ const styles = StyleSheet.create({
   picker: {
     flex: 1,
     height: 50,
+    color: 'inherit',
+  },
+
+  // Custom Dropdown Styles
+  dropdownContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingHorizontal: 16,
+    height: 50,
+    backgroundColor: 'transparent',
+  },
+  dropdownIcon: {
+    marginRight: 12,
+  },
+  dropdownText: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  dropdownOptions: {
+    marginTop: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+    zIndex: 1000,
+  },
+  dropdownOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.05)',
+  },
+  dropdownOptionText: {
+    fontSize: 16,
+    fontWeight: '500',
   },
 
   // Modal Actions
@@ -1332,24 +1430,19 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   cancelButton: {
-    paddingVertical: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
     paddingHorizontal: 24,
     borderRadius: 12,
-    alignItems: "center",
     borderWidth: 1,
-  },
-  cancelButtonText: {
-    fontSize: 16,
-    fontWeight: "600",
+    height: 50,
   },
   buttonContent: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-  },
-  buttonText: {
-    fontSize: 16,
-    fontWeight: '600',
   },
 
   // Edamam Logo
