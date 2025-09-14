@@ -135,6 +135,9 @@ const EditUserScreen: React.FC = () => {
         throw new Error(error.message || errorMsg);
       }
       
+      // User profile updated successfully
+      console.log('User profile updated successfully');
+      
       Alert.alert('Success', successMsg);
     } catch (error: any) {
       console.error('Error:', error);

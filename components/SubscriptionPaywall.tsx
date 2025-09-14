@@ -158,26 +158,52 @@ const SubscriptionPaywall: React.FC<SubscriptionPaywallProps> = ({
     try {
       setPresentingCodeSheet(true);
 
+      // Get subscription status before redemption attempt
+      const statusBefore = await revenueCatManager.getSubscriptionStatus();
+
       // Opens Apple's native code redemption UI (iOS 14+ only).
       await revenueCatManager.presentCodeRedemptionSheet();
 
-      // After the user redeems (or cancels), sync entitlements
-      // Note: presentCodeRedemptionSheet doesn't return success/failure
-      // Apple handles all validation internally
-      
-      // ✅ Optimistically show success message
-      Alert.alert(
-        '🎉 Code Redemption',
-        'If you entered a valid code, your subscription has been updated.',
-        [
-          {
-            text: 'Continue',
-            onPress: () => {
-              onSuccess?.();
+      // Get subscription status after redemption attempt
+      const statusAfter = await revenueCatManager.getSubscriptionStatus();
+
+      // Check if subscription status changed (indicating successful redemption)
+      const wasSuccessful = !statusBefore.isActive && statusAfter.isActive;
+
+      if (wasSuccessful) {
+        // User successfully redeemed a code and now has an active subscription
+        Alert.alert(
+          '🎉 Code Redeemed Successfully!',
+          'Your subscription is now active. Enjoy all premium features!',
+          [
+            {
+              text: 'Get Started',
+              onPress: () => {
+                onSuccess?.();
+              }
             }
-          }
-        ]
-      );
+          ]
+        );
+      } else {
+        // User either cancelled or the code was invalid/already used
+        // Don't call onSuccess - keep them on the paywall
+        if (statusAfter.isActive) {
+          // They already had an active subscription
+          Alert.alert(
+            'Already Subscribed',
+            'You already have an active subscription!',
+            [
+              {
+                text: 'Continue',
+                onPress: () => {
+                  onSuccess?.();
+                }
+              }
+            ]
+          );
+        }
+        // If no subscription and no change, user likely cancelled - no alert needed
+      }
     } catch (error: any) {
       console.error('Code redemption error:', error);
       Alert.alert(

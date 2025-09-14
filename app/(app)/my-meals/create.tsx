@@ -299,6 +299,8 @@ const CreateMealScreen = () => {
               message += "\n" + suggestions;
             }
             
+            // Meal added successfully with nutrition calculation
+            
             Alert.alert("Success", message, [{ text: "OK" }]);
             
           } catch (nutritionErr) {
@@ -321,6 +323,7 @@ const CreateMealScreen = () => {
             Alert.alert(errorTitle, errorMessage, [{ text: "OK" }]);
           }
         } else {
+          // Meal added successfully with manual macros
           Alert.alert("Success", "Meal added successfully with manual nutrition values!");
         }
         router.push("/(app)/my-meals/meals");

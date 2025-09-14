@@ -575,6 +575,9 @@ export default function EditMealScreen() {
           // Continue even if nutrition calculation fails
         }
 
+        // Meal updated successfully
+        console.log('Meal updated successfully');
+
         Alert.alert("Success", "Meal updated successfully!");
         setHasUnsavedChanges(false);
         router.push(`/my-meals/${mealId}/info`);

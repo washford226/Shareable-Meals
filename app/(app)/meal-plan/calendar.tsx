@@ -18,7 +18,6 @@ import { Meal } from "../../../types/types";
 import { useTheme } from "../../../context/ThemeContext";
 import BottomNav from "../../../components/bottomNav";
 import { supabase } from "utils/supabase";
-import { cachedDataService } from "utils/cachedDataService";
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as FileSystem from 'expo-file-system';
@@ -93,20 +92,7 @@ const MealPlanCalendar: React.FC = () => {
         return [];
       }
 
-      // Try cached data first for better performance
-      try {
-        const cachedMeals = await cachedDataService.getMealsForDate(userId, date, false);
-        if (cachedMeals && cachedMeals.length > 0) {
-          console.log(`📱 Using cached meals for ${date} (${cachedMeals.length} meals)`);
-          setLoadingDates(prev => ({ ...prev, [date]: false }));
-          setError(null);
-          return cachedMeals;
-        }
-      } catch (cacheError) {
-        console.log(`Cache miss for ${date}, fetching from Supabase`);
-      }
-
-      // Fetch both regular meal plan entries and macro meals
+      // Fetch both regular meal plan entries and macro meals directly from Supabase
       const [mealPlanData, macroMealsData] = await Promise.all([
         // Fetch meal plan entries with full meal details
         supabase
@@ -281,13 +267,13 @@ const MealPlanCalendar: React.FC = () => {
             const currentDate = addDays(weekStartDate, i);
             const currentDateString = format(currentDate, "yyyy-MM-dd");
             fetchPromises.push(
-              cachedDataService.getMealsForDate(userId, currentDateString, false)
+              fetchMealsForDate(currentDateString)
                 .then(mealsForDate => {
                   newMeals[currentDateString] = mealsForDate;
                 })
                 .catch(error => {
-                  console.log(`Cache miss for ${currentDateString}, will fetch from Supabase`);
-                  return null; // Mark as needing fresh fetch
+                  console.log(`Error fetching meals for ${currentDateString}:`, error);
+                  newMeals[currentDateString] = [];
                 })
             );
           }
@@ -398,9 +384,7 @@ const MealPlanCalendar: React.FC = () => {
 
                 Alert.alert("Success", `All meals for ${format(new Date(date), "EEEE, MMMM d")} have been deleted.`);
                 
-                // Invalidate meal plan cache to ensure fresh data on next load
-                await cachedDataService.invalidateMealPlanCache(userId);
-                
+                // Update local state to reflect deletion
                 setMeals((prevMeals) => {
                   const updatedMeals = { ...prevMeals };
                   updatedMeals[date] = []; // Set to empty array instead of deleting
@@ -565,10 +549,7 @@ const MealPlanCalendar: React.FC = () => {
         return;
       }
 
-      // Clear cache to ensure fresh data
-      await cachedDataService.invalidateMealPlanCache(userId);
-
-      // Refresh the meals for the current date from cache/database
+      // Refresh the meals for the current date from database
       const mealDate = meal.created_at ? format(new Date(meal.created_at), 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd');
       const updatedMeals = await fetchMealsForDate(mealDate);
       setMeals(prevMeals => ({
@@ -731,11 +712,6 @@ const MealPlanCalendar: React.FC = () => {
       
       // Get user ID for cache invalidation
       const userId = await getCurrentUserId();
-      if (userId) {
-        // Clear cache to ensure fresh data is loaded
-        await cachedDataService.invalidateMealPlanCache(userId);
-      }
-      
       // Refresh the meals for this date to show the new macro meal
       const updatedMeals = await fetchMealsForDate(dateKey);
       
@@ -1276,8 +1252,8 @@ const MealPlanCalendar: React.FC = () => {
 const styles = StyleSheet.create({
   outerContainer: { 
     flex: 1,
-    paddingTop: 20, // Reduced from 20 to save space
-    // Remove paddingBottom to allow content to extend to nav bar
+    paddingTop: 20,
+    // Ensure container takes full screen height
   },
   errorBanner: {
     flexDirection: "row",
@@ -1558,16 +1534,18 @@ mealScanButtonText: {
   },
   scrollView: { 
     flex: 1,
-    maxHeight: SCREEN_HEIGHT * 0.84, // Increased from 0.78 to use more screen space
+    maxHeight: SCREEN_HEIGHT - getBottomNavHeight() - 140, // Prevent overflow beyond screen
   },
   scrollViewContent: {
     alignItems: 'flex-start',
+    flexGrow: 1, // Allow content to grow to full height
   },
   container: { 
     flexDirection: "row", 
-    paddingHorizontal: 12, // Keep horizontal padding but remove vertical padding
-    paddingVertical: 0, // Remove all vertical padding
+    paddingHorizontal: 12,
+    paddingVertical: 0,
     alignItems: 'flex-start',
+    // Allow container to size dynamically based on calendar day height
   },
   mealPicture: {
     width: 150,

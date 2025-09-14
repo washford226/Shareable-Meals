@@ -16,8 +16,6 @@ import { useTheme } from '../../../context/ThemeContext';
 import BottomNav from 'components/bottomNav';
 import { useRouter } from 'expo-router';
 import { supabase } from 'utils/supabase';
-import { cachedDataService } from 'utils/cachedDataService';
-import CacheDebugComponent from 'components/CacheDebugComponent';
 
 const AccountScreen: React.FC = () => {
   const [username, setUsername] = useState<string>('');
@@ -30,7 +28,6 @@ const AccountScreen: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [navigationLoading, setNavigationLoading] = useState<string | null>(null);
-  const [showCacheDebug, setShowCacheDebug] = useState<boolean>(false);
 
   const { theme, toggleTheme } = useTheme();
   const router = useRouter();
@@ -52,10 +49,14 @@ const AccountScreen: React.FC = () => {
       
       const userId = userData.user.id;
 
-      // Use cached data service for faster loading
-      const data = await cachedDataService.getUserProfile(userId);
+      // Fetch user profile directly from Supabase
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .select('*')
+        .eq('id', userId)
+        .single();
 
-      if (!data) {
+      if (error || !data) {
         throw new Error('User profile not found');
       }
 
@@ -485,38 +486,6 @@ const AccountScreen: React.FC = () => {
               </View>
               <Ionicons name="chevron-forward" size={16} color={theme.subtext} />
             </TouchableOpacity>
-          )}
-
-          {/* Cache Debug - Show for admins */}
-          {isAdmin && (
-            <TouchableOpacity
-              style={styles.actionItem}
-              onPress={() => setShowCacheDebug(!showCacheDebug)}
-            >
-              <View style={styles.actionItemLeft}>
-                <Ionicons 
-                  name={showCacheDebug ? "analytics" : "analytics-outline"} 
-                  size={16} 
-                  color={theme.primary} 
-                />
-                <Text style={[styles.actionItemLabel, { color: theme.text }]}>
-                  Cache Debug
-                </Text>
-              </View>
-              <Ionicons 
-                name={showCacheDebug ? "chevron-down" : "chevron-forward"} 
-                size={16} 
-                color={theme.subtext} 
-              />
-            </TouchableOpacity>
-          )}
-
-          {/* Cache Debug Component */}
-          {showCacheDebug && (
-            <CacheDebugComponent 
-              visible={showCacheDebug} 
-              onClose={() => setShowCacheDebug(false)} 
-            />
           )}
 
           {/* Logout */}

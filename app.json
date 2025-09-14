@@ -2,7 +2,7 @@
   "expo": {
     "name": "Shareable Meals",
     "slug": "MealPlanApp",
-    "version": "1.0.0",
+    "version": "1.0.3",
     "orientation": "portrait",
     "icon": "./assets/images/Logo_Light_Square_512.png",
     "scheme": "myapp",

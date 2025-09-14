@@ -425,6 +425,8 @@ const URLCreateMealScreen: React.FC = () => {
             message += "\n" + suggestions;
           }
           
+          // Meal added successfully with nutrition calculation
+          
           Alert.alert("Success", message, [
             {
               text: "OK",
@@ -457,6 +459,7 @@ const URLCreateMealScreen: React.FC = () => {
           ]);
         }
       } else {
+        // Meal added successfully with manual macros
         Alert.alert("Success", "Meal added successfully with manual nutrition values!", [
           {
             text: "OK",
