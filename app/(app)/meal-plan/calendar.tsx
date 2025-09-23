@@ -20,7 +20,7 @@ import BottomNav from "../../../components/bottomNav";
 import { supabase } from "utils/supabase";
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { Ionicons } from '@expo/vector-icons';
 import { 
   analyzeImageNutrition, 
@@ -611,27 +611,97 @@ const MealPlanCalendar: React.FC = () => {
   // Meal scanning functionality
   const resizeAndEncode = async (uri: string): Promise<string> => {
     try {
-      // Resize image to 512x512 max and compress to JPEG with 70% quality
-      const manipResult = await ImageManipulator.manipulateAsync(
-        uri,
-        [{ resize: { width: 512 } }],
-        { 
-          compress: 0.7, // 70% quality (60-80% range)
-          format: ImageManipulator.SaveFormat.JPEG 
+      console.log('Processing image for meal scan:', uri);
+      
+      // Check if the URI exists and is accessible
+      const fileInfo = await FileSystem.getInfoAsync(uri);
+      if (!fileInfo.exists) {
+        throw new Error('Image file not found or inaccessible');
+      }
+      
+      console.log('File info:', fileInfo);
+
+      // First try with image manipulation
+      let manipResult;
+      try {
+        manipResult = await ImageManipulator.manipulateAsync(
+          uri,
+          [{ resize: { width: 512 } }],
+          { 
+            compress: 0.7, // 70% quality (60-80% range)
+            format: ImageManipulator.SaveFormat.JPEG 
+          }
+        );
+        console.log('Image manipulation result:', manipResult);
+      } catch (manipError) {
+        console.warn('Image manipulation failed, trying without resize:', manipError);
+        
+        // Fallback: try to use original image with different compression
+        try {
+          manipResult = await ImageManipulator.manipulateAsync(
+            uri,
+            [], // No resize
+            { 
+              compress: 0.5, // Lower quality to reduce size
+              format: ImageManipulator.SaveFormat.JPEG 
+            }
+          );
+        } catch (fallbackError) {
+          console.error('Fallback manipulation also failed:', fallbackError);
+          throw new Error('Failed to process image with any method');
         }
-      );
+      }
+
+      // Check if the manipulated image exists
+      const manipFileInfo = await FileSystem.getInfoAsync(manipResult.uri);
+      if (!manipFileInfo.exists) {
+        throw new Error('Failed to create manipulated image');
+      }
 
       // Convert to base64
       const base64 = await FileSystem.readAsStringAsync(manipResult.uri, {
         encoding: FileSystem.EncodingType.Base64,
       });
 
+      if (!base64 || base64.length === 0) {
+        throw new Error('Failed to convert image to base64');
+      }
+
       // Log image size for debugging
-      console.log(`Resized meal image size: ${Math.round(base64.length * 0.75 / 1024)} KB`);
+      const sizeKB = Math.round(base64.length * 0.75 / 1024);
+      console.log(`Processed meal image size: ${sizeKB} KB`);
+      
+      // Check if image is too large (max 10MB for most APIs)
+      if (sizeKB > 10240) {
+        console.warn('Image is quite large, may cause issues with API');
+      }
+      
+      // Clean up the temporary manipulated file
+      try {
+        await FileSystem.deleteAsync(manipResult.uri, { idempotent: true });
+      } catch (cleanupError) {
+        console.warn('Failed to cleanup temp file:', cleanupError);
+      }
       
       return base64;
     } catch (error) {
       console.error('Error resizing meal image:', error);
+      
+      // Provide more specific error messages
+      if (error instanceof Error) {
+        if (error.message.includes('Image file not found')) {
+          throw new Error('Unable to access the captured image. Please try taking another photo.');
+        } else if (error.message.includes('manipulated image')) {
+          throw new Error('Failed to process the image. Please try again with a different photo.');
+        } else if (error.message.includes('base64')) {
+          throw new Error('Failed to prepare image for analysis. Please try again.');
+        } else if (error.message.includes('process image with any method')) {
+          throw new Error('Image format not supported. Please try taking a new photo.');
+        } else {
+          throw new Error(`Image processing failed: ${error.message}`);
+        }
+      }
+      
       throw new Error('Failed to process image. Please try again.');
     }
   };
@@ -669,14 +739,34 @@ const MealPlanCalendar: React.FC = () => {
       if (!result.canceled && result.assets[0]) {
         const imageUri = result.assets[0].uri;
         if (imageUri) {
+          console.log('Camera captured image:', imageUri);
           // Resize and compress the image before sending
           const processedBase64 = await resizeAndEncode(imageUri);
           await scanMealImage(processedBase64, dateKey);
+        } else {
+          throw new Error('No image URI received from camera');
         }
+      } else {
+        console.log('Camera capture cancelled by user');
       }
     } catch (error) {
       console.error('Error opening camera for meal scan:', error);
-      Alert.alert('Error', 'Failed to open camera. Please try again.');
+      
+      // Provide more specific error messages
+      let errorMessage = 'Failed to open camera. Please try again.';
+      if (error instanceof Error) {
+        if (error.message.includes('Camera not available')) {
+          errorMessage = 'Camera is not available on this device.';
+        } else if (error.message.includes('Permission')) {
+          errorMessage = 'Camera permission is required for meal scanning.';
+        } else if (error.message.includes('image URI')) {
+          errorMessage = 'Failed to capture image. Please try again.';
+        } else if (error.message.includes('processing failed') || error.message.includes('process image')) {
+          errorMessage = error.message; // Use the specific error from resizeAndEncode
+        }
+      }
+      
+      Alert.alert('Camera Error', errorMessage);
     }
   };
 
@@ -685,7 +775,7 @@ const MealPlanCalendar: React.FC = () => {
     setSelectedScanDate(dateKey);
     
     try {
-      console.log(`Analyzing meal image with OpenAI GPT-4 Vision - Size: ${Math.round(base64Image.length * 0.75 / 1024)} KB`);
+      console.log(`Analyzing meal image with OpenAI GPT-5 Vision - Size: ${Math.round(base64Image.length * 0.75 / 1024)} KB`);
 
       // Use the OpenAI GPT-4 Vision API via Meal_Scanner Edge Function
       const result = await analyzeImageNutrition(base64Image, false, dateKey);
