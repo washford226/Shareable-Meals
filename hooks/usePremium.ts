@@ -24,14 +24,29 @@ export const useSubscription = () => {
     try {
       setState(prev => ({ ...prev, isLoading: true, error: null }));
       
+      console.log('🔄 Starting subscription check...');
+      
+      // Add timeout for network calls
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Subscription check timeout')), 8000);
+      });
+
       // Initialize RevenueCat with current user ID
-      const { data: { user } } = await supabase.auth.getUser();
+      const getUserPromise = supabase.auth.getUser();
+      const userResult = await Promise.race([getUserPromise, timeoutPromise]);
+      const { data: { user } } = userResult as any;
+      
       await revenueCatManager.initialize(user?.id);
       
-      const [subscriptionStatus, appAccess] = await Promise.all([
-        revenueCatManager.getSubscriptionStatus(),
-        revenueCatManager.checkAppAccess()
-      ]);
+      const [subscriptionStatus, appAccess] = await Promise.race([
+        Promise.all([
+          revenueCatManager.getSubscriptionStatus(),
+          revenueCatManager.checkAppAccess()
+        ]),
+        timeoutPromise
+      ]) as any;
+      
+      console.log('✅ Subscription check completed successfully');
       
       setState(prev => ({ 
         ...prev, 
@@ -42,14 +57,14 @@ export const useSubscription = () => {
         isLoading: false 
       }));
     } catch (error: any) {
-      console.error('Error refreshing subscription status:', error);
-      // In development/Expo Go, default to no access to test paywall
+      console.error('❌ Error refreshing subscription status:', error);
+      // In development/Expo Go, allow access if we can't check subscription
       const isDevelopment = __DEV__;
       setState(prev => ({ 
         ...prev, 
-        error: isDevelopment ? null : (error.message || 'Failed to load subscription status'),
-        hasAppAccess: false,
-        accessReason: 'no_subscription',
+        error: error.message || 'Failed to load subscription status',
+        hasAppAccess: isDevelopment, // Allow access in dev mode when network fails
+        accessReason: isDevelopment ? 'trial' : 'no_subscription',
         subscriptionStatus: {
           isActive: false,
           productId: null,

@@ -10,7 +10,9 @@ export interface Meal {
   visibility: boolean; // Indicates if the meal is public or private
   averageRating: number;
   reviewCount?: number;
-  meal_type: "Breakfast" | "Lunch" | "Dinner" | "Other" | "Scanned";
+  meal_type: "breakfast" | "lunch" | "dinner" | "snack" | "dessert" | "Breakfast" | "Lunch" | "Dinner" | "Other" | "Scanned"; // Updated to include new types
+  cook_time?: string; // Optional field for cooking time
+  upvotes?: number; // Optional field for upvotes (used in discover meals)
   picture: string | Blob | null; // Allow null if no picture is provided
   meal_plan_id?: number; // Optional if not part of a meal plan
   instructions?: string; // Optional field for meal preparation instructions

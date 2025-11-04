@@ -127,3 +127,9 @@ export type CuisineOption = {
   icon: string;
   description: string;
 };
+
+// AI Generation filter options (used in meal browsing screens)
+export const aiGenerationFilterOptions = [
+  { label: "AI Generated", value: "ai" },
+  { label: "Manually Created", value: "human" },
+];

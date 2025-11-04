@@ -49,7 +49,9 @@ export function useLazyLoad<T>(
 
   const lazyFetch = useCallback(() => {
     runAfterInteractions(() => {
-      fetchFunction();
+      fetchFunction().catch((error) => {
+        console.error('LazyLoad fetch error:', error);
+      });
     });
   }, [fetchFunction, runAfterInteractions]);
 

@@ -25,6 +25,7 @@
     "expo-env.d.ts"
   ],
   "exclude": [
-    "supabase/functions/**/*"
+    "supabase/functions/**/*",
+    "__tests__/**/*"
   ]
 }

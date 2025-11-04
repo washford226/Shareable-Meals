@@ -1,7 +1,12 @@
 # Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
 
-# dependencies
+app-ads.txt
+# Dependencies
 node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
 
 # Expo
 .expo/
@@ -20,19 +25,157 @@ expo-env.d.ts
 # Metro
 .metro-health-check*
 
-# debug
+# Debug
 npm-debug.*
 yarn-debug.*
 yarn-error.*
 
-# macOS
-.DS_Store
-*.pem
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
 
-# local env files
-.env*.local
+# Coverage directory used by tools like istanbul
+coverage/
+*.lcov
 
-# typescript
+# nyc test coverage
+.nyc_output
+
+# Grunt intermediate storage (https://gruntjs.com/creating-plugins#storing-task-files)
+.grunt
+
+# Bower dependency directory (https://bower.io/)
+bower_components
+
+# node-waf configuration
+.lock-wscript
+
+# Compiled binary addons (https://nodejs.org/api/addons.html)
+build/Release
+
+# Dependency directories
+jspm_packages/
+
+# TypeScript v1 declaration files
+typings/
+
+# TypeScript cache
 *.tsbuildinfo
 
-app-example
+# Optional npm cache directory
+.npm
+
+# Optional eslint cache
+.eslintcache
+
+# Microbundle cache
+.rpt2_cache/
+.rts2_cache_cjs/
+.rts2_cache_es/
+.rts2_cache_umd/
+
+# Optional REPL history
+.node_repl_history
+
+# Output of 'npm pack'
+*.tgz
+
+# Yarn Integrity file
+.yarn-integrity
+
+# Environment files - CRITICAL FOR PUBLIC REPOS
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env*.local
+
+# Supabase credentials and config (IMPORTANT!)
+supabase/.env
+supabase/.env.local
+**/supabase.ts.backup
+**/supabase-backup.*
+
+# API Keys and Secrets (CRITICAL!)
+*.json.key
+*-key.json
+service-account*.json
+google-services.json
+GoogleService-Info.plist
+firebase-adminsdk*.json
+shareable-meals-*.json
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Log files
+logs
+*.log
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Windows
+*.stackdump
+
+# Linux
+*~
+
+# IDE and Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Temporary files
+*.tmp
+*.temp
+
+# Build artifacts
+build/
+dist/
+
+# Mobile specific
+*.apk
+*.aab
+*.ipa
+
+# Certificates and keys
+*.pem
+*.crt
+*.csr
+
+# Backup files
+*.backup
+*.bak
+*.orig
+*-old.*
+*-new.*
+*-backup.*
+
+# Example and test directories that shouldn't be public
+app-example/
+**/example/
+**/examples/
+test-data/
+dummy-data/
+
+# Generated documentation
+docs/build/
+
+# Sensitive configuration files
+config/secrets.*
+config/production.*
+secrets/

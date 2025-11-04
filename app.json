@@ -2,16 +2,16 @@
   "expo": {
     "name": "Shareable Meals",
     "slug": "MealPlanApp",
-    "version": "1.0.4",
+    "version": "1.0.6",
     "orientation": "portrait",
-    "icon": "./assets/images/Logo_Light_Square_512.png",
+    "icon": "./assets/images/ShareableMealsIcon.png",
     "scheme": "myapp",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.williamashford.shareablemeals",
-      "buildNumber": "8",
+      "deploymentTarget": "13.4",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSPhotoLibraryUsageDescription": "This app needs access to your photo library to upload meal images and profile pictures.",
@@ -20,7 +20,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/Logo_Light_Square_512.png",
+        "foregroundImage": "./assets/images/ShareableMealsIcon.png",
         "backgroundColor": "#ffffff"
       },
       "package": "com.williamashford.shareablemeals"
@@ -28,21 +28,30 @@
     "web": {
       "bundler": "metro",
       "output": "static",
-      "favicon": "./assets/images/Logo_Light_Square_512.png"
+      "favicon": "./assets/images/ShareableMealsIcon.png"
     },
     "plugins": [
       "expo-router",
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/Logo_Light_Square_512.png",
+          "image": "./assets/images/ShareableMealsIcon.png",
           "imageWidth": 200,
           "resizeMode": "contain",
           "backgroundColor": "#ffffff"
         }
       ],
       "expo-secure-store",
-      "expo-web-browser"
+      "expo-web-browser",
+      "expo-camera",
+      [
+        "react-native-google-mobile-ads",
+        {
+          "androidAppId": "ca-app-pub-1810378947217437~9874156053",
+          "iosAppId": "ca-app-pub-1810378947217437~9874156053"
+        }
+      ],
+      "expo-sqlite"
     ],
     "experiments": {
       "typedRoutes": true

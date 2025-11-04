@@ -27,32 +27,61 @@ const AppAccessGuard: React.FC<AppAccessGuardProps> = ({
     hasAppAccess, 
     accessReason, 
     daysRemaining,
+    error,
     refreshSubscriptionStatus,
     getSubscriptionStatusText 
   } = useSubscription();
   
   const [showPaywall, setShowPaywall] = useState(false);
+  const [hasTimedOut, setHasTimedOut] = useState(false);
+
+  // Add timeout for loading state
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      if (isLoading) {
+        console.log('⏰ Subscription check timed out, allowing access in development');
+        setHasTimedOut(true);
+      }
+    }, 10000); // 10 second timeout
+
+    return () => clearTimeout(timeout);
+  }, [isLoading]);
 
   useEffect(() => {
     // Show paywall if user doesn't have access after loading (but not in development mode)
-    if (!isLoading && !hasAppAccess && !__DEV__) {
+    if (!isLoading && !hasAppAccess && !__DEV__ && !hasTimedOut) {
       setShowPaywall(true);
     }
-  }, [isLoading, hasAppAccess]);
+  }, [isLoading, hasAppAccess, hasTimedOut]);
 
   const handleSubscriptionSuccess = () => {
     setShowPaywall(false);
     refreshSubscriptionStatus();
   };
 
-  // Show loading screen while checking subscription
-  if (isLoading) {
+  const handleRetryConnection = () => {
+    setHasTimedOut(false);
+    refreshSubscriptionStatus();
+  };
+
+  // Show loading screen while checking subscription (unless timed out)
+  if (isLoading && !hasTimedOut) {
     return (
       <View style={[styles.loadingContainer, { backgroundColor: theme.background }]}>
         <ActivityIndicator size="large" color={theme.primary} />
         <Text style={[styles.loadingText, { color: theme.text }]}>
           Checking subscription status...
         </Text>
+        {error && (
+          <TouchableOpacity 
+            style={[styles.skipButton, { backgroundColor: theme.primary }]}
+            onPress={handleRetryConnection}
+          >
+            <Text style={[styles.skipButtonText, { color: '#FFFFFF' }]}>
+              Skip & Continue
+            </Text>
+          </TouchableOpacity>
+        )}
       </View>
     );
   }
@@ -62,8 +91,8 @@ const AppAccessGuard: React.FC<AppAccessGuardProps> = ({
     // You can add a trial warning banner here if needed
   }
 
-  // If user has access or we're in development mode, show the app content
-  if (hasAppAccess || __DEV__) {
+  // If user has access, we're in development mode, or we've timed out, show the app content
+  if (hasAppAccess || __DEV__ || hasTimedOut) {
     return <>{children}</>;
   }
 
@@ -97,6 +126,16 @@ const styles = StyleSheet.create({
     marginTop: 16,
     fontSize: 16,
     textAlign: 'center',
+  },
+  skipButton: {
+    marginTop: 20,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  skipButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
   },
   paywallContainer: {
     flex: 1,

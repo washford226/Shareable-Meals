@@ -1,15 +1,46 @@
 import "../polyfills"; // Import polyfills first
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { Stack } from "expo-router";
 import { View, Platform, StatusBar } from "react-native";
 import { ThemeProvider, useTheme } from "../context/ThemeContext";
-import AppAccessGuard from "../components/AppAccessGuard";
+import { RevenueCatProvider } from "../context/RevenueCatContext";
+import * as Font from 'expo-font';
+import * as SplashScreen from 'expo-splash-screen';
+
+// Keep the splash screen visible while we fetch resources
+SplashScreen.preventAutoHideAsync();
 
 function AppContent() {
   const { theme } = useTheme();
+  const [fontsLoaded, setFontsLoaded] = useState(false);
   
   // Determine if we're in dark mode by checking the background color
   const isDarkMode = theme.background === '#0f172a'; // Dark theme background
+  
+  useEffect(() => {
+    async function loadFonts() {
+      try {
+        await Font.loadAsync({
+          'SpaceMono-Regular': require('../assets/fonts/SpaceMono-Regular.ttf'),
+          // Add more fonts here as you get them
+          // 'SpaceMono-Bold': require('../assets/fonts/SpaceMono-Bold.ttf'),
+          // 'CustomFont-Light': require('../assets/fonts/CustomFont-Light.ttf'),
+        });
+        setFontsLoaded(true);
+      } catch (error) {
+        console.warn('Error loading fonts:', error);
+        setFontsLoaded(true); // Continue anyway
+      } finally {
+        await SplashScreen.hideAsync();
+      }
+    }
+
+    loadFonts();
+  }, []);
+
+  if (!fontsLoaded) {
+    return null;
+  }
   
   return (
     <View style={{ flex: 1 }}>
@@ -37,9 +68,9 @@ function AppContent() {
 export default function Layout() {
   return (
     <ThemeProvider>
-      <AppAccessGuard>
+      <RevenueCatProvider>
         <AppContent />
-      </AppAccessGuard>
+      </RevenueCatProvider>
     </ThemeProvider>
   );
 }

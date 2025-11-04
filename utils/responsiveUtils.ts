@@ -154,6 +154,50 @@ export const responsiveFontSizes = {
   nutritionLabel: scaleFont(7),  // Reduced from 8 for tighter fit
 };
 
+/**
+ * Legacy font size mapper - helps convert hardcoded font sizes to theme equivalents
+ * This is useful for gradually migrating components to use the theme system
+ */
+export const mapLegacyFontSize = (legacySize: number): keyof typeof responsiveFontSizes | 'custom' => {
+  // Map common hardcoded font sizes to appropriate responsive font types
+  const fontSizeMap: { [key: number]: keyof typeof responsiveFontSizes } = {
+    10: 'caption',
+    11: 'caption',
+    12: 'bodySmall',
+    13: 'label',
+    14: 'bodyMedium',
+    15: 'bodyMedium',
+    16: 'body',
+    17: 'body',
+    18: 'h4',
+    19: 'h4',
+    20: 'h3',
+    21: 'h3',
+    22: 'h3',
+    24: 'h2',
+    26: 'h2',
+    28: 'h1',
+    30: 'h1',
+  };
+
+  // Return the closest match or 'custom' for sizes that need special handling
+  return fontSizeMap[legacySize] || 'custom';
+};
+
+/**
+ * Get responsive font size for any value - useful for migrating legacy components
+ */
+export const getResponsiveFontSize = (baseSize: number): number => {
+  return scaleFont(baseSize);
+};
+
+/**
+ * Theme-compatible font family mapper
+ */
+export const getFontFamily = (fontType: 'system' | 'spacemono' = 'system'): string => {
+  return fontType === 'spacemono' ? 'SpaceMono-Regular' : 'System';
+};
+
 // Calendar-specific responsive sizing with better proportional scaling
 export const getCalendarDayHeight = (): number => {
   // Calculate available height accounting for header and bottom nav

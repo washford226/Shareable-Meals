@@ -9,6 +9,7 @@ const NutritionNav: React.FC = () => {
   const { date } = useLocalSearchParams();
   const pathname = usePathname();
   const { theme } = useTheme();
+  const styles = createStyles(theme);
   const normalizedDate = Array.isArray(date) ? date[0] : date;
 
   // Determine which tab is active
@@ -91,7 +92,7 @@ const NutritionNav: React.FC = () => {
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (theme: any) => StyleSheet.create({
   navContainer: {
     marginVertical: 16,
     marginHorizontal: 16,
@@ -148,12 +149,12 @@ const styles = StyleSheet.create({
     marginRight: 2,
   },
   tabText: {
-    fontSize: 14,
-    fontWeight: "600",
+    fontSize: theme.fonts.subheadline,
+    fontFamily: theme.fontFamily.semiBold,
     textAlign: 'center',
   },
   activeTabText: {
-    fontWeight: "700",
+    fontFamily: theme.fontFamily.bold,
   },
   activeIndicator: {
     position: 'absolute',
