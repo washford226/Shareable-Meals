@@ -1,115 +1,49 @@
-import React, { useState, useEffect } from "react";
-import { View, Text, TextInput, StyleSheet, Alert, TouchableOpacity, Image, ActivityIndicator, ScrollView, Platform } from "react-native";
-import { useRouter } from "expo-router";
-import { supabase } from "utils/supabase";
-import { Ionicons } from "@expo/vector-icons";
-import { useTheme } from "context/ThemeContext";
+import React, { useState } from 'react';
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  Alert,
+  StyleSheet,
+  ActivityIndicator,
+  Image,
+  ScrollView,
+} from 'react-native';
+import { router } from "expo-router";
+import { Ionicons } from '@expo/vector-icons';
+import { supabase } from "../../utils/supabase";
+import { useTheme } from "../../context/ThemeContext";
 
-const logoLight = require("../../assets/images/Logo_Light-removebg-preview.png");
-const logoDark = require("../../assets/images/Logo_Dark-removebg-preview.png");
+const shareableMealsIcon = require('../../assets/images/ShareableMealsIcon.png');
 
 const LoginScreen = () => {
-  const router = useRouter();
   const { theme } = useTheme();
-
-  const [email, setEmail] = useState(""); // Supabase uses email for login
-  const [password, setPassword] = useState("");
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [errors, setErrors] = useState({ email: "", password: "" });
-
-  // Check if user is already logged in
-  useEffect(() => {
-    checkExistingSession();
-  }, []);
-
-  const checkExistingSession = async () => {
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session) {
-        // User is already logged in, redirect to main app
-        router.replace("/(app)/meal-plan/calendar");
-      }
-    } catch (error) {
-      console.error("Error checking existing session:", error);
-    }
-  };
-
-  // Email validation
-  const validateEmail = (email: string) => {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(email);
-  };
-
-  // Clear errors when user types
-  const handleEmailChange = (text: string) => {
-    setEmail(text);
-    if (errors.email) {
-      setErrors(prev => ({ ...prev, email: "" }));
-    }
-  };
-
-  const handlePasswordChange = (text: string) => {
-    setPassword(text);
-    if (errors.password) {
-      setErrors(prev => ({ ...prev, password: "" }));
-    }
-  };
 
   const handleLogin = async () => {
-    // Reset errors
-    setErrors({ email: "", password: "" });
-    
-    // Validation
-    let hasErrors = false;
-    const newErrors = { email: "", password: "" };
-
-    if (!email.trim()) {
-      newErrors.email = "Email is required";
-      hasErrors = true;
-    } else if (!validateEmail(email.trim())) {
-      newErrors.email = "Please enter a valid email address";
-      hasErrors = true;
-    }
-
-    if (!password) {
-      newErrors.password = "Password is required";
-      hasErrors = true;
-    } else if (password.length < 6) {
-      newErrors.password = "Password must be at least 6 characters";
-      hasErrors = true;
-    }
-
-    if (hasErrors) {
-      setErrors(newErrors);
+    if (!email || !password) {
+      Alert.alert('Error', 'Please fill in all fields');
       return;
     }
 
     setLoading(true);
     try {
       const { error } = await supabase.auth.signInWithPassword({
-        email: email.trim().toLowerCase(),
-        password,
+        email: email.trim(),
+        password: password,
       });
 
       if (error) {
-        // Handle specific error types
-        if (error.message.includes('Invalid login credentials')) {
-          Alert.alert("Login Failed", "Invalid email or password. Please check your credentials and try again.");
-        } else if (error.message.includes('Email not confirmed')) {
-          Alert.alert("Email Not Verified", "Please check your email and click the verification link before signing in.");
-        } else if (error.message.includes('Too many requests')) {
-          Alert.alert("Too Many Attempts", "Too many login attempts. Please wait a moment before trying again.");
-        } else {
-          Alert.alert("Login Error", error.message || "An error occurred during login.");
-        }
+        Alert.alert('Error', error.message);
       } else {
-        // Success - navigate to main app
-        router.replace("/(app)/meal-plan/calendar");
+        router.replace('/');
       }
     } catch (error) {
-      console.error("Login error:", error);
-      Alert.alert("Error", "An unexpected error occurred. Please check your internet connection and try again.");
+      Alert.alert('Error', 'An unexpected error occurred');
     } finally {
       setLoading(false);
     }
@@ -121,12 +55,16 @@ const LoginScreen = () => {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
-        removeClippedSubviews={true}
-        scrollEventThrottle={16}
       >
         {/* Logo Section */}
         <View style={styles.logoSection}>
-          <Image source={theme.background === '#0f172a' ? logoDark : logoLight} style={styles.logo} />
+          <View style={styles.iconContainer}>
+            <Image 
+              source={shareableMealsIcon} 
+              style={styles.logoImage}
+              resizeMode="contain"
+            />
+          </View>
           <Text style={[styles.title, { color: theme.text }]}>Welcome to Shareable Meals</Text>
           <Text style={[styles.subtitle, { color: theme.subtext }]}>
             Sign in to start planning and sharing your meals
@@ -151,28 +89,19 @@ const LoginScreen = () => {
               <Ionicons name="mail" size={16} color={theme.subtext} style={styles.inputIcon} />
               <TextInput
                 style={[styles.textInput, { 
-                  borderColor: errors.email ? theme.danger : theme.border, 
                   color: theme.text,
                   backgroundColor: theme.background 
                 }]}
                 placeholder="Enter your email address"
                 placeholderTextColor={theme.placeholder}
                 value={email}
-                onChangeText={handleEmailChange}
+                onChangeText={setEmail}
                 autoCapitalize="none"
                 keyboardType="email-address"
                 autoCorrect={false}
                 editable={!loading}
               />
             </View>
-            {errors.email && (
-              <View style={styles.errorContainer}>
-                <Ionicons name="alert-circle" size={14} color={theme.danger} />
-                <Text style={[styles.errorText, { color: theme.danger }]}>
-                  {errors.email}
-                </Text>
-              </View>
-            )}
           </View>
 
           {/* Password Input */}
@@ -184,7 +113,6 @@ const LoginScreen = () => {
               <Ionicons name="lock-closed" size={16} color={theme.subtext} style={styles.inputIcon} />
               <TextInput
                 style={[styles.textInput, { 
-                  borderColor: errors.password ? theme.danger : theme.border, 
                   color: theme.text,
                   backgroundColor: theme.background,
                   paddingRight: 48
@@ -192,7 +120,7 @@ const LoginScreen = () => {
                 placeholder="Enter your password"
                 placeholderTextColor={theme.placeholder}
                 value={password}
-                onChangeText={handlePasswordChange}
+                onChangeText={setPassword}
                 secureTextEntry={!isPasswordVisible}
                 editable={!loading}
               />
@@ -208,74 +136,47 @@ const LoginScreen = () => {
                 />
               </TouchableOpacity>
             </View>
-            {errors.password && (
-              <View style={styles.errorContainer}>
-                <Ionicons name="alert-circle" size={14} color={theme.danger} />
-                <Text style={[styles.errorText, { color: theme.danger }]}>
-                  {errors.password}
-                </Text>
-              </View>
-            )}
           </View>
 
-          {/* Forgot Password Link */}
-          <TouchableOpacity 
-            style={styles.forgotPasswordContainer}
-            onPress={() => router.push("../(auth)/forgot-password")}
-            disabled={loading}
-          >
-            <Text style={[styles.forgotPasswordText, { color: theme.primary }]}>
-              Forgot your password?
-            </Text>
-          </TouchableOpacity>
+          {/* Forgot Password */}
+          <View style={styles.forgotPasswordContainer}>
+            <TouchableOpacity
+              onPress={() => router.push("/(auth)/forgot-password")}
+              disabled={loading}
+            >
+              <Text style={[styles.forgotPasswordText, { color: theme.primary }]}>
+                Forgot Password?
+              </Text>
+            </TouchableOpacity>
+          </View>
 
           {/* Login Button */}
-          <TouchableOpacity 
-            style={[
-              styles.loginButton, 
-              { 
-                backgroundColor: (!email || !password || loading) ? theme.border : theme.primary,
-                opacity: loading ? 0.8 : 1
-              }
-            ]} 
-            onPress={handleLogin} 
-            disabled={!email || !password || loading}
+          <TouchableOpacity
+            style={[styles.loginButton, { backgroundColor: theme.primary }]}
+            onPress={handleLogin}
+            disabled={loading}
           >
             {loading ? (
-              <ActivityIndicator size="small" color={theme.buttonText} />
+              <ActivityIndicator color={theme.buttonTextPrimary} />
             ) : (
-              <>
-                <Ionicons name="log-in" size={16} color={theme.buttonText} />
-                <Text style={[styles.loginButtonText, { color: theme.buttonText }]}>
-                  Sign In
-                </Text>
-              </>
+              <Text style={[styles.loginButtonText, { color: theme.buttonTextPrimary }]}>
+                Sign In
+              </Text>
             )}
           </TouchableOpacity>
         </View>
 
-        {/* Sign Up Section */}
+        {/* Sign Up Card */}
         <View style={[styles.signupCard, { backgroundColor: theme.card }]}>
           <View style={styles.signupContent}>
-            <Text style={[styles.signupText, { color: theme.subtext }]}>
-              Don&apos;t have an account?
+            <Text style={[styles.signupText, { color: theme.text }]}>
+              Don't have an account?
             </Text>
             <TouchableOpacity
-              style={[styles.signupButton, { 
-                borderColor: theme.primary,
-                backgroundColor: theme.background 
-              }]}
-              onPress={() => {
-                try {
-                  router.push("/(auth)/signup");
-                } catch (navError) {
-                  console.error("Navigation error to signup:", navError);
-                  router.push("./signup");
-                }
-              }}
+              style={[styles.signupButton, { borderColor: theme.primary }]}
+              onPress={() => router.push("/(auth)/signup")}
               disabled={loading}
             >
-              <Ionicons name="person-add" size={16} color={theme.primary} />
               <Text style={[styles.signupButtonText, { color: theme.primary }]}>
                 Create Account
               </Text>
@@ -288,67 +189,62 @@ const LoginScreen = () => {
 };
 
 const styles = StyleSheet.create({
-  container: { 
-    flex: 1 
+  container: {
+    flex: 1,
   },
   scrollContent: {
     flexGrow: 1,
+    padding: 20,
     justifyContent: 'center',
-    padding: 16,
-    paddingTop: Platform.OS === 'ios' ? 60 : 40,
-    paddingBottom: 80,
   },
-  // Logo Section
   logoSection: {
     alignItems: 'center',
-    marginBottom: 32,
+    marginBottom: 40,
   },
-  logo: { 
-    width: 300, 
-    height: 300, 
-    marginBottom: -50,
-    resizeMode: 'contain'
+  iconContainer: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 20,
+    overflow: 'hidden',
   },
-  title: { 
-    fontSize: 26, 
-    fontWeight: '700',
-    marginBottom: 8,
+  logoImage: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: 'bold',
     textAlign: 'center',
-    lineHeight: 32,
+    marginBottom: 8,
   },
   subtitle: {
     fontSize: 16,
     textAlign: 'center',
     lineHeight: 22,
   },
-  // Login Card
   loginCard: {
     borderRadius: 16,
     padding: 24,
     marginBottom: 20,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.1,
-        shadowRadius: 12,
-      },
-      android: {
-        elevation: 6,
-      },
-    }),
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
   },
   cardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 24,
-    gap: 8,
   },
   cardTitle: {
     fontSize: 20,
     fontWeight: '600',
+    marginLeft: 8,
   },
-  // Input Styles
   inputGroup: {
     marginBottom: 20,
   },
@@ -372,97 +268,58 @@ const styles = StyleSheet.create({
     height: 48,
     paddingLeft: 40,
     paddingRight: 12,
-    borderWidth: 1.5,
-    borderRadius: 12,
+    borderWidth: 1,
+    borderRadius: 8,
     fontSize: 16,
   },
   passwordToggle: {
     position: 'absolute',
     right: 12,
-    padding: 8,
-    borderRadius: 6,
+    padding: 4,
+    borderRadius: 4,
   },
-  // Error Styles
-  errorContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 6,
-    gap: 4,
-  },
-  errorText: {
-    fontSize: 12,
-    flex: 1,
-  },
-  // Forgot Password
   forgotPasswordContainer: {
     alignItems: 'flex-end',
     marginBottom: 24,
   },
-  forgotPasswordText: { 
+  forgotPasswordText: {
     fontSize: 14,
     fontWeight: '500',
   },
-  // Login Button
   loginButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    height: 48,
+    borderRadius: 8,
     justifyContent: 'center',
-    height: 52,
-    borderRadius: 12,
-    gap: 8,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-      },
-      android: {
-        elevation: 3,
-      },
-    }),
+    alignItems: 'center',
   },
   loginButtonText: {
     fontSize: 16,
     fontWeight: '600',
   },
-  // Sign Up Card
   signupCard: {
     borderRadius: 16,
-    padding: 20,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05,
-        shadowRadius: 8,
-      },
-      android: {
-        elevation: 3,
-      },
-    }),
+    padding: 24,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
   },
   signupContent: {
     alignItems: 'center',
-    gap: 16,
   },
   signupText: {
     fontSize: 16,
-    textAlign: 'center',
+    marginBottom: 16,
   },
   signupButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 12,
     paddingHorizontal: 24,
-    borderRadius: 10,
-    borderWidth: 1.5,
-    gap: 8,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderRadius: 8,
   },
   signupButtonText: {
     fontSize: 16,
-    fontWeight: '500',
+    fontWeight: '600',
   },
 });
 

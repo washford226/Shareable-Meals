@@ -432,6 +432,9 @@ describe('RevenueCatManager', () => {
     it('should return trial access with days remaining', async () => {
       const futureDate = new Date();
       futureDate.setDate(futureDate.getDate() + 5); // 5 days from now
+      
+      const recentStartDate = new Date();
+      recentStartDate.setDate(recentStartDate.getDate() - 3); // Started 3 days ago
 
       const trialCustomerInfo = {
         ...mockCustomerInfo,
@@ -440,7 +443,8 @@ describe('RevenueCatManager', () => {
             'premium': {
               ...mockCustomerInfo.entitlements.active.premium,
               willRenew: false,
-              expirationDate: futureDate.toISOString()
+              expirationDate: futureDate.toISOString(),
+              originalPurchaseDate: recentStartDate.toISOString()
             }
           },
           all: {}

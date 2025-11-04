@@ -28,6 +28,7 @@ create table public.macro_meals (
   carbs double precision null,
   fat double precision null,
   created_at timestamp with time zone null default now(),
+  meal_date date not null default CURRENT_DATE,
   constraint macro_meals_pkey primary key (id),
   constraint macro_meals_user_id_fkey foreign KEY (user_id) references user_profiles (id) on delete CASCADE
 ) TABLESPACE pg_default;
@@ -41,6 +42,31 @@ create table public.meal_ingredients (
   constraint meal_ingredients_pkey primary key (meal_ingredient_id),
   constraint meal_ingredients_meal_id_fkey foreign KEY (meal_id) references meals (id) on delete CASCADE
 ) TABLESPACE pg_default;
+
+create table public.meal_likes (
+  id serial not null,
+  meal_id integer not null,
+  user_id uuid not null,
+  created_at timestamp with time zone null default now(),
+  constraint meal_likes_pkey primary key (id),
+  constraint meal_likes_meal_id_user_id_key unique (meal_id, user_id),
+  constraint meal_likes_meal_id_fkey foreign KEY (meal_id) references meals (id) on delete CASCADE,
+  constraint meal_likes_user_id_fkey foreign KEY (user_id) references user_profiles (id) on delete CASCADE
+) TABLESPACE pg_default;
+
+create index IF not exists idx_meal_likes_meal_id on public.meal_likes using btree (meal_id) TABLESPACE pg_default;
+
+create index IF not exists idx_meal_likes_user_id on public.meal_likes using btree (user_id) TABLESPACE pg_default;
+
+create index IF not exists idx_meal_likes_created_at on public.meal_likes using btree (created_at desc) TABLESPACE pg_default;
+
+create trigger trigger_meal_like_count_delete
+after DELETE on meal_likes for EACH row
+execute FUNCTION update_meal_like_count ();
+
+create trigger trigger_meal_like_count_insert
+after INSERT on meal_likes for EACH row
+execute FUNCTION update_meal_like_count ();
 
 create table public.meal_plan (
   meal_plan_id serial not null,
@@ -76,7 +102,6 @@ create table public.meals (
   carbohydrates integer null,
   fat integer null,
   instructions text null,
-  "recipeLink" character varying(255) null,
   created_by_ai boolean null default false,
   created_by character varying(255) null,
   favorite boolean null default false,
@@ -87,23 +112,12 @@ create table public.meals (
   visibility boolean null default true,
   created_at timestamp with time zone null default now(),
   forever_invis boolean not null default false,
-  "AI_Macros" boolean null,
   "Edamam_macros" boolean null,
+  meal_type text null,
+  cook_time text null,
+  like_count integer null default 0,
   constraint meals_pkey primary key (id),
   constraint meals_user_id_fkey foreign KEY (user_id) references auth.users (id) on delete CASCADE
-) TABLESPACE pg_default;
-
-create table public.pantry (
-  pantry_id serial not null,
-  user_id uuid not null,
-  food text not null,
-  quantity double precision null,
-  unit character varying(50) null,
-  expiration_date date null,
-  added_at timestamp with time zone null default now(),
-  updated_at timestamp with time zone null default now(),
-  constraint pantry_pkey primary key (pantry_id),
-  constraint pantry_user_id_fkey foreign KEY (user_id) references user_profiles (id) on delete CASCADE
 ) TABLESPACE pg_default;
 
 create table public.reports (
@@ -118,37 +132,101 @@ create table public.reports (
   constraint reports_user_id_fkey foreign KEY (user_id) references user_profiles (id) on delete CASCADE
 ) TABLESPACE pg_default;
 
-create table public.reviews (
-  review_id serial not null,
-  meal_id integer not null,
-  user_id uuid not null,
-  rating numeric not null,
-  comment text null,
+create table public.stories (
+  id serial not null,
+  title character varying(255) not null,
+  description text null,
+  thumbnail_url text null,
+  video_url text not null,
+  duration integer not null,
+  author_id uuid not null,
+  meal_id integer null,
+  tags text[] null,
+  view_count integer null default 0,
+  like_count integer null default 0,
+  is_featured boolean null default false,
+  is_active boolean null default true,
+  visibility_level character varying(20) null default 'public'::character varying,
   created_at timestamp with time zone null default now(),
   updated_at timestamp with time zone null default now(),
-  constraint reviews_pkey primary key (review_id),
-  constraint reviews_meal_id_fkey foreign KEY (meal_id) references meals (id) on delete CASCADE,
-  constraint reviews_user_id_fkey foreign KEY (user_id) references user_profiles (id) on delete CASCADE,
-  constraint reviews_rating_check check (
+  constraint stories_pkey primary key (id),
+  constraint stories_author_id_fkey foreign KEY (author_id) references user_profiles (id) on delete CASCADE,
+  constraint stories_meal_id_fkey foreign KEY (meal_id) references meals (id) on delete set null,
+  constraint stories_visibility_level_check check (
     (
-      (rating >= (1)::numeric)
-      and (rating <= (5)::numeric)
+      (visibility_level)::text = any (
+        (
+          array[
+            'public'::character varying,
+            'private'::character varying,
+            'unlisted'::character varying
+          ]
+        )::text[]
+      )
     )
   )
 ) TABLESPACE pg_default;
 
-create table public.user_grocery_items (
-  id uuid not null default gen_random_uuid (),
+create index IF not exists idx_stories_author_id on public.stories using btree (author_id) TABLESPACE pg_default;
+
+create index IF not exists idx_stories_meal_id on public.stories using btree (meal_id) TABLESPACE pg_default;
+
+create index IF not exists idx_stories_created_at on public.stories using btree (created_at desc) TABLESPACE pg_default;
+
+create index IF not exists idx_stories_is_featured on public.stories using btree (is_featured) TABLESPACE pg_default
+where
+  (is_featured = true);
+
+create index IF not exists idx_stories_visibility on public.stories using btree (visibility_level) TABLESPACE pg_default;
+
+create index IF not exists idx_stories_active on public.stories using btree (is_active) TABLESPACE pg_default
+where
+  (is_active = true);
+
+create trigger trigger_update_stories_updated_at BEFORE
+update on stories for EACH row
+execute FUNCTION update_stories_updated_at ();
+
+create table public.story_likes (
+  id serial not null,
+  story_id integer not null,
   user_id uuid not null,
-  raw_name text null,
-  quantity numeric null,
-  unit text null,
-  checked boolean null default false,
   created_at timestamp with time zone null default now(),
-  updated_at timestamp with time zone null default now(),
-  constraint user_grocery_items_pkey primary key (id),
-  constraint user_grocery_items_user_id_fkey foreign KEY (user_id) references user_profiles (id) on delete CASCADE
+  constraint story_likes_pkey primary key (id),
+  constraint story_likes_story_id_user_id_key unique (story_id, user_id),
+  constraint story_likes_story_id_fkey foreign KEY (story_id) references stories (id) on delete CASCADE,
+  constraint story_likes_user_id_fkey foreign KEY (user_id) references user_profiles (id) on delete CASCADE
 ) TABLESPACE pg_default;
+
+create index IF not exists idx_story_likes_story_id on public.story_likes using btree (story_id) TABLESPACE pg_default;
+
+create index IF not exists idx_story_likes_user_id on public.story_likes using btree (user_id) TABLESPACE pg_default;
+
+create trigger trigger_story_like_count_delete
+after DELETE on story_likes for EACH row
+execute FUNCTION update_story_like_count ();
+
+create trigger trigger_story_like_count_insert
+after INSERT on story_likes for EACH row
+execute FUNCTION update_story_like_count ();
+
+create table public.story_views (
+  id serial not null,
+  story_id integer not null,
+  viewer_id uuid null,
+  viewed_at timestamp with time zone null default now(),
+  ip_address inet null,
+  user_agent text null,
+  constraint story_views_pkey primary key (id),
+  constraint story_views_story_id_fkey foreign KEY (story_id) references stories (id) on delete CASCADE,
+  constraint story_views_viewer_id_fkey foreign KEY (viewer_id) references user_profiles (id) on delete set null
+) TABLESPACE pg_default;
+
+create index IF not exists idx_story_views_story_id on public.story_views using btree (story_id) TABLESPACE pg_default;
+
+create index IF not exists idx_story_views_viewer_id on public.story_views using btree (viewer_id) TABLESPACE pg_default;
+
+create index IF not exists idx_story_views_viewed_at on public.story_views using btree (viewed_at desc) TABLESPACE pg_default;
 
 create table public.user_profiles (
   id uuid not null,
@@ -199,3 +277,27 @@ create table public.weekly_winners (
   constraint weekly_winners_meal_id_fkey foreign KEY (meal_id) references meals (id) on delete CASCADE,
   constraint weekly_winners_user_id_fkey foreign KEY (user_id) references user_profiles (id) on delete set null
 ) TABLESPACE pg_default;
+
+create table public.user_subscriptions (
+  id uuid not null default gen_random_uuid (),
+  user_id uuid null,
+  revenue_cat_user_id text null,
+  product_id text null,
+  is_active boolean null default false,
+  is_trial boolean null default false,
+  expiration_date timestamp with time zone null,
+  will_renew boolean null default false,
+  created_at timestamp with time zone null default now(),
+  updated_at timestamp with time zone null default now(),
+  constraint user_subscriptions_pkey primary key (id),
+  constraint user_subscriptions_user_id_key unique (user_id),
+  constraint user_subscriptions_user_id_fkey foreign KEY (user_id) references auth.users (id) on delete CASCADE
+) TABLESPACE pg_default;
+
+create index IF not exists idx_user_subscriptions_user_id on public.user_subscriptions using btree (user_id) TABLESPACE pg_default;
+
+create index IF not exists idx_user_subscriptions_active on public.user_subscriptions using btree (is_active) TABLESPACE pg_default
+where
+  (is_active = true);
+
+create index IF not exists idx_user_subscriptions_revenue_cat on public.user_subscriptions using btree (revenue_cat_user_id) TABLESPACE pg_default;

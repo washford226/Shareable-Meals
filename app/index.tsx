@@ -39,7 +39,7 @@ export default function Index() {
   }
 
   if (isAuthenticated) {
-    return <Redirect href="/(app)/meal-plan/calendar" />;
+    return <Redirect href="/(main)/(tabs)/calendar" />;
   }
 
   return <Redirect href="/(auth)/login" />;

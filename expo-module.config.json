@@ -1,0 +1,9 @@
+{
+  "platforms": ["ios", "android"],
+  "ios": {
+    "deploymentTarget": "13.4"
+  },
+  "android": {
+    "minSdkVersion": 21
+  }
+}
