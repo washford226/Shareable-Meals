@@ -32,18 +32,68 @@ const LoginScreen = () => {
 
     setLoading(true);
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email: email.trim(),
         password: password,
       });
 
       if (error) {
-        Alert.alert('Error', error.message);
+        // Check if the error is related to email confirmation
+        if (error.message.includes('Email not confirmed') || 
+            error.message.includes('email_not_confirmed') ||
+            error.message.includes('not confirmed')) {
+          handleUnverifiedEmail();
+        } else {
+          Alert.alert('Error', error.message);
+        }
       } else {
         router.replace('/');
       }
     } catch (error) {
       Alert.alert('Error', 'An unexpected error occurred');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleUnverifiedEmail = () => {
+    Alert.alert(
+      'Email Verification Required 📧',
+      'Your account is not yet verified. Please check your email inbox and click the verification link. Didn\'t receive the email?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Resend Verification',
+          onPress: resendVerificationEmail
+        }
+      ]
+    );
+  };
+
+  const resendVerificationEmail = async () => {
+    if (!email.trim()) {
+      Alert.alert('Error', 'Please enter your email address first');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const { error } = await supabase.auth.resend({
+        type: 'signup',
+        email: email.trim()
+      });
+
+      if (error) {
+        Alert.alert('Error', 'Failed to resend verification email. Please try again.');
+      } else {
+        Alert.alert(
+          'Verification Email Sent! ✅',
+          'We\'ve sent a new verification email to your inbox. Please check your email and click the verification link to activate your account.',
+          [{ text: 'OK' }]
+        );
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Failed to resend verification email. Please try again.');
     } finally {
       setLoading(false);
     }
