@@ -76,8 +76,8 @@ const SignUpScreen = () => {
       }
 
       Alert.alert(
-        "Success", 
-        "Account created successfully! Please check your email to verify your account.",
+        "Account Created Successfully! 🎉", 
+        "We've sent a verification email to your inbox. Please check your email and click the verification link to activate your account.",
         [{ text: "OK", onPress: () => router.replace("/login") }]
       );
 
